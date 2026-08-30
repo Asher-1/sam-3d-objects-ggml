@@ -55,4 +55,16 @@ mv checkpoints/${TAG}-download/checkpoints checkpoints/${TAG}
 rm -rf checkpoints/${TAG}-download
 ```
 
+### GGUF weights (C++ inference, optional)
 
+The `cpp_ggml` C++ engine does not need the PyTorch checkpoints above; it loads
+pre-converted GGUF weights hosted at
+[Asher-1/SAM_3D_OBJECTS_GGUF](https://huggingface.co/Asher-1/SAM_3D_OBJECTS_GGUF)
+(6 pipeline models x f32/f16/q8_0, ~5.9 GiB for the recommended f16 set):
+
+```bash
+bash cpp_ggml/scripts/download_gguf.sh
+```
+
+See [`cpp_ggml/models/MODEL_CARD.md`](../cpp_ggml/models/MODEL_CARD.md) for the
+file manifest and quantization notes.

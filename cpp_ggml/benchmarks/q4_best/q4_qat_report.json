@@ -1,0 +1,132 @@
+{
+  "metadata": {
+    "schema": "sam3d.slat_q4_0_cross_step_qat.v1",
+    "quantizer": "ggml_q4_0_f32_scale_f16_dequant_ste",
+    "teacher_steps": 25,
+    "rollout_steps": 2,
+    "cfg_strength": 1.0,
+    "rescale_t": 1.0,
+    "trained_modules": [
+      "_base_models.generator.reverse_fn.backbone.blocks.23.self_attn.to_qkv.weight",
+      "_base_models.generator.reverse_fn.backbone.blocks.22.self_attn.to_qkv.weight",
+      "_base_models.generator.reverse_fn.backbone.blocks.21.self_attn.to_qkv.weight",
+      "_base_models.generator.reverse_fn.backbone.blocks.20.self_attn.to_qkv.weight",
+      "_base_models.generator.reverse_fn.backbone.blocks.20.self_attn.to_out.weight"
+    ],
+    "components": [
+      "self-qkv",
+      "self-out"
+    ],
+    "iterations": 3,
+    "learning_rate": 0.001,
+    "loss_scale": 4096.0,
+    "seed": 20260903,
+    "initial_override_tensor_count": 3,
+    "activation_checkpoint": true,
+    "checkpointed_modules": 25,
+    "uncheckpointed_train_blocks": [
+      "reverse_fn.backbone.blocks.20"
+    ],
+    "validation_start_steps": [
+      0,
+      8,
+      16,
+      23
+    ],
+    "validation_initial": {
+      "0": 0.0001064095413312316,
+      "8": 0.0001982862304430455,
+      "16": 0.0003893941466230899,
+      "23": 0.000535057857632637,
+      "mean": 0.000307286944007501
+    },
+    "validation_final": {
+      "0": 0.00013231417688075453,
+      "8": 0.0001421563938492909,
+      "16": 0.00033779232762753963,
+      "23": 0.0005251020775176585,
+      "mean": 0.0002843412439688109
+    },
+    "selection_every": 1,
+    "selected_iteration": 1,
+    "deployment_q4_delta": {
+      "changed_values": 3468448,
+      "total_values": 4194304,
+      "changed_fraction": 0.8269424438476562,
+      "max_deployed_delta": 0.1519775390625
+    },
+    "initial_loss": 0.0001409118704032153,
+    "final_loss": 0.00028765725437551737
+  },
+  "sensitivity_e2e": [
+    {
+      "id": "slat_qat_attention_f16_retain",
+      "policy": "retain the five QAT-trained SLat attention matrices as F16; all other tensors stay Q4_0",
+      "ggml_e2e_ms": 80372.43505000515,
+      "render_mae": 0.058790694922208786,
+      "psnr_db": 16.13887692373734,
+      "accepted": false,
+      "reason": "MAE improved only 0.11 percent over the retained baseline and latency increased"
+    },
+    {
+      "id": "ss_all_f16_isolation",
+      "policy": "SS generator and decoder F16; SLat generator and Gaussian decoder Q4_0",
+      "ggml_e2e_ms": 107000.5719969995,
+      "render_mae": 0.019627967849373817,
+      "accepted": false,
+      "reason": "isolates SS diffusion as the dominant Q4 error source but misses the 70-second latency gate"
+    },
+    {
+      "id": "ss_blocks_20_23_projection_f16",
+      "policy": "SS blocks 20-23 attention, cross-attention, MLP and adaLN projection weights F16; all other tensors Q4_0",
+      "ggml_e2e_ms": 78970.35745300673,
+      "render_mae": 0.06340304762125015,
+      "accepted": false,
+      "reason": "worse than the retained baseline; static late-block retention is rejected"
+    }
+  ],
+  "artifacts": {
+    "source_checkpoint": "cpp_ggml/models/pytorch/slat_generator.ckpt",
+    "qat_weight_override": {
+      "path": "cpp_ggml/models/pytorch/slat_generator-q4_best-qat.pt",
+      "sha256": "c1d2b342b458471d955ab2323a12de3a8cc0d0d4d983d696c387c547ca4f330b"
+    },
+    "deployed_gguf": {
+      "ss_generator": {
+        "path": "cpp_ggml/models/gguf/ss_generator-q4_0.gguf",
+        "sha256": "8d477ef5c236f2cbf9066a1bb5279fea144fe14f44907f677a9ad120614c8fbe"
+      },
+      "slat_generator": {
+        "path": "cpp_ggml/models/gguf/slat_generator-q4_0.gguf",
+        "sha256": "fc2b67284646665a7939669d43b8de1416ccf2d8408b2ccacb4c04bef4d6aee1"
+      },
+      "slat_decoder_gs": {
+        "path": "cpp_ggml/models/gguf/slat_decoder_gs-q4_0.gguf",
+        "sha256": "5a3ad7d43be291bd6e7a43d692b5eee3dc2fdfe49ce1cfeda9a010c211c1eaab"
+      }
+    }
+  },
+  "history": [
+    {
+      "iteration": 1,
+      "start_step": 4,
+      "loss": 0.0001409118704032153,
+      "gradient_norm": 0.0008181890747725388,
+      "validation_mean": 0.0002843509901140351
+    },
+    {
+      "iteration": 2,
+      "start_step": 6,
+      "loss": 0.00012530642561614513,
+      "gradient_norm": 0.0004788273576924634,
+      "validation_mean": 0.000353390601958381
+    },
+    {
+      "iteration": 3,
+      "start_step": 0,
+      "loss": 0.00028765725437551737,
+      "gradient_norm": 0.0011379120595408387,
+      "validation_mean": 0.00033982525565079413
+    }
+  ]
+}

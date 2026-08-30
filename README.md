@@ -76,6 +76,79 @@ For  more details and multi-object reconstruction, please take a look at out two
 
 As a way to combine the strengths of both **SAM 3D Objects** and **SAM 3D Body**, we provide an example notebook that demonstrates how to combine the results of both models such that they are aligned in the same frame of reference. Check it out [here](notebook/demo_3db_mesh_alignment.ipynb).
 
+## C++ (ggml) Runtime: performance and advantages
+
+[`cpp_ggml/`](cpp_ggml/) provides a native GGML implementation of the
+condition, SS, SLat and Gaussian stages. It supports CPU, CUDA and Vulkan
+builds and consumes F32, F16, Q8_0 and Q4 GGUF files. The main advantages are
+portable backends, one-patch reproducibility, bounded-memory model streaming,
+and a single raw image-to-Gaussian-PLY benchmark contract shared with the
+official renderer.
+
+The current C++ runtime is not yet an all-native replacement for the official
+image-to-textured-GLB pipeline. The checked-in raw-image benchmark still uses
+official Python for input conditioning and rendering, while C++ produces the
+GGML Gaussian path. A native non-baked mesh GLB export is regression-tested
+against official mesh-decoder tensors, but native mesh decoding, UV unwrap,
+texture baking and mesh cleanup are not complete. The exact boundary and the
+commands to reproduce it are documented in [`cpp_ggml/README.md`](cpp_ggml/README.md).
+
+### Measured end-to-end snapshot
+
+The table below is the latest real canonical image/mask run retained in
+[`cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json`](cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json).
+It is deliberately not a marketing claim: rows without a fresh exclusive-GPU
+record are marked pending, and the release gate remains failing when quality or
+latency is outside the contract.
+
+| Pipeline | Format | Total image -> Gaussian PLY | Render RGB MAE | Status |
+| --- | --- | ---: | ---: | --- |
+| Official PyTorch | F16 streamed | 75.994 s | 0 (self-reference) | exclusive reference |
+| GGML CUDA | Q8_0 | 72.726 s | 0.01243 | measured; quality/70 s gates pending |
+| GGML Vulkan | Q8_0 | not freshly measured | not measured | idle-GPU run required |
+| GGML CUDA | Q4 retained best milestone | 111.273 s | 0.04069 | historical; gate failed |
+
+These are full image-to-PLY timings, not isolated operator timings. The latest
+render comparison and latency/quality plots are linked from
+[`cpp_ggml/benchmarks/README.md`](cpp_ggml/benchmarks/README.md). Re-run the
+matrix after reserving an idle GPU to refresh all formats and both backends.
+
+### Model families and practical advantages
+
+The GGUF directory contains the complete stage matrix, so users can choose a
+single precision policy without changing the graph:
+
+| GGUF family | Pipeline role | Practical advantage |
+| --- | --- | --- |
+| `ss_generator-*`, `ss_decoder-*` | sparse structure and occupancy | controls the geometry support; F16 is the accuracy reference, Q8_0 is the current speed/quality compromise, and Q4 is the compact experimental path |
+| `slat_generator-*` | structured latent diffusion | keeps the long latent denoising stage in the same native GGML graph across CPU, CUDA and Vulkan |
+| `slat_decoder_gs-*`, `slat_decoder_gs_4-*` | Gaussian attribute decoding | produces the Gaussian representation used by the official camera renderer |
+| `slat_decoder_mesh-*` | mesh decoding | enables the official mesh branch when the Python post-processing path is selected |
+
+Every family is available in the repository's F32/F16/Q8_0 and Q4 variants
+where conversion supports that tensor layout. The runtime keeps the model
+files under one canonical directory, streams stages within a bounded memory
+budget, and records hashes in E2E reports so a benchmark result can be
+reproduced rather than inferred from a module microbenchmark.
+
+### GGUF downloads
+
+All model artifacts are kept in [`cpp_ggml/models/gguf/`](cpp_ggml/models/gguf/).
+The SAM 3D model helper downloads the matching files from
+[Asher-1/SAM_3D_OBJECTS_GGUF](https://huggingface.co/Asher-1/SAM_3D_OBJECTS_GGUF).
+The requested public GGUF download index is also available at
+[Asher-1/lingbot-map-gguf](https://huggingface.co/Asher-1/lingbot-map-gguf/tree/main);
+it is a separate model family and must not be substituted for SAM 3D weights.
+Use the repository helper to place SAM 3D files in the canonical directory:
+
+```bash
+bash cpp_ggml/scripts/download_gguf.sh
+```
+
+For the complete clone, environment, build, inference and regression workflow,
+see [`cpp_ggml/README.md`](cpp_ggml/README.md) and run
+`bash cpp_ggml/scripts/quickstart.sh bootstrap`.
+
 ## License
 
 The SAM 3D Objects model checkpoints and code are licensed under [SAM License](./LICENSE).

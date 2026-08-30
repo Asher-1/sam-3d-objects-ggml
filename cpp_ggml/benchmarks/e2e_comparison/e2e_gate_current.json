@@ -1,0 +1,83 @@
+{
+  "schema": "sam3d.e2e.gate.v2",
+  "input": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json",
+  "reference_runner": "PyTorch official F16 streamed",
+  "pytorch_latency_ms": 75994.2,
+  "reference_exclusive_gpu": true,
+  "reference_exclusive_gpu_required": true,
+  "checks": [
+    {
+      "candidate": "GGML CUDA f16 raw",
+      "present": false
+    },
+    {
+      "candidate": "GGML Vulkan f16 raw",
+      "present": false
+    },
+    {
+      "candidate": "GGML CUDA q8_0 raw",
+      "present": true,
+      "latency_ms": 72726.1057710275,
+      "render_mae": 0.01243360061198473,
+      "max_render_mae": 0.01,
+      "max_latency_ms": 70000.0,
+      "quality": false,
+      "measured": true,
+      "latency_gate": false,
+      "speed_vs_reference": true,
+      "speed_gate_required": true,
+      "exclusive_gpu": true,
+      "exclusive_gpu_required": true
+    },
+    {
+      "candidate": "GGML Vulkan q8_0 raw",
+      "present": true,
+      "latency_ms": null,
+      "render_mae": null,
+      "max_render_mae": 0.01,
+      "max_latency_ms": 70000.0,
+      "quality": false,
+      "measured": false,
+      "latency_gate": false,
+      "speed_vs_reference": false,
+      "speed_gate_required": true,
+      "exclusive_gpu": false,
+      "exclusive_gpu_required": true
+    },
+    {
+      "candidate": "GGML CUDA q4_0 raw",
+      "present": true,
+      "latency_ms": 111272.542,
+      "render_mae": 0.04069218412041664,
+      "max_render_mae": 0.01,
+      "max_latency_ms": 70000.0,
+      "quality": false,
+      "measured": true,
+      "latency_gate": false,
+      "speed_vs_reference": false,
+      "speed_gate_required": true,
+      "exclusive_gpu": false,
+      "exclusive_gpu_required": true,
+      "faster_than": "cuda-q8",
+      "faster_than_gate": false
+    },
+    {
+      "candidate": "GGML Vulkan q4_0 raw",
+      "present": false
+    }
+  ],
+  "passed": false,
+  "failures": [
+    "missing required E2E row: GGML CUDA f16 raw",
+    "missing required E2E row: GGML Vulkan f16 raw",
+    "GGML CUDA q8_0 raw: render MAE 0.01243360061198473 exceeds 0.01",
+    "GGML CUDA q8_0 raw: E2E latency 72726.1057710275 ms exceeds 70000.0 ms",
+    "GGML Vulkan q8_0 raw: missing a measured raw E2E result",
+    "GGML CUDA q4_0 raw: render MAE 0.04069218412041664 exceeds 0.01",
+    "GGML CUDA q4_0 raw: E2E latency 111272.542 ms exceeds 70000.0 ms",
+    "GGML CUDA q4_0 raw: E2E latency 111272.542 ms does not beat PyTorch 75994.2 ms",
+    "GGML CUDA q4_0 raw: missing an exclusive-GPU timing provenance record",
+    "GGML CUDA q4_0 raw: must be faster than cuda-q8",
+    "missing required E2E row: GGML Vulkan q4_0 raw"
+  ]
+}

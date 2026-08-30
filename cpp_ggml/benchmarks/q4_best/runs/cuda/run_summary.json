@@ -1,0 +1,43 @@
+{
+  "image": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png",
+  "mask": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png",
+  "backend": "cuda",
+  "dtype": "q4_0",
+  "ss_dtype": "q4_k",
+  "slat_dtype": "q4_0",
+  "gaussian_dtype": "q4_0",
+  "seed": 42,
+  "ggml_condition_ms": 3418.6818129965104,
+  "ggml_ss_ms": 52400.63555899542,
+  "ggml_slat_ms": 55453.22439400479,
+  "ggml_flow_ms": 107853.85995300021,
+  "ggml_e2e_ms": 111272.54176599672,
+  "strict_reference_coords": false,
+  "ggml_ply": "/tmp/sam3d-q4k-sensitive-q40-rest-e2e-cuda/ggml_cuda_q4_0.ply",
+  "pytorch_ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/benchmarks/data/e2e/output_gs.ply",
+  "provenance": {
+    "schema": "sam3d.e2e.provenance.v1",
+    "source_revision": "84bb8fefdd0c37aaa0bbf5e056702fe785cef024",
+    "source_dirty": true,
+    "sam3d_cli_sha256": "ef4ba1c445190d2ce04b5cb916aa427956081768462c378887282f3c9f7d3fa7",
+    "models": {
+      "ss_generator": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q4_k.gguf",
+        "sha256": "b658beeaee87e338761bc9507bd4d090045bd3ba784abf20132749f6e0200990"
+      },
+      "slat_generator": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q4_0.gguf",
+        "sha256": "fc2b67284646665a7939669d43b8de1416ccf2d8408b2ccacb4c04bef4d6aee1"
+      },
+      "slat_decoder_gs": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q4_0.gguf",
+        "sha256": "5a3ad7d43be291bd6e7a43d692b5eee3dc2fdfe49ce1cfeda9a010c211c1eaab"
+      }
+    }
+  },
+  "render_report": "/tmp/sam3d-q4k-sensitive-q40-rest-e2e-cuda/render_cuda_q4_0/render_metrics.json",
+  "render_mae": 0.04069218412041664,
+  "release_max_render_mae": 0.01,
+  "render_quality_pass": false,
+  "measurement_status": "historical raw record; current Q4_K candidate attribution requires a fresh run with captured input model hashes"
+}

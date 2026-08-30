@@ -1,0 +1,10 @@
+{
+  "frames": 60,
+  "resolution": 512,
+  "mae": 0.01243360061198473,
+  "rmse": 0.05153014385228711,
+  "max_abs": 0.8549019694328308,
+  "psnr_db": 25.75877290309083,
+  "pytorch_ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/benchmarks/data/e2e/output_gs.ply",
+  "ggml_ply": "/tmp/sam3d-cuda-mma-auto-q8-tLBWDT/ggml_cuda_q8_0.ply"
+}

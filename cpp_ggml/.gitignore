@@ -1,0 +1,13 @@
+build-*/
+models/gguf/
+models/pytorch/
+results/
+__pycache__/
+*.pyc
+.ggml-patch.lock
+benchmarks/data/e2e/
+!benchmarks/data/e2e/
+benchmarks/data/e2e/*
+!benchmarks/data/e2e/ss_occ_f32.samt
+*.ply
+*.bin

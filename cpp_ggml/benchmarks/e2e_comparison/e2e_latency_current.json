@@ -1,0 +1,71 @@
+{
+  "schema": "sam3d.e2e.latency.v3",
+  "workload": "one canonical image + mask to Gaussian PLY, then official 60-view render",
+  "input": "notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png, mask 14, seed 42",
+  "device": "NVIDIA GeForce RTX 3060 (12 GiB)",
+  "latency_gate_ms": 70000,
+  "release_gate": {
+    "schema": "sam3d.e2e.release-contract.v2",
+    "reference_runner": "PyTorch official F16 streamed",
+    "require_reference_exclusive_gpu": true,
+    "max_render_mae": 0.01,
+    "max_latency_ms": 70000,
+    "required": [
+      {"id": "cuda-f16", "runner": "GGML CUDA f16 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
+      {"id": "vulkan-f16", "runner": "GGML Vulkan f16 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
+      {"id": "cuda-q8", "runner": "GGML CUDA q8_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
+      {"id": "vulkan-q8", "runner": "GGML Vulkan q8_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
+      {"id": "cuda-q4", "runner": "GGML CUDA q4_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true, "require_faster_than": "cuda-q8"},
+      {"id": "vulkan-q4", "runner": "GGML Vulkan q4_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true, "require_faster_than": "vulkan-q8"}
+    ]
+  },
+  "protocol": "Latency includes all GGML condition, SS, SLat and Gaussian stages after the canonical saved image/mask conditions are loaded. Each candidate must use the same official camera path and render comparison. GPU timing is accepted only with required=true, checked=true and an empty active_compute_processes list.",
+  "rows": [
+    {
+      "runner": "PyTorch official F16 streamed",
+      "backend": "cuda",
+      "dtype": "f16",
+      "latency_ms": 75994.2,
+      "warmup": 0,
+      "iters": 1,
+      "status": "measured latest exclusive reference",
+      "render_mae": 0.0,
+      "gpu_exclusivity": {"required": true, "checked": true, "active_compute_processes": []},
+      "weight_residency": "streamed"
+    },
+    {
+      "runner": "GGML CUDA q8_0 raw",
+      "backend": "cuda",
+      "dtype": "q8_0",
+      "latency_ms": 72726.1057710275,
+      "warmup": 0,
+      "iters": 1,
+      "status": "measured latest exclusive; render-MAE and 70 s gates fail",
+      "phases_ms": {"condition": 2267.501150025055, "ss": 34165.62589799287, "slat_plus_gaussian": 36292.97872300958},
+      "render_mae": 0.01243360061198473,
+      "render_psnr_db": 25.75877290309083,
+      "render_report": "render_cuda_q8_current/render_metrics.json",
+      "gpu_exclusivity": {"required": true, "checked": true, "active_compute_processes": []},
+      "weight_residency": "GGML backend native"
+    },
+    {
+      "runner": "GGML Vulkan q8_0 raw",
+      "backend": "vulkan",
+      "dtype": "q8_0",
+      "latency_ms": null,
+      "status": "not freshly measured: shared GPU process observed; rerun with --require-exclusive-gpu",
+      "gpu_exclusivity": {"required": true, "checked": false, "active_compute_processes": ["shared GPU process present"]}
+    },
+    {
+      "runner": "GGML CUDA q4_0 raw",
+      "backend": "cuda",
+      "dtype": "q4_0",
+      "latency_ms": 111272.542,
+      "status": "historical retained Q4 milestone; current model hash and fresh render are required",
+      "render_mae": 0.04069218412041664,
+      "render_psnr_db": 18.506119247278484,
+      "gpu_exclusivity": {"required": true, "checked": false, "active_compute_processes": ["historical provenance unavailable"]}
+    }
+  ],
+  "note": "This is a current end-to-end evidence snapshot, not a release pass. Missing F16, Vulkan and fresh Q4 rows intentionally remain visible as gate failures. No isolated operator timing is used as a substitute for image-to-PLY evidence."
+}
