@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -193,6 +194,33 @@ bool Backend::alloc(ggml_cgraph* graph, std::vector<ggml_tensor*> inputs) {
 }
 
 bool Backend::run(ggml_cgraph* graph) {
+    if (std::getenv("SAM3D_DEBUG_GRAPH") != nullptr) {
+        // CUDA's F32 binary-broadcast kernel requires an F32 right operand.
+        // Report only graph nodes violating that contract; a full graph dump for
+        // the mesh decoder is tens of thousands of lines and obscures the edge.
+        for (int node_index = 0; node_index < ggml_graph_n_nodes(graph); ++node_index) {
+            ggml_tensor* node = ggml_graph_node(graph, node_index);
+            if (node->op != GGML_OP_ADD || node->src[0] == nullptr || node->src[1] == nullptr ||
+                node->src[0]->type != GGML_TYPE_F32 || node->src[1]->type == GGML_TYPE_F32) {
+                continue;
+            }
+            std::fprintf(stderr,
+                         "SAM3D_DEBUG_GRAPH incompatible ADD node=%d dst=%s type=%s "
+                         "src0=%s type=%s shape=[%lld,%lld,%lld,%lld] "
+                         "src1=%s type=%s shape=[%lld,%lld,%lld,%lld]\n",
+                         node_index, node->name, ggml_type_name(node->type), node->src[0]->name,
+                         ggml_type_name(node->src[0]->type),
+                         static_cast<long long>(node->src[0]->ne[0]),
+                         static_cast<long long>(node->src[0]->ne[1]),
+                         static_cast<long long>(node->src[0]->ne[2]),
+                         static_cast<long long>(node->src[0]->ne[3]), node->src[1]->name,
+                         ggml_type_name(node->src[1]->type),
+                         static_cast<long long>(node->src[1]->ne[0]),
+                         static_cast<long long>(node->src[1]->ne[1]),
+                         static_cast<long long>(node->src[1]->ne[2]),
+                         static_cast<long long>(node->src[1]->ne[3]));
+        }
+    }
     const auto run_started = profiling_enabled_ ? ProfileClock::now() : ProfileClock::time_point{};
     ggml_backend_t be = sched_ ? nullptr : compute_backend_;
     if (be) {

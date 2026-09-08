@@ -65,4 +65,29 @@ struct GsTables {
     bool build(const int32_t* coords, int64_t n_fine);
 };
 
+// Sparse coordinate and neighbour tables for SLatMeshDecoder.  Unlike the
+// Gaussian decoder, this branch expands every active 64^3 cell twice.  The
+// expansion order is exactly torch.nonzero(torch.ones(2, 2, 2)): z varies
+// fastest, then y, then x.  This preserves the feature/coordinate ownership
+// expected by SparseSubdivide and by the later FlexiCubes extractor.
+struct MeshConvLevel {
+    int64_t n = 0;
+    int resolution = 0;
+    // (n, 4), token-major [batch, x, y, z]
+    std::vector<int32_t> coords;
+    // (n * 27), token-major 3x3x3 SubMConv gather table. Missing neighbours
+    // refer to row n, the zero sentinel appended by MeshDecoderGraph.
+    std::vector<int32_t> conv;
+};
+
+struct MeshTables {
+    // The Mesh and Gaussian decoders share the same 64^3 Swin torso.
+    GsTables swin;
+    // levels[0] is the input sparse support at 64^3; levels[1] and [2] are
+    // the 128^3 and 256^3 supports after the two SparseSubdivide calls.
+    MeshConvLevel levels[3];
+
+    bool build(const int32_t* coords, int64_t n_fine, int base_resolution = 64);
+};
+
 }  // namespace sam3d

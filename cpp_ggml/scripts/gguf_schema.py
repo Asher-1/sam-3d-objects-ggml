@@ -202,15 +202,16 @@ def quantize_q4_k(w: np.ndarray) -> np.ndarray:
 
 
 def convert_tensor(w, dtype: str, *, q4_activations: np.ndarray | None = None,
-                   q4_scale_multipliers: tuple[float, ...] | None = None,
-                   q4_output_rows: int | None = None,
-                   q4_token_limit: int | None = None) -> np.ndarray:
+                 q4_scale_multipliers: tuple[float, ...] | None = None,
+                 q4_output_rows: int | None = None,
+                 q4_token_limit: int | None = None,
+                 keep_low_dim_f32: bool = True) -> np.ndarray:
     """Accepts torch.Tensor or np.ndarray; returns the stored numpy array."""
     is_torch = hasattr(w, "detach")
     ndim = w.dim() if is_torch else w.ndim
     # keep small per-channel params (bias, norms) in F32: binary ops between
     # the F32 activations and F16 biases are not supported by ggml backends
-    if ndim <= 1:
+    if ndim <= 1 and keep_low_dim_f32:
         if is_torch:
             return w.detach().float().numpy()
         return np.asarray(w, dtype=np.float32)
@@ -259,7 +260,8 @@ def convert_tensor(w, dtype: str, *, q4_activations: np.ndarray | None = None,
     return quantize_q8_0(w.astype(np.float32))
 
 
-def write_tensor(w, name, t, dtype, *, q4_activations: np.ndarray | None = None,
+def write_tensor(w, name, t, dtype, *, storage_dtype: str | None = None,
+                 q4_activations: np.ndarray | None = None,
                  q4_scale_multipliers: tuple[float, ...] | None = None,
                  q4_output_rows: int | None = None,
                  q4_token_limit: int | None = None):
@@ -268,26 +270,28 @@ def write_tensor(w, name, t, dtype, *, q4_activations: np.ndarray | None = None,
     gguf-py >= 0.19 rejects raw uint8 payloads unless raw_dtype is passed;
     raw_shape must be the per-row *byte* shape, which gguf-py converts back
     to the logical element shape when writing the GGUF header."""
-    arr = convert_tensor(t, dtype, q4_activations=q4_activations,
+    tensor_dtype = storage_dtype or dtype
+    arr = convert_tensor(t, tensor_dtype, q4_activations=q4_activations,
                          q4_scale_multipliers=q4_scale_multipliers,
-                         q4_output_rows=q4_output_rows, q4_token_limit=q4_token_limit)
+                         q4_output_rows=q4_output_rows, q4_token_limit=q4_token_limit,
+                         keep_low_dim_f32=storage_dtype is None)
     if arr.dtype == np.uint8:
         logical = tuple(t.shape) if hasattr(t, "detach") else np.asarray(t).shape
-        if dtype == "q4_0":
+        if tensor_dtype == "q4_0":
             bytes_per_block = 18
             raw_dtype = gguf.GGMLQuantizationType.Q4_0
-        elif dtype == "q4_1":
+        elif tensor_dtype == "q4_1":
             bytes_per_block = 20
             raw_dtype = gguf.GGMLQuantizationType.Q4_1
-        elif dtype == "q4_k":
+        elif tensor_dtype == "q4_k":
             bytes_per_block = 144
             raw_dtype = gguf.GGMLQuantizationType.Q4_K
-        elif dtype == "q8_0":
+        elif tensor_dtype == "q8_0":
             bytes_per_block = 34
             raw_dtype = gguf.GGMLQuantizationType.Q8_0
         else:
             raise ValueError(f"packed tensor without a quantized dtype: {name}")
-        block_size = 256 if dtype == "q4_k" else 32
+        block_size = 256 if tensor_dtype == "q4_k" else 32
         byte_shape = tuple(logical[:-1]) + (logical[-1] // block_size * bytes_per_block,)
         w.add_tensor(name, arr, raw_shape=byte_shape,
                      raw_dtype=raw_dtype)

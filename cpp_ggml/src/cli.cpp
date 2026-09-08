@@ -6,6 +6,7 @@
 #include "sam3dggml.h"
 #include "asset_io.hpp"
 #include "common.hpp"
+#include "image_preprocess.hpp"
 #include "gguf_loader.hpp"
 #include "backend.hpp"
 #include "ss_decoder_graph.hpp"
@@ -15,6 +16,14 @@
 #include "ss_flow_graph.hpp"
 #include "slat_flow_graph.hpp"
 #include "gs_decoder_graph.hpp"
+#include "flexicubes.hpp"
+#include "mesh_postprocess.hpp"
+#include "mesh_uv.hpp"
+#include "mesh_decoder_graph.hpp"
+#if defined(SAM3D_NATIVE_PBR_CUDA)
+#include "gaussian_renderer.hpp"
+#include "texture_inpaint.hpp"
+#endif
 #include "sparse_ops.hpp"
 #include "graph_builder.hpp"
 #include "ggml-cpu.h"
@@ -22,6 +31,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <limits>
 #include <vector>
 
@@ -39,9 +49,37 @@ static void print_usage() {
             "  e2e|run --model <models_dir> <condition_dir> --out <out.ply>\n"
             "            [--backend cpu|cuda|vulkan] [--seed N] [--threads N]\n"
             "  moge-smoke --model <moge.gguf> [--backend cpu|cuda|vulkan]\n"
-            "             [--width N] [--height N] [--threads N]\n"
+            "             [--input image.png] [--width N] [--height N] [--threads N]\n"
+            "  preprocess-conditions --image <image> --pointmap <pointmap.samt> --out-dir <dir>\n"
+            "             [--mask <binary-mask.png>] [--decoded-rgb-out <image.samt>]\n"
             "  mesh-export --vertices <vertices.samt> --faces <faces.samt>\n"
             "              [--attrs <vertex_attrs.samt>] --out <asset.glb>\n"
+            "  mesh-decode --model <slat_decoder_mesh.gguf> --input <slat_feats.samt>\n"
+            "              --coords <slat_coords.samt> --out <cube_features.samt>\n"
+            "              [--coords-out <subdivided_coords.samt>] [--stage input_layer|blockN|upsampleN]\n"
+            "              [--backend cpu|cuda|vulkan]\n"
+            "  mesh-extract --features <cube_features.samt> --coords <cube_coords.samt>\n"
+            "               --out <asset.glb> [--resolution N] [--vertices-out <vertices.samt>]\n"
+            "               [--faces-out <faces.samt>] [--attrs-out <vertex_attrs.samt>]\n"
+            "               [--xatlas-uv --uv-out <uv.samt>]\n"
+            "  mesh-postprocess --vertices <vertices.samt> --faces <faces.samt>\n"
+            "                   --vertices-out <vertices.samt> --faces-out <faces.samt>\n"
+            "                   [--target-reduction 0.95 --visibility <frequency.samt>]\n"
+            "  mesh-filter-visibility --vertices <vertices.samt> --faces <faces.samt>\n"
+            "                         --visibility <frequency.samt>\n"
+            "                         --vertices-out <vertices.samt> --faces-out <faces.samt>\n"
+            "                         [--candidates-out <face_indices.samt>]\n"
+            "  mesh-repair-boundaries --vertices <vertices.samt> --faces <faces.samt>\n"
+            "                         --vertices-out <vertices.samt> --faces-out <faces.samt>\n"
+            "                         [--max-boundary-edges 55 --no-refine]\n"
+            "  mesh-parameterize --vertices <vertices.samt> --faces <faces.samt>\n"
+            "                    --vertices-out <vertices.samt> --faces-out <faces.samt>\n"
+            "                    --uv-out <uv.samt>\n"
+            "  gaussian-render --ply <output_gs.ply> --out-dir <images_dir>\n"
+            "               [--views 100] [--resolution 1024]\n"
+            "               [--extrinsics <cameras.samt> --intrinsics <cameras.samt>]\n"
+            "  texture-inpaint --texture <base_color.png> --mask <holes.png> --out <repaired.png>\n"
+            "                  [--radius 3]\n"
             "\n"
             "Use scripts/run_image_to_3d.py for the raw-image E2E benchmark.\n");
 }
@@ -66,6 +104,60 @@ static bool tensor_values_f32(const std::string& path, RawTensor& tensor,
     return true;
 }
 
+static bool tensor_indices(const std::string& path, RawTensor& tensor,
+                           std::vector<uint32_t>& values, const char* label) {
+    if (!load_raw_tensor(path, tensor) ||
+        (tensor.type != GGML_TYPE_F32 && tensor.type != GGML_TYPE_I32)) {
+        LOGE("%s must be a readable F32 or I32 SAMT tensor: %s", label, path.c_str());
+        return false;
+    }
+    const size_t count = tensor.type == GGML_TYPE_F32
+        ? tensor.data.size() / sizeof(float)
+        : tensor.data.size() / sizeof(int32_t);
+    const size_t element_bytes = tensor.type == GGML_TYPE_F32 ? sizeof(float) : sizeof(int32_t);
+    if (tensor.data.size() != count * element_bytes) {
+        LOGE("%s has a malformed SAMT payload: %s", label, path.c_str());
+        return false;
+    }
+    values.resize(count);
+    if (tensor.type == GGML_TYPE_I32) {
+        for (size_t index = 0; index < count; ++index) {
+            int32_t value = 0;
+            std::memcpy(&value, tensor.data.data() + index * sizeof(value), sizeof(value));
+            if (value < 0) {
+                LOGE("%s contains a negative index", label);
+                return false;
+            }
+            values[index] = static_cast<uint32_t>(value);
+        }
+        return true;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        float value = 0.0f;
+        std::memcpy(&value, tensor.data.data() + index * sizeof(value), sizeof(value));
+        if (!std::isfinite(value) || value < 0.0f ||
+            value > static_cast<float>(std::numeric_limits<uint32_t>::max()) ||
+            std::floor(value) != value) {
+            LOGE("%s contains a non-integer or invalid index", label);
+            return false;
+        }
+        values[index] = static_cast<uint32_t>(value);
+    }
+    return true;
+}
+
+static bool save_mesh_indices_i32(const std::string& path, int64_t face_count,
+                                  const std::vector<uint32_t>& indices) {
+    if (indices.size() != static_cast<size_t>(face_count) * 3) return false;
+    std::vector<int32_t> output;
+    output.reserve(indices.size());
+    for (uint32_t index : indices) {
+        if (index > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) return false;
+        output.push_back(static_cast<int32_t>(index));
+    }
+    return save_raw_tensor_i32(path, {3, face_count}, output.data());
+}
+
 static int cmd_mesh_export(const MeshExportOpts& options) {
     if (options.vertices.empty() || options.faces.empty() || options.output.empty()) {
         LOGE("mesh-export requires --vertices, --faces and --out");
@@ -75,9 +167,9 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
     RawTensor vertices_tensor;
     RawTensor faces_tensor;
     std::vector<float> vertices;
-    std::vector<float> faces;
+    std::vector<uint32_t> faces;
     if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "vertices") ||
-        !tensor_values_f32(options.faces, faces_tensor, faces, "faces")) {
+        !tensor_indices(options.faces, faces_tensor, faces, "mesh-export faces")) {
         return 1;
     }
     if (vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
@@ -87,7 +179,7 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
     }
     if (faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
         faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3) {
-        LOGE("mesh-export: faces must have official SAMT shape [3, face_count]");
+        LOGE("mesh-export: faces must have official F32/I32 SAMT shape [3, face_count]");
         return 1;
     }
 
@@ -104,14 +196,7 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
     }
     mesh.indices.reserve(faces.size());
     const size_t vertex_count = mesh.positions.size() / 3;
-    for (float value : faces) {
-        if (!std::isfinite(value) || value < 0.0f ||
-            value > static_cast<float>(std::numeric_limits<uint32_t>::max()) ||
-            std::floor(value) != value) {
-            LOGE("mesh-export: faces contains a non-integer or invalid index");
-            return 1;
-        }
-        const uint32_t index = static_cast<uint32_t>(value);
+    for (uint32_t index : faces) {
         if (index >= vertex_count) {
             LOGE("mesh-export: face index %u is outside %zu vertices", index, vertex_count);
             return 1;
@@ -151,17 +236,777 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
     return 0;
 }
 
+struct MeshExtractOpts {
+    std::string features;
+    std::string coordinates;
+    std::string output;
+    std::string vertices_output;
+    std::string faces_output;
+    std::string candidates_output;
+    std::string attributes_output;
+    std::string uv_output;
+    bool xatlas_uv = false;
+    int resolution = 256;
+};
+
+struct MeshPostprocessOpts {
+    std::string vertices;
+    std::string faces;
+    std::string vertices_output;
+    std::string faces_output;
+    std::string visibility;
+    float target_reduction = 0.95f;
+};
+
+struct MeshVisibilityFilterOpts {
+    std::string vertices;
+    std::string faces;
+    std::string visibility;
+    std::string vertices_output;
+    std::string faces_output;
+    std::string candidates_output;
+};
+
+struct MeshBoundaryRepairOpts {
+    std::string vertices;
+    std::string faces;
+    std::string vertices_output;
+    std::string faces_output;
+    int max_boundary_edges = 55;
+    bool refine = true;
+};
+
+struct MeshParameterizeOpts {
+    std::string vertices;
+    std::string faces;
+    std::string vertices_output;
+    std::string faces_output;
+    std::string uv_output;
+};
+
+static int cmd_mesh_postprocess(const MeshPostprocessOpts& options) {
+#if !defined(SAM3D_NATIVE_PBR_CUDA)
+    (void)options;
+    LOGE("mesh-postprocess requires a CUDA native-PBR build with VTK support");
+    return 1;
+#else
+    if (options.vertices.empty() || options.faces.empty() || options.vertices_output.empty() ||
+        options.faces_output.empty()) {
+        LOGE("mesh-postprocess requires --vertices, --faces, --vertices-out and --faces-out");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "mesh-postprocess vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "mesh-postprocess faces") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3) {
+        LOGE("mesh-postprocess expects vertices [3,V] F32 and faces [3,F] F32/I32 SAMT tensors");
+        return 1;
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    std::string error;
+    MeshSimplifyOptions simplify;
+    simplify.target_reduction = options.target_reduction;
+    if (!simplify_mesh_official_vtk(mesh, simplify, error)) {
+        LOGE("mesh-postprocess: %s", error.c_str());
+        return 1;
+    }
+    MeshVisibilityFilterStats visibility_stats;
+    if (!options.visibility.empty()) {
+        RawTensor visibility_tensor;
+        std::vector<float> visibility;
+        if (!tensor_values_f32(options.visibility, visibility_tensor, visibility,
+                               "mesh-postprocess visibility") ||
+            visibility_tensor.ne.size() != 1 ||
+            visibility.size() != mesh.indices.size() / 3) {
+            LOGE("mesh-postprocess visibility must be F32 [face_count] after VTK reduction");
+            return 1;
+        }
+        if (!filter_invisible_faces_official(mesh, visibility, {}, &visibility_stats, error)) {
+            LOGE("mesh-postprocess visibility/mincut: %s", error.c_str());
+            return 1;
+        }
+    }
+    const int64_t vertex_count = static_cast<int64_t>(mesh.positions.size() / 3);
+    const int64_t face_count = static_cast<int64_t>(mesh.indices.size() / 3);
+    if (!save_raw_tensor_f32(options.vertices_output, {3, vertex_count}, mesh.positions.data()) ||
+        !save_mesh_indices_i32(options.faces_output, face_count, mesh.indices)) {
+        LOGE("mesh-postprocess: failed to write output SAMT tensors");
+        return 1;
+    }
+    LOGI("mesh-postprocess: VTK reduction %.3f: %lld vertices, %lld triangles; "
+         "visibility mincut candidates=%zu removed=%zu (MeshFix boundary repair is separate)",
+         options.target_reduction, static_cast<long long>(vertex_count), static_cast<long long>(face_count),
+         visibility_stats.mincut_face_count, visibility_stats.removed_face_count);
+    return 0;
+#endif
+}
+
+static int cmd_mesh_filter_visibility(const MeshVisibilityFilterOpts& options) {
+#if !defined(SAM3D_NATIVE_PBR_CUDA)
+    (void)options;
+    LOGE("mesh-filter-visibility requires a CUDA native-PBR build with VTK support");
+    return 1;
+#else
+    if (options.vertices.empty() || options.faces.empty() || options.visibility.empty() ||
+        options.vertices_output.empty() || options.faces_output.empty()) {
+        LOGE("mesh-filter-visibility requires --vertices, --faces, --visibility, --vertices-out and --faces-out");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    RawTensor visibility_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    std::vector<float> visibility;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "mesh-filter-visibility vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "mesh-filter-visibility faces") ||
+        !tensor_values_f32(options.visibility, visibility_tensor, visibility,
+                           "mesh-filter-visibility visibility") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3 ||
+        visibility_tensor.ne.size() != 1 || visibility.size() != faces.size() / 3) {
+        LOGE("mesh-filter-visibility expects vertices [3,V], faces [3,F], visibility [F] SAMT tensors");
+        return 1;
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    MeshVisibilityFilterStats stats;
+    std::vector<uint32_t> candidates;
+    std::string error;
+    if (!filter_invisible_faces_official(mesh, visibility, {}, &stats, error,
+                                         options.candidates_output.empty() ? nullptr : &candidates)) {
+        LOGE("mesh-filter-visibility: %s", error.c_str());
+        return 1;
+    }
+    const int64_t vertex_count = static_cast<int64_t>(mesh.positions.size() / 3);
+    const int64_t face_count = static_cast<int64_t>(mesh.indices.size() / 3);
+    if (!save_raw_tensor_f32(options.vertices_output, {3, vertex_count}, mesh.positions.data()) ||
+        !save_mesh_indices_i32(options.faces_output, face_count, mesh.indices)) {
+        LOGE("mesh-filter-visibility: failed to write output SAMT tensors");
+        return 1;
+    }
+    if (!options.candidates_output.empty()) {
+        std::vector<int32_t> candidate_indices;
+        candidate_indices.reserve(candidates.size());
+        for (uint32_t face : candidates) candidate_indices.push_back(static_cast<int32_t>(face));
+        if (!save_raw_tensor_i32(options.candidates_output,
+                                 {static_cast<int64_t>(candidate_indices.size())},
+                                 candidate_indices.data())) {
+            LOGE("mesh-filter-visibility: failed to write candidate face indices");
+            return 1;
+        }
+    }
+    LOGI("mesh-filter-visibility: invisible=%zu outer=%zu mincut=%zu removed=%zu; "
+         "%lld vertices, %lld triangles (before MeshFix)",
+         stats.invisible_face_count, stats.outer_face_count, stats.mincut_face_count,
+         stats.removed_face_count, static_cast<long long>(vertex_count),
+         static_cast<long long>(face_count));
+    return 0;
+#endif
+}
+
+static int cmd_mesh_repair_boundaries(const MeshBoundaryRepairOpts& options) {
+    if (options.vertices.empty() || options.faces.empty() || options.vertices_output.empty() ||
+        options.faces_output.empty()) {
+        LOGE("mesh-repair-boundaries requires --vertices, --faces, --vertices-out and --faces-out");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices,
+                           "mesh-repair-boundaries vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "mesh-repair-boundaries faces") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3) {
+        LOGE("mesh-repair-boundaries expects vertices [3,V] and faces [3,F] SAMT tensors");
+        return 1;
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    std::string error;
+    if (!repair_mesh_boundaries_official_meshfix(mesh, options.max_boundary_edges, options.refine, error)) {
+        LOGE("mesh-repair-boundaries: %s", error.c_str());
+        return 1;
+    }
+    const int64_t vertex_count = static_cast<int64_t>(mesh.positions.size() / 3);
+    const int64_t face_count = static_cast<int64_t>(mesh.indices.size() / 3);
+    if (!save_raw_tensor_f32(options.vertices_output, {3, vertex_count}, mesh.positions.data()) ||
+        !save_mesh_indices_i32(options.faces_output, face_count, mesh.indices)) {
+        LOGE("mesh-repair-boundaries: failed to write output SAMT tensors");
+        return 1;
+    }
+    LOGI("mesh-repair-boundaries: %lld vertices, %lld triangles",
+         static_cast<long long>(vertex_count), static_cast<long long>(face_count));
+    return 0;
+}
+
+static int cmd_mesh_parameterize(const MeshParameterizeOpts& options) {
+    if (options.vertices.empty() || options.faces.empty() || options.vertices_output.empty() ||
+        options.faces_output.empty() || options.uv_output.empty()) {
+        LOGE("mesh-parameterize requires --vertices, --faces, --vertices-out, --faces-out and --uv-out");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "mesh-parameterize vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "mesh-parameterize faces") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3) {
+        LOGE("mesh-parameterize expects vertices [3,V] F32 and faces [3,F] F32/I32 SAMT tensors");
+        return 1;
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    std::string error;
+    if (!parameterize_mesh_xatlas(mesh, error)) {
+        LOGE("mesh-parameterize: %s", error.c_str());
+        return 1;
+    }
+    const int64_t vertex_count = static_cast<int64_t>(mesh.positions.size() / 3);
+    const int64_t face_count = static_cast<int64_t>(mesh.indices.size() / 3);
+    if (!save_raw_tensor_f32(options.vertices_output, {3, vertex_count}, mesh.positions.data()) ||
+        !save_mesh_indices_i32(options.faces_output, face_count, mesh.indices) ||
+        !save_raw_tensor_f32(options.uv_output, {2, vertex_count}, mesh.texcoords.data())) {
+        LOGE("mesh-parameterize: failed to write output SAMT tensors");
+        return 1;
+    }
+    LOGI("mesh-parameterize: xatlas produced %lld vertices, %lld triangles",
+         static_cast<long long>(vertex_count), static_cast<long long>(face_count));
+    return 0;
+}
+
+struct GaussianRenderOpts {
+    std::string ply;
+    std::string output_dir;
+    std::string extrinsics;
+    std::string intrinsics;
+    int views = 100;
+    int resolution = 1024;
+};
+
+struct TextureInpaintOpts {
+    std::string texture;
+    std::string mask;
+    std::string output;
+    float radius = 3.0f;
+};
+
+static int cmd_texture_inpaint(const TextureInpaintOpts& options) {
+#if !defined(SAM3D_NATIVE_PBR_CUDA)
+    (void)options;
+    LOGE("texture-inpaint requires a native-PBR CUDA build with OpenCV Telea support");
+    return 1;
+#else
+    if (options.texture.empty() || options.mask.empty() || options.output.empty()) {
+        LOGE("texture-inpaint requires --texture, --mask and --out");
+        return 1;
+    }
+    RgbaImage texture;
+    RgbaImage mask;
+    std::string error;
+    if (!load_rgba_image(options.texture, texture, error)) {
+        LOGE("texture-inpaint: %s", error.c_str());
+        return 1;
+    }
+    if (!load_rgba_image(options.mask, mask, error)) {
+        LOGE("texture-inpaint: %s", error.c_str());
+        return 1;
+    }
+    if (texture.width != mask.width || texture.height != mask.height) {
+        LOGE("texture-inpaint: texture and mask dimensions differ");
+        return 1;
+    }
+    std::vector<uint8_t> holes(static_cast<size_t>(texture.width) * texture.height);
+    for (size_t pixel = 0; pixel < holes.size(); ++pixel) {
+        // Official masks are single-channel 0/1 images. Using RGB luminance
+        // makes the command accept their PNG form after stb's RGBA decode.
+        const uint8_t* value = mask.rgba.data() + pixel * 4;
+        holes[pixel] = static_cast<uint8_t>(value[0] != 0 || value[1] != 0 || value[2] != 0);
+    }
+    if (!inpaint_texture_telea(texture, holes, options.radius, error)) {
+        LOGE("texture-inpaint: %s", error.c_str());
+        return 1;
+    }
+    if (!write_rgba_png(options.output, texture, error)) {
+        LOGE("texture-inpaint: %s", error.c_str());
+        return 1;
+    }
+    LOGI("texture-inpaint: wrote %s", options.output.c_str());
+    return 0;
+#endif
+}
+
+#if defined(SAM3D_NATIVE_PBR_CUDA)
+static bool load_gaussian_cameras(const GaussianRenderOpts& options,
+                                  std::vector<GaussianCamera>& cameras,
+                                  std::string& error) {
+    if (options.extrinsics.empty() != options.intrinsics.empty()) {
+        error = "--extrinsics and --intrinsics must be supplied together";
+        return false;
+    }
+    if (options.extrinsics.empty()) {
+        GaussianRenderConfig config;
+        config.width = options.resolution;
+        config.height = options.resolution;
+        cameras = make_gaussian_hammersley_cameras(options.views, config, error);
+        return !cameras.empty();
+    }
+
+    RawTensor extrinsics;
+    RawTensor intrinsics;
+    if (!load_raw_tensor(options.extrinsics, extrinsics) ||
+        !load_raw_tensor(options.intrinsics, intrinsics) ||
+        extrinsics.type != GGML_TYPE_F32 || intrinsics.type != GGML_TYPE_F32 ||
+        extrinsics.ne.size() != 3 || intrinsics.ne.size() != 3 ||
+        extrinsics.ne[0] != 4 || extrinsics.ne[1] != 4 ||
+        intrinsics.ne[0] != 3 || intrinsics.ne[1] != 3 ||
+        extrinsics.ne[2] <= 0 || intrinsics.ne[2] != extrinsics.ne[2] ||
+        extrinsics.data.size() != static_cast<size_t>(extrinsics.ne[2]) * 16 * sizeof(float) ||
+        intrinsics.data.size() != static_cast<size_t>(intrinsics.ne[2]) * 9 * sizeof(float)) {
+        error = "camera SAMT tensors must be F32 [camera_count,4,4] and [camera_count,3,3]";
+        return false;
+    }
+    const size_t count = static_cast<size_t>(extrinsics.ne[2]);
+    cameras.resize(count);
+    for (size_t index = 0; index < count; ++index) {
+        std::memcpy(cameras[index].extrinsics.data(),
+                    extrinsics.data.data() + index * 16 * sizeof(float), 16 * sizeof(float));
+        std::memcpy(cameras[index].intrinsics.data(),
+                    intrinsics.data.data() + index * 9 * sizeof(float), 9 * sizeof(float));
+    }
+    return true;
+}
+#endif
+
+static int cmd_gaussian_render(const GaussianRenderOpts& options) {
+#if !defined(SAM3D_NATIVE_PBR_CUDA)
+    (void)options;
+    LOGE("gaussian-render requires a CUDA build configured with SAM3D_GGML_NATIVE_PBR=ON");
+    return 1;
+#else
+    if (options.ply.empty() || options.output_dir.empty() || options.views <= 0 ||
+        options.resolution <= 0) {
+        LOGE("gaussian-render requires --ply, --out-dir, positive --views and positive --resolution");
+        return 1;
+    }
+    std::error_code filesystem_error;
+    std::filesystem::create_directories(options.output_dir, filesystem_error);
+    if (filesystem_error) {
+        LOGE("gaussian-render: cannot create %s: %s", options.output_dir.c_str(),
+             filesystem_error.message().c_str());
+        return 1;
+    }
+    GaussianSplatSet splats;
+    std::string error;
+    if (!load_gaussian_splat_ply(options.ply, splats, error)) {
+        LOGE("gaussian-render: %s", error.c_str());
+        return 1;
+    }
+    GaussianRenderConfig config;
+    config.width = options.resolution;
+    config.height = options.resolution;
+    std::vector<GaussianCamera> cameras;
+    if (!load_gaussian_cameras(options, cameras, error)) {
+        LOGE("gaussian-render: %s", error.c_str());
+        return 1;
+    }
+    std::vector<RgbaImage> images;
+    if (!render_gaussian_views_cuda(splats, cameras, config, images, error)) {
+        LOGE("gaussian-render: %s", error.c_str());
+        return 1;
+    }
+    for (size_t index = 0; index < images.size(); ++index) {
+        char name[64];
+        std::snprintf(name, sizeof(name), "view_%03zu.png", index);
+        const std::string output = (std::filesystem::path(options.output_dir) / name).string();
+        if (!write_rgba_png(output, images[index], error)) {
+            LOGE("gaussian-render: %s", error.c_str());
+            return 1;
+        }
+    }
+    LOGI("gaussian-render: wrote %zu official Hammersley views (%dx%d) to %s", images.size(),
+         config.width, config.height, options.output_dir.c_str());
+    return 0;
+#endif
+}
+
+static int cmd_mesh_extract(const MeshExtractOpts& options) {
+    if (options.features.empty() || options.coordinates.empty() || options.output.empty()) {
+        LOGE("mesh-extract requires --features, --coords and --out");
+        return 1;
+    }
+    RawTensor features_tensor;
+    RawTensor coordinates_tensor;
+    std::vector<float> features;
+    if (!tensor_values_f32(options.features, features_tensor, features, "cube features") ||
+        !load_raw_tensor(options.coordinates, coordinates_tensor) ||
+        coordinates_tensor.type != GGML_TYPE_I32 || coordinates_tensor.ne.size() != 2 ||
+        coordinates_tensor.ne[0] != 4 ||
+        coordinates_tensor.data.size() % sizeof(int32_t) != 0) {
+        LOGE("mesh-extract expects F32 [101, cell_count] features and I32 [4, cell_count] coordinates");
+        return 1;
+    }
+    if (features_tensor.ne.size() != 2 || features_tensor.ne[0] != 101 ||
+        features_tensor.ne[1] <= 0 || coordinates_tensor.ne[1] != features_tensor.ne[1] ||
+        features.size() != static_cast<size_t>(features_tensor.ne[1]) * 101) {
+        LOGE("mesh-extract: feature and coordinate dimensions do not match the official mesh layout");
+        return 1;
+    }
+    if (options.resolution <= 0) {
+        LOGE("mesh-extract: --resolution must be positive");
+        return 1;
+    }
+    std::vector<int32_t> coordinates(coordinates_tensor.data.size() / sizeof(int32_t));
+    std::memcpy(coordinates.data(), coordinates_tensor.data.data(), coordinates_tensor.data.size());
+
+    FlexiCubesResult extracted;
+    std::string error;
+    if (!decode_flexicubes(features.data(), coordinates.data(), features_tensor.ne[1],
+                           options.resolution, extracted, error)) {
+        LOGE("mesh-extract: %s", error.c_str());
+        return 1;
+    }
+    if (!extracted.success()) {
+        LOGE("mesh-extract: FlexiCubes found no closed surface");
+        return 1;
+    }
+    const int64_t extracted_vertex_count = static_cast<int64_t>(extracted.positions.size() / 3);
+    NativeMesh mesh;
+    mesh.positions = extracted.positions;
+    mesh.indices = extracted.indices;
+    mesh.vertex_attributes = extracted.vertex_attributes;
+    mesh.colors.resize(static_cast<size_t>(extracted_vertex_count) * 3);
+    for (int64_t vertex = 0; vertex < extracted_vertex_count; ++vertex) {
+        mesh.colors[vertex * 3 + 0] = extracted.vertex_attributes[vertex * 6 + 0];
+        mesh.colors[vertex * 3 + 1] = extracted.vertex_attributes[vertex * 6 + 1];
+        mesh.colors[vertex * 3 + 2] = extracted.vertex_attributes[vertex * 6 + 2];
+    }
+    if (options.xatlas_uv) {
+        if (!parameterize_mesh_xatlas(mesh, error)) {
+            LOGE("mesh-extract: %s", error.c_str());
+            return 1;
+        }
+        if (!options.uv_output.empty() &&
+            !save_raw_tensor_f32(options.uv_output,
+                                 {2, static_cast<int64_t>(mesh.texcoords.size() / 2)},
+                                 mesh.texcoords.data())) {
+            LOGE("mesh-extract: failed to write %s", options.uv_output.c_str());
+            return 1;
+        }
+    } else if (!options.uv_output.empty()) {
+        LOGE("mesh-extract: --uv-out requires --xatlas-uv");
+        return 1;
+    }
+    const int64_t output_vertex_count = static_cast<int64_t>(mesh.positions.size() / 3);
+    const int64_t output_face_count = static_cast<int64_t>(mesh.indices.size() / 3);
+    for (int64_t vertex = 0; vertex < output_vertex_count; ++vertex) {
+        const float y = mesh.positions[vertex * 3 + 1];
+        mesh.positions[vertex * 3 + 1] = mesh.positions[vertex * 3 + 2];
+        mesh.positions[vertex * 3 + 2] = -y;
+    }
+    // Every exported tensor is in the same final coordinate system and uses
+    // the seam-expanded xatlas vertex order when --xatlas-uv is selected.
+    if (!options.vertices_output.empty() &&
+        !save_raw_tensor_f32(options.vertices_output, {3, output_vertex_count}, mesh.positions.data())) {
+        LOGE("mesh-extract: failed to write %s", options.vertices_output.c_str());
+        return 1;
+    }
+    if (!options.attributes_output.empty() &&
+        (mesh.vertex_attributes.size() != static_cast<size_t>(output_vertex_count) * 6 ||
+         !save_raw_tensor_f32(options.attributes_output, {6, output_vertex_count},
+                              mesh.vertex_attributes.data()))) {
+        LOGE("mesh-extract: failed to write %s", options.attributes_output.c_str());
+        return 1;
+    }
+    if (!options.faces_output.empty()) {
+        if (!save_mesh_indices_i32(options.faces_output, output_face_count, mesh.indices)) {
+            LOGE("mesh-extract: failed to write %s", options.faces_output.c_str());
+            return 1;
+        }
+    }
+    if (!write_pbr_glb(options.output, mesh, error)) {
+        LOGE("mesh-extract: %s", error.c_str());
+        return 1;
+    }
+    LOGI("mesh-extract: wrote %s (%lld vertices, %lld triangles)", options.output.c_str(),
+         static_cast<long long>(output_vertex_count), static_cast<long long>(output_face_count));
+    return 0;
+}
+
+struct MeshDecodeOpts {
+    std::string model;
+    std::string input;
+    std::string coordinates;
+    std::string output;
+    std::string output_coordinates;
+    std::string stage;
+    std::string backend = "auto";
+    int threads = 8;
+};
+
+static int cmd_mesh_decode(const MeshDecodeOpts& options) {
+    if (options.model.empty() || options.input.empty() || options.coordinates.empty() ||
+        options.output.empty()) {
+        LOGE("mesh-decode requires --model, --input, --coords and --out");
+        return 1;
+    }
+
+    RawTensor features_tensor;
+    RawTensor coords_tensor;
+    if (!load_raw_tensor(options.input, features_tensor) ||
+        features_tensor.type != GGML_TYPE_F32 || features_tensor.ne.size() != 2 ||
+        features_tensor.ne[0] != 8 || features_tensor.data.size() % sizeof(float) != 0) {
+        LOGE("mesh-decode: --input must be an F32 SAMT tensor with shape [8, token_count]");
+        return 1;
+    }
+    if (!load_raw_tensor(options.coordinates, coords_tensor) ||
+        coords_tensor.type != GGML_TYPE_I32 || coords_tensor.ne.size() != 2 ||
+        coords_tensor.ne[0] != 4 || coords_tensor.data.size() % sizeof(int32_t) != 0) {
+        LOGE("mesh-decode: --coords must be an I32 SAMT tensor with shape [4, token_count]");
+        return 1;
+    }
+    const int64_t token_count = features_tensor.ne[1];
+    if (coords_tensor.ne[1] != token_count || token_count <= 0 ||
+        features_tensor.data.size() != static_cast<size_t>(token_count) * 8 * sizeof(float) ||
+        coords_tensor.data.size() != static_cast<size_t>(token_count) * 4 * sizeof(int32_t)) {
+        LOGE("mesh-decode: feature and coordinate token counts do not agree");
+        return 1;
+    }
+
+    auto backend = Backend::create(options.backend, options.threads);
+    if (!backend) return 1;
+    GGUFModel model;
+    if (!model.load(options.model, backend->weights_buffer_type())) return 1;
+    if (model.str("sam3d.model") != "slat_decoder_mesh") {
+        LOGE("mesh-decode requires slat_decoder_mesh GGUF, got %s",
+             model.str("sam3d.model").c_str());
+        return 1;
+    }
+
+    const int32_t* input_coords = reinterpret_cast<const int32_t*>(coords_tensor.data.data());
+    MeshTables tables;
+    if (!tables.build(input_coords, token_count, model.i32("meshdec.resolution", 64))) {
+        LOGE("mesh-decode: failed to construct sparse subdivision or convolution tables");
+        return 1;
+    }
+    const int64_t final_output_tokens = token_count * 64;
+    if (tables.levels[2].n != final_output_tokens) {
+        LOGE("mesh-decode: unexpected two-stage subdivision size");
+        return 1;
+    }
+
+    GraphContext context;
+    MeshDecoderGraph graph_builder;
+    graph_builder.g = &context;
+    graph_builder.m = &model;
+    graph_builder.tb = &tables;
+    graph_builder.debug_stage = options.stage;
+    ggml_tensor* input = context.input_f32("mesh_decoder_input", {8, token_count});
+    graph_builder.x = input;
+    graph_builder.inputs.push_back(input);
+    graph_builder.table_data.push_back(nullptr);
+    const std::vector<ggml_tensor*> outputs = graph_builder.build();
+    GGML_ASSERT(outputs.size() == 1);
+    const int64_t output_channels = outputs.front()->ne[0];
+    const int64_t output_tokens = outputs.front()->ne[1];
+    if (options.stage.empty() &&
+        (output_channels != 101 || output_tokens != final_output_tokens)) {
+        LOGE("mesh-decode: final graph shape is not [101, %lld]",
+             static_cast<long long>(final_output_tokens));
+        return 1;
+    }
+    ggml_cgraph* graph = ggml_new_graph_custom(context.ctx(), 65536, false);
+    ggml_set_output(outputs.front());
+    ggml_build_forward_expand(graph, outputs.front());
+    if (!backend->alloc(graph) ||
+        !backend->set_input_f32(input,
+                                reinterpret_cast<const float*>(features_tensor.data.data()),
+                                static_cast<size_t>(token_count) * 8)) {
+        return 1;
+    }
+    for (size_t index = 0; index < graph_builder.inputs.size(); ++index) {
+        ggml_tensor* graph_input = graph_builder.inputs[index];
+        const auto& data = graph_builder.table_data[index];
+        if (!graph_input->buffer || !data) continue;
+        const bool uploaded = graph_input->type == GGML_TYPE_F32
+            ? backend->set_input_f32(graph_input, reinterpret_cast<const float*>(data->data()), data->size())
+            : backend->set_input_i32(graph_input, data->data(), data->size());
+        if (!uploaded) return 1;
+    }
+    if (!backend->run(graph)) return 1;
+
+    std::vector<float> output;
+    if (!backend->get_tensor_f32(outputs.front(), output) ||
+        output.size() != static_cast<size_t>(output_tokens) * output_channels ||
+        !std::all_of(output.begin(), output.end(),
+                     [](float value) { return std::isfinite(value); })) {
+        LOGE("mesh-decode: graph produced an invalid feature tensor");
+        return 1;
+    }
+    if (!save_raw_tensor_f32(options.output, {output_channels, output_tokens}, output.data())) {
+        LOGE("mesh-decode: failed to write %s", options.output.c_str());
+        return 1;
+    }
+    if (!options.output_coordinates.empty()) {
+        const MeshConvLevel* output_level = &tables.levels[0];
+        if (output_tokens == tables.levels[1].n) output_level = &tables.levels[1];
+        if (output_tokens == tables.levels[2].n) output_level = &tables.levels[2];
+        if (output_tokens != output_level->n) {
+            LOGE("mesh-decode: debug stage has no matching sparse support");
+            return 1;
+        }
+        RawTensor output_coords;
+        output_coords.ne = {4, output_tokens};
+        output_coords.type = GGML_TYPE_I32;
+        output_coords.data.resize(output_level->coords.size() * sizeof(int32_t));
+        std::memcpy(output_coords.data.data(), output_level->coords.data(), output_coords.data.size());
+        if (!save_raw_tensor(options.output_coordinates, output_coords)) {
+            LOGE("mesh-decode: failed to write %s", options.output_coordinates.c_str());
+            return 1;
+        }
+    }
+    LOGI("mesh-decode: %lld input cells -> [%lld, %lld] %s (%s)",
+         static_cast<long long>(token_count), static_cast<long long>(output_channels),
+         static_cast<long long>(output_tokens),
+         options.stage.empty() ? "raw features" : options.stage.c_str(), backend->backend_name());
+    return 0;
+}
+
 struct MogeSmokeOpts {
     std::string model;
     std::string output_prefix;
+    std::string image_path;
     std::string backend = "cpu";
     int width = 56;
     int height = 56;
     int threads = 8;
 };
 
+struct PreprocessConditionsOpts {
+    std::string image;
+    std::string mask;
+    std::string pointmap;
+    std::string output_dir;
+    std::string decoded_rgb_output;
+};
+
+static bool save_decoded_rgb(const std::string& path, const RgbaImage& image) {
+    std::vector<float> rgb(static_cast<size_t>(image.width) * image.height * 3);
+    for (size_t pixel = 0; pixel < static_cast<size_t>(image.width) * image.height; ++pixel) {
+        for (size_t channel = 0; channel < 3; ++channel) {
+            rgb[pixel * 3 + channel] = static_cast<float>(image.rgba[pixel * 4 + channel]);
+        }
+    }
+    // The Python fixture is contiguous HWC, serialized with reversed ggml
+    // dimensions. Keep the byte order as HWC so the decoder contract can be
+    // checked directly against `input_image_rgba.samt`.
+    return save_raw_tensor_f32(path, {3, image.width, image.height}, rgb.data());
+}
+
+static int cmd_preprocess_conditions(const PreprocessConditionsOpts& options) {
+    if (options.image.empty() || options.pointmap.empty() || options.output_dir.empty()) {
+        LOGE("preprocess-conditions requires --image, --pointmap and --out-dir");
+        return 1;
+    }
+    RgbaImage image;
+    std::string error;
+    if (!load_rgba_image(options.image, image, error)) {
+        LOGE("preprocess-conditions: %s", error.c_str());
+        return 1;
+    }
+    if (!options.decoded_rgb_output.empty() &&
+        !save_decoded_rgb(options.decoded_rgb_output, image)) {
+        LOGE("preprocess-conditions: failed to write decoded RGB tensor %s",
+             options.decoded_rgb_output.c_str());
+        return 1;
+    }
+    if (!options.mask.empty()) {
+        RgbaImage mask;
+        if (!load_rgba_image(options.mask, mask, error)) {
+            LOGE("preprocess-conditions: %s", error.c_str());
+            return 1;
+        }
+        if (mask.width != image.width || mask.height != image.height) {
+            LOGE("preprocess-conditions: mask dimensions must match the input image");
+            return 1;
+        }
+        for (size_t pixel = 0; pixel < static_cast<size_t>(image.width) * image.height; ++pixel) {
+            // notebook/inference.py::load_mask first applies `mask > 0` and
+            // then selects the last channel. With stb's RGBA decode, that is
+            // the alpha channel; preserve its boolean semantics exactly.
+            image.rgba[pixel * 4 + 3] = mask.rgba[pixel * 4 + 3] == 0 ? 0 : 255;
+        }
+    }
+    RawTensor pointmap;
+    if (!load_raw_tensor(options.pointmap, pointmap) || pointmap.type != GGML_TYPE_F32 ||
+        (pointmap.ne.size() != 3 && pointmap.ne.size() != 4) || pointmap.ne[0] <= 0 ||
+        pointmap.ne[1] <= 0 || pointmap.ne[2] != 3 ||
+        (pointmap.ne.size() == 4 && pointmap.ne[3] != 1) ||
+        pointmap.data.size() % sizeof(float) != 0) {
+        LOGE("preprocess-conditions: pointmap must be F32 SAMT [W,H,3] or [W,H,3,1]");
+        return 1;
+    }
+    const int width = static_cast<int>(pointmap.ne[0]);
+    const int height = static_cast<int>(pointmap.ne[1]);
+    const size_t count = static_cast<size_t>(width) * height * 3;
+    if (pointmap.data.size() != count * sizeof(float)) {
+        LOGE("preprocess-conditions: pointmap payload size is inconsistent with its shape");
+        return 1;
+    }
+    std::vector<float> values(count);
+    std::memcpy(values.data(), pointmap.data.data(), pointmap.data.size());
+    NativeConditionInputs output;
+    if (!preprocess_ss_conditions(image, values, width, height, {}, output, error) ||
+        !write_ss_conditions(options.output_dir, output, error)) {
+        LOGE("preprocess-conditions: %s", error.c_str());
+        return 1;
+    }
+    LOGI("preprocess-conditions: wrote native 518x518 SS conditions to %s", options.output_dir.c_str());
+    return 0;
+}
+
 static int cmd_moge_smoke(const MogeSmokeOpts& options) {
-    if (options.width < 14 || options.height < 14) {
+    int width = options.width;
+    int height = options.height;
+    std::vector<float> rgb;
+    if (!options.image_path.empty()) {
+        RgbaImage image;
+        std::string error;
+        if (!load_rgba_image(options.image_path, image, error)) {
+            LOGE("moge-smoke: %s", error.c_str());
+            return 1;
+        }
+        width = image.width;
+        height = image.height;
+        rgb.resize(static_cast<size_t>(width) * height * 3);
+        for (size_t pixel = 0; pixel < static_cast<size_t>(width) * height; ++pixel) {
+            rgb[pixel * 3 + 0] = static_cast<float>(image.rgba[pixel * 4 + 0]) / 255.0f;
+            rgb[pixel * 3 + 1] = static_cast<float>(image.rgba[pixel * 4 + 1]) / 255.0f;
+            rgb[pixel * 3 + 2] = static_cast<float>(image.rgba[pixel * 4 + 2]) / 255.0f;
+        }
+    }
+    if (width < 14 || height < 14) {
         LOGE("moge-smoke dimensions must both be at least 14");
         return 1;
     }
@@ -178,7 +1023,7 @@ static int cmd_moge_smoke(const MogeSmokeOpts& options) {
     MogeGraph graph_builder;
     graph_builder.g = &context;
     graph_builder.m = &model;
-    ggml_tensor* input = context.input_f32("moge_rgb", {3, options.width, options.height});
+    ggml_tensor* input = context.input_f32("moge_rgb", {3, width, height});
     MogeOutputs outputs = graph_builder.build(input);
     ggml_cgraph* graph = ggml_new_graph_custom(context.ctx(), 32768, false);
     ggml_set_output(outputs.points);
@@ -236,13 +1081,15 @@ static int cmd_moge_smoke(const MogeSmokeOpts& options) {
     LOGI("moge-smoke: graph nodes=%d, allocating", ggml_graph_n_nodes(graph));
     if (!backend->alloc(graph)) return 1;
 
-    std::vector<float> rgb(static_cast<size_t>(options.width) * options.height * 3);
-    for (int y = 0; y < options.height; ++y) {
-        for (int x = 0; x < options.width; ++x) {
-            const size_t offset = (static_cast<size_t>(y) * options.width + x) * 3;
-            rgb[offset] = static_cast<float>(x) / std::max(1, options.width - 1);
-            rgb[offset + 1] = static_cast<float>(y) / std::max(1, options.height - 1);
-            rgb[offset + 2] = 0.25f;
+    if (rgb.empty()) {
+        rgb.resize(static_cast<size_t>(width) * height * 3);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const size_t offset = (static_cast<size_t>(y) * width + x) * 3;
+                rgb[offset] = static_cast<float>(x) / std::max(1, width - 1);
+                rgb[offset + 1] = static_cast<float>(y) / std::max(1, height - 1);
+                rgb[offset + 2] = 0.25f;
+            }
         }
     }
     if (!backend->set_input_f32(input, rgb.data(), rgb.size())) return 1;
@@ -276,9 +1123,9 @@ static int cmd_moge_smoke(const MogeSmokeOpts& options) {
     }
     if (!options.output_prefix.empty()) {
         if (!save_raw_tensor_f32(options.output_prefix + ".points.samt",
-                                 {options.width, options.height, 3, 1}, points.data()) ||
+                                 {width, height, 3, 1}, points.data()) ||
             !save_raw_tensor_f32(options.output_prefix + ".mask_logits.samt",
-                                 {options.width, options.height, 1, 1}, mask.data())) {
+                                 {width, height, 1, 1}, mask.data())) {
             LOGE("moge-smoke: failed to save output tensors with prefix %s",
                  options.output_prefix.c_str());
             return 1;
@@ -1242,10 +2089,147 @@ int main(int argc, char** argv) {
         }
         return cmd_mesh_export(options);
     }
+    if (cmd == "gaussian-render") {
+        GaussianRenderOpts options;
+        options.output_dir = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--ply") && i + 1 < argc) options.ply = argv[++i];
+            else if (!std::strcmp(argv[i], "--out-dir") && i + 1 < argc) options.output_dir = argv[++i];
+            else if (!std::strcmp(argv[i], "--views") && i + 1 < argc) options.views = std::atoi(argv[++i]);
+            else if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) {
+                options.resolution = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--extrinsics") && i + 1 < argc) {
+                options.extrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--intrinsics") && i + 1 < argc) {
+                options.intrinsics = argv[++i];
+            }
+        }
+        return cmd_gaussian_render(options);
+    }
+    if (cmd == "texture-inpaint") {
+        TextureInpaintOpts options;
+        options.output = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--texture") && i + 1 < argc) options.texture = argv[++i];
+            else if (!std::strcmp(argv[i], "--mask") && i + 1 < argc) options.mask = argv[++i];
+            else if (!std::strcmp(argv[i], "--radius") && i + 1 < argc) {
+                options.radius = std::strtof(argv[++i], nullptr);
+            }
+        }
+        return cmd_texture_inpaint(options);
+    }
+    if (cmd == "mesh-decode") {
+        MeshDecodeOpts options;
+        options.model = model;
+        options.input = input;
+        options.output = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--coords") && i + 1 < argc) options.coordinates = argv[++i];
+            else if (!std::strcmp(argv[i], "--coords-out") && i + 1 < argc) {
+                options.output_coordinates = argv[++i];
+            } else if (!std::strcmp(argv[i], "--stage") && i + 1 < argc) {
+                options.stage = argv[++i];
+            } else if (!std::strcmp(argv[i], "--backend") && i + 1 < argc) {
+                options.backend = argv[++i];
+            } else if (!std::strcmp(argv[i], "--threads") && i + 1 < argc) {
+                options.threads = std::atoi(argv[++i]);
+            }
+        }
+        return cmd_mesh_decode(options);
+    }
+    if (cmd == "mesh-extract") {
+        MeshExtractOpts options;
+        options.output = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--features") && i + 1 < argc) options.features = argv[++i];
+            else if (!std::strcmp(argv[i], "--coords") && i + 1 < argc) options.coordinates = argv[++i];
+            else if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) {
+                options.resolution = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--vertices-out") && i + 1 < argc) {
+                options.vertices_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--faces-out") && i + 1 < argc) {
+                options.faces_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--attrs-out") && i + 1 < argc) {
+                options.attributes_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--xatlas-uv")) {
+                options.xatlas_uv = true;
+            } else if (!std::strcmp(argv[i], "--uv-out") && i + 1 < argc) {
+                options.uv_output = argv[++i];
+            }
+        }
+        return cmd_mesh_extract(options);
+    }
+    if (cmd == "mesh-postprocess") {
+        MeshPostprocessOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--vertices-out") && i + 1 < argc) {
+                options.vertices_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--faces-out") && i + 1 < argc) {
+                options.faces_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--target-reduction") && i + 1 < argc) {
+                options.target_reduction = std::strtof(argv[++i], nullptr);
+            } else if (!std::strcmp(argv[i], "--visibility") && i + 1 < argc) {
+                options.visibility = argv[++i];
+            }
+        }
+        return cmd_mesh_postprocess(options);
+    }
+    if (cmd == "mesh-filter-visibility") {
+        MeshVisibilityFilterOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--visibility") && i + 1 < argc) {
+                options.visibility = argv[++i];
+            } else if (!std::strcmp(argv[i], "--vertices-out") && i + 1 < argc) {
+                options.vertices_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--faces-out") && i + 1 < argc) {
+                options.faces_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--candidates-out") && i + 1 < argc) {
+                options.candidates_output = argv[++i];
+            }
+        }
+        return cmd_mesh_filter_visibility(options);
+    }
+    if (cmd == "mesh-repair-boundaries") {
+        MeshBoundaryRepairOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--vertices-out") && i + 1 < argc) {
+                options.vertices_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--faces-out") && i + 1 < argc) {
+                options.faces_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--max-boundary-edges") && i + 1 < argc) {
+                options.max_boundary_edges = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--no-refine")) {
+                options.refine = false;
+            }
+        }
+        return cmd_mesh_repair_boundaries(options);
+    }
+    if (cmd == "mesh-parameterize") {
+        MeshParameterizeOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--vertices-out") && i + 1 < argc) {
+                options.vertices_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--faces-out") && i + 1 < argc) {
+                options.faces_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--uv-out") && i + 1 < argc) {
+                options.uv_output = argv[++i];
+            }
+        }
+        return cmd_mesh_parameterize(options);
+    }
     if (cmd == "moge-smoke") {
         MogeSmokeOpts options;
         options.model = model;
         options.output_prefix = out;
+        options.image_path = input;
         for (int i = 2; i < argc; ++i) {
             if (!strcmp(argv[i], "--backend") && i + 1 < argc) options.backend = argv[++i];
             else if (!strcmp(argv[i], "--width") && i + 1 < argc) options.width = atoi(argv[++i]);
@@ -1257,6 +2241,22 @@ int main(int argc, char** argv) {
             return 1;
         }
         return cmd_moge_smoke(options);
+    }
+    if (cmd == "preprocess-conditions") {
+        PreprocessConditionsOpts options;
+        options.image = input;
+        options.pointmap = model;
+        options.output_dir = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--image") && i + 1 < argc) options.image = argv[++i];
+            else if (!std::strcmp(argv[i], "--pointmap") && i + 1 < argc) options.pointmap = argv[++i];
+            else if (!std::strcmp(argv[i], "--mask") && i + 1 < argc) options.mask = argv[++i];
+            else if (!std::strcmp(argv[i], "--out-dir") && i + 1 < argc) options.output_dir = argv[++i];
+            else if (!std::strcmp(argv[i], "--decoded-rgb-out") && i + 1 < argc) {
+                options.decoded_rgb_output = argv[++i];
+            }
+        }
+        return cmd_preprocess_conditions(options);
     }
     if (cmd == "dino") {
         std::string embedder = "cemb.emb0";

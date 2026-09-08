@@ -1,5 +1,17 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 11ed9e8b..9433db3e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -197,6 +197,7 @@ set(GGML_BLAS_VENDOR ${GGML_BLAS_VENDOR_DEFAULT} CACHE STRING
+ option(GGML_LLAMAFILE                       "ggml: use LLAMAFILE"                             ${GGML_LLAMAFILE_DEFAULT})
+ 
+ option(GGML_CUDA                            "ggml: use CUDA"                                  OFF)
++option(GGML_CUDA_FAST_MATH                  "ggml: compile CUDA kernels with fast math"       ON)
+ option(GGML_MUSA                            "ggml: use MUSA"                                  OFF)
+ option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)
+ option(GGML_CUDA_FORCE_CUBLAS               "ggml: always use cuBLAS instead of mmq kernels"  OFF)
 diff --git a/src/ggml-cpu/ggml-cpu.c b/src/ggml-cpu/ggml-cpu.c
-index 87ac0a702efc31613b3c65e7133b45b4ab9adbe2..cc42c81c36755feefcc51c495b6e62bc2879afbb 100644
+index 87ac0a70..cc42c81c 100644
 --- a/src/ggml-cpu/ggml-cpu.c
 +++ b/src/ggml-cpu/ggml-cpu.c
 @@ -2891,6 +2891,14 @@ struct ggml_cplan ggml_graph_plan(
@@ -17,8 +29,102 @@ index 87ac0a702efc31613b3c65e7133b45b4ab9adbe2..cc42c81c36755feefcc51c495b6e62bc
                  case GGML_OP_ROPE:
                  case GGML_OP_ROPE_BACK:
                      {
+diff --git a/src/ggml-cuda/CMakeLists.txt b/src/ggml-cuda/CMakeLists.txt
+index d3953eee..f247ce45 100644
+--- a/src/ggml-cuda/CMakeLists.txt
++++ b/src/ggml-cuda/CMakeLists.txt
+@@ -173,7 +173,7 @@ if (CUDAToolkit_FOUND)
+         if (GGML_CUDA_CUB_3DOT2)
+             target_link_libraries(ggml-cuda PRIVATE  CCCL::CCCL)
+         endif()
+-        target_link_libraries(ggml-cuda PRIVATE CUDA::cudart CUDA::cublas)
++        target_link_libraries(ggml-cuda PRIVATE CUDA::cudart CUDA::cublas CUDA::cublasLt)
+     endif()
+ 
+     if (GGML_CUDA_NO_VMM)
+@@ -194,7 +194,10 @@ if (CUDAToolkit_FOUND)
+ 
+     set(CUDA_CXX_FLAGS "")
+ 
+-    set(CUDA_FLAGS -use_fast_math -extended-lambda)
++    set(CUDA_FLAGS -extended-lambda)
++    if (GGML_CUDA_FAST_MATH)
++        list(PREPEND CUDA_FLAGS -use_fast_math)
++    endif()
+ 
+     if (GGML_CUDA_DEBUG)
+         list(APPEND CUDA_FLAGS -lineinfo)
+diff --git a/src/ggml-cuda/common.cuh b/src/ggml-cuda/common.cuh
+index 14dd1098..a7ce7401 100644
+--- a/src/ggml-cuda/common.cuh
++++ b/src/ggml-cuda/common.cuh
+@@ -1412,6 +1412,14 @@ struct ggml_cuda_stream_context {
+     }
+ };
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++struct ggml_cuda_f16_transpose_cache_entry {
++    void * data = nullptr;
++    int64_t rows = 0;
++    int64_t cols = 0;
++};
++#endif
++
+ struct ggml_backend_cuda_context {
+     int device;
+     std::string name;
+@@ -1419,6 +1427,11 @@ struct ggml_backend_cuda_context {
+ 
+     cudaStream_t streams[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = { { nullptr } };
+     cublasHandle_t cublas_handles[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++    cublasLtHandle_t cublaslt_handles[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
++    std::unordered_map<const ggml_tensor *, ggml_cuda_f16_transpose_cache_entry>
++        f16_transpose_cache[GGML_CUDA_MAX_DEVICES];
++#endif
+     void * cublas_workspaces[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
+     size_t cublas_workspace_sizes[GGML_CUDA_MAX_DEVICES] = {0};
+ 
+@@ -1501,7 +1514,14 @@ struct ggml_backend_cuda_context {
+         if (cublas_handles[device][curr_stream_no] == nullptr) {
+             ggml_cuda_set_device(device);
+             CUBLAS_CHECK(cublasCreate(&cublas_handles[device][curr_stream_no]));
+-            CUBLAS_CHECK(cublasSetMathMode(cublas_handles[device][curr_stream_no], CUBLAS_TF32_TENSOR_OP_MATH));
++            // The default keeps the tensor-core throughput path. Strict F32
++            // is an explicit opt-in for graphs with numerically sensitive
++            // residual branches (for example MoGe's later DINO blocks).
++            // CUBLAS_DEFAULT_MATH disables the forced TF32 tensor-op mode.
++            const bool strict_f32 = getenv("GGML_CUDA_STRICT_F32") != nullptr;
++            CUBLAS_CHECK(cublasSetMathMode(cublas_handles[device][curr_stream_no],
++                                           strict_f32 ? CUBLAS_DEFAULT_MATH
++                                                      : CUBLAS_TF32_TENSOR_OP_MATH));
+             CUBLAS_CHECK(cublasSetStream(cublas_handles[device][curr_stream_no], stream()));
+ #if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA) && (CUBLAS_VER_MAJOR > 11 || (CUBLAS_VER_MAJOR == 11 && CUBLAS_VER_MINOR >= 2))
+             if (cublas_workspace_sizes[device] == 0) {
+@@ -1515,6 +1535,16 @@ struct ggml_backend_cuda_context {
+         return cublas_handles[device][curr_stream_no];
+     }
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++    cublasLtHandle_t cublaslt_handle() {
++        if (cublaslt_handles[device][curr_stream_no] == nullptr) {
++            ggml_cuda_set_device(device);
++            CUBLAS_CHECK(cublasLtCreate(&cublaslt_handles[device][curr_stream_no]));
++        }
++        return cublaslt_handles[device][curr_stream_no];
++    }
++#endif
++
+     // pool
+     std::unique_ptr<ggml_cuda_pool> pools[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS];
+ 
+@@ -1673,4 +1703,3 @@ static __inline__ void ggml_cuda_kernel_launch(Kernel kernel, const ggml_cuda_ke
+     kernel<<<launch_params.block_nums, launch_params.block_dims, launch_params.shmem, launch_params.stream>>>(std::forward<Args>(args)... );
+     CUDA_CHECK(cudaGetLastError());
+ }
+-
 diff --git a/src/ggml-cuda/cpy.cu b/src/ggml-cuda/cpy.cu
-index fd7ffc0bc55758a119e995f614937b755c8e3c9a..addebe014df02d8e6cbb40ce644cb05f9c3e9098 100644
+index fd7ffc0b..addebe01 100644
 --- a/src/ggml-cuda/cpy.cu
 +++ b/src/ggml-cuda/cpy.cu
 @@ -322,6 +322,46 @@ static void ggml_cpy_q4_1_f32_cuda(
@@ -122,47 +228,309 @@ index ab7a3b29..62bfa2bd 100644
          case BEST_FATTN_KERNEL_NONE:
              GGML_ABORT("fatal error");
          case BEST_FATTN_KERNEL_TILE:
-diff --git a/src/ggml-cuda/common.cuh b/src/ggml-cuda/common.cuh
-index 2c5cad319..000000000 100644
---- a/src/ggml-cuda/common.cuh
-+++ b/src/ggml-cuda/common.cuh
-@@ -1501,7 +1501,14 @@ struct ggml_backend_cuda_context {
-         if (cublas_handles[device][curr_stream_no] == nullptr) {
-             ggml_cuda_set_device(device);
-             CUBLAS_CHECK(cublasCreate(&cublas_handles[device][curr_stream_no]));
--            CUBLAS_CHECK(cublasSetMathMode(cublas_handles[device][curr_stream_no], CUBLAS_TF32_TENSOR_OP_MATH));
-+            // The default keeps the tensor-core throughput path. Strict F32
-+            // is an explicit opt-in for graphs with numerically sensitive
-+            // residual branches (for example MoGe's later DINO blocks).
-+            // CUBLAS_DEFAULT_MATH disables the forced TF32 tensor-op mode.
-+            const bool strict_f32 = getenv("GGML_CUDA_STRICT_F32") != nullptr;
-+            CUBLAS_CHECK(cublasSetMathMode(cublas_handles[device][curr_stream_no],
-+                                           strict_f32 ? CUBLAS_DEFAULT_MATH
-+                                                      : CUBLAS_TF32_TENSOR_OP_MATH));
-             CUBLAS_CHECK(cublasSetStream(cublas_handles[device][curr_stream_no], stream()));
- #if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA) && (CUBLAS_VER_MAJOR > 11 || (CUBLAS_VER_MAJOR == 11 && CUBLAS_VER_MINOR >= 2))
-             if (cublas_workspace_sizes[device] == 0) {
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 11ed9e8bd..000000000 100644
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -199,3 +199,4 @@
- option(GGML_CUDA                            "ggml: use CUDA"                                  OFF)
-+option(GGML_CUDA_FAST_MATH                  "ggml: compile CUDA kernels with fast math"       ON)
- option(GGML_MUSA                            "ggml: use MUSA"                                  OFF)
- option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)
-diff --git a/src/ggml-cuda/CMakeLists.txt b/src/ggml-cuda/CMakeLists.txt
-index d3953eee9..000000000 100644
---- a/src/ggml-cuda/CMakeLists.txt
-+++ b/src/ggml-cuda/CMakeLists.txt
-@@ -197 +197,4 @@ if (GGML_CUDA)
--    set(CUDA_FLAGS -use_fast_math -extended-lambda)
-+    set(CUDA_FLAGS -extended-lambda)
-+    if (GGML_CUDA_FAST_MATH)
-+        list(PREPEND CUDA_FLAGS -use_fast_math)
-+    endif()
+diff --git a/src/ggml-cuda/ggml-cuda.cu b/src/ggml-cuda/ggml-cuda.cu
+index a8a1c09c..2a8dee49 100644
+--- a/src/ggml-cuda/ggml-cuda.cu
++++ b/src/ggml-cuda/ggml-cuda.cu
+@@ -707,6 +707,13 @@ ggml_backend_cuda_context::~ggml_backend_cuda_context() {
+         CUDA_CHECK(cudaEventDestroy(copy_event));
+     }
+     for (int i = 0; i < GGML_CUDA_MAX_DEVICES; ++i) {
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++        for (const auto & [_, entry] : f16_transpose_cache[i]) {
++            if (entry.data != nullptr) {
++                CUDA_CHECK(cudaFree(entry.data));
++            }
++        }
++#endif
+         for (int j = 0; j < GGML_CUDA_MAX_STREAMS; ++j) {
+             if (streams[i][j] != nullptr) {
+                 CUDA_CHECK(cudaStreamDestroy(streams[i][j]));
+@@ -714,6 +721,11 @@ ggml_backend_cuda_context::~ggml_backend_cuda_context() {
+             if (cublas_handles[i][j] != nullptr) {
+                 CUBLAS_CHECK(cublasDestroy(cublas_handles[i][j]));
+             }
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++            if (cublaslt_handles[i][j] != nullptr) {
++                CUBLAS_CHECK(cublasLtDestroy(cublaslt_handles[i][j]));
++            }
++#endif
+             if (cublas_workspaces[i][j] != nullptr) {
+                 CUDA_CHECK(cudaFree(cublas_workspaces[i][j]));
+             }
+@@ -1421,6 +1433,24 @@ static void ggml_cuda_mul_mat_cublas_impl(ggml_backend_cuda_context & ctx, const
+     cudaStream_t main_stream = ctx.stream();
+     cublasHandle_t cublas_h = ctx.cublas_handle();
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++    // GGML_PREC_F32 promises an F32 reduction.  A CUDA handle configured for
++    // TF32 tensor ops otherwise silently truncates F32 operands on Ampere and
++    // newer GPUs, defeating that per-op contract.  Keep the stricter mode
++    // local to genuine F32-input operations so F16/BF16 Tensor Core linears
++    // retain their established throughput and numerical behavior.
++    const bool strict_f32_operands =
++        dst->op_params[0] == GGML_PREC_F32 &&
++        src0->type == GGML_TYPE_F32 && src1->type == GGML_TYPE_F32;
++    cublasMath_t saved_math_mode = CUBLAS_DEFAULT_MATH;
++    if (strict_f32_operands) {
++        CUBLAS_CHECK(cublasGetMathMode(cublas_h, &saved_math_mode));
++        if (saved_math_mode != CUBLAS_DEFAULT_MATH) {
++            CUBLAS_CHECK(cublasSetMathMode(cublas_h, CUBLAS_DEFAULT_MATH));
++        }
++    }
++#endif
++
+     const size_t src0_ts = ggml_type_size(src0->type);
+     GGML_ASSERT(nb00 == src0_ts);
+     int64_t s01 = nb01 / src0_ts;
+@@ -1617,6 +1647,12 @@ static void ggml_cuda_mul_mat_cublas_impl(ggml_backend_cuda_context & ctx, const
+         const to_fp32_cuda_t to_fp32_cuda = ggml_get_to_fp32_cuda(traits::ggml_type_val);
+         to_fp32_cuda(dst_temp.get(), dst_ddf, ne_dst, main_stream);
+     }
++
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++    if (strict_f32_operands && saved_math_mode != CUBLAS_DEFAULT_MATH) {
++        CUBLAS_CHECK(cublasSetMathMode(cublas_h, saved_math_mode));
++    }
++#endif
+ }
+ 
+ static void ggml_cuda_mul_mat_cublas(ggml_backend_cuda_context & ctx, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst) {
+@@ -1662,6 +1698,150 @@ static void ggml_cuda_mul_mat_cublas(ggml_backend_cuda_context & ctx, const ggml
+     }
+ }
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++static __global__ void ggml_cuda_transpose_f16_linear_weights(
++        const uint16_t * source, uint16_t * destination, int64_t rows, int64_t cols) {
++    const int64_t index = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
++    const int64_t count = rows * cols;
++    if (index >= count) {
++        return;
++    }
++    const int64_t row = index / cols;
++    const int64_t col = index % cols;
++    destination[col * rows + row] = source[index];
++}
++
++static const void * ggml_cuda_f16_linear_weight_transpose(
++        ggml_backend_cuda_context & ctx, const ggml_tensor * weights,
++        int64_t rows, int64_t cols) {
++    auto & cache = ctx.f16_transpose_cache[ctx.device];
++    const auto found = cache.find(weights);
++    if (found != cache.end()) {
++        if (found->second.rows != rows || found->second.cols != cols) {
++            return nullptr;
++        }
++        return found->second.data;
++    }
++
++    ggml_cuda_f16_transpose_cache_entry entry{};
++    entry.rows = rows;
++    entry.cols = cols;
++    const size_t bytes = static_cast<size_t>(rows) * static_cast<size_t>(cols) * sizeof(uint16_t);
++    CUDA_CHECK(cudaMalloc(&entry.data, bytes));
++    constexpr int threads = 256;
++    const int64_t count = rows * cols;
++    const int blocks = static_cast<int>((count + threads - 1) / threads);
++    ggml_cuda_transpose_f16_linear_weights<<<blocks, threads, 0, ctx.stream()>>>(
++        static_cast<const uint16_t *>(weights->data), static_cast<uint16_t *>(entry.data), rows, cols);
++    CUDA_CHECK(cudaGetLastError());
++    const auto [it, inserted] = cache.emplace(weights, entry);
++    GGML_ASSERT(inserted);
++    return it->second.data;
++}
++
++// PyTorch F16 Linear uses F32 GEMM accumulation and applies its F16 bias in
++// the epilogue before materializing F16 output. The generic ggml graph rounds
++// a F32 MUL_MAT and F32 ADD separately, which is observably different.
++static bool ggml_cuda_mul_mat_f16_bias_cublaslt(ggml_backend_cuda_context & ctx,
++                                                 const ggml_tensor * mul_mat,
++                                                 const ggml_tensor * bias,
++                                                 ggml_tensor * dst) {
++    const ggml_tensor * weights = mul_mat->src[0];
++    const ggml_tensor * input   = mul_mat->src[1];
++    if (weights == nullptr || input == nullptr || bias == nullptr ||
++        weights->type != GGML_TYPE_F16 || input->type != GGML_TYPE_F16 ||
++        bias->type != GGML_TYPE_F16 || mul_mat->type != GGML_TYPE_F32 ||
++        dst->type != GGML_TYPE_F16 || mul_mat->op_params[0] != GGML_PREC_F32 ||
++        !ggml_is_contiguous(weights) || !ggml_is_contiguous(input) ||
++        !ggml_is_contiguous(bias) || !ggml_is_contiguous(dst) ||
++        weights->ne[2] != 1 || weights->ne[3] != 1 ||
++        input->ne[2] != 1 || input->ne[3] != 1 ||
++        mul_mat->ne[2] != 1 || mul_mat->ne[3] != 1 ||
++        dst->ne[2] != 1 || dst->ne[3] != 1 ||
++        bias->ne[0] != mul_mat->ne[0] || ggml_nrows(bias) != 1 ||
++        !ggml_are_same_shape(mul_mat, dst) ||
++        weights->ne[0] != input->ne[0] || weights->ne[1] != mul_mat->ne[0] ||
++        input->ne[1] != mul_mat->ne[1]) {
++        return false;
++    }
++
++    const int64_t rows  = input->ne[1];
++    const int64_t inner = input->ne[0];
++    const int64_t cols  = weights->ne[1];
++    const int64_t max_int = std::numeric_limits<int>::max();
++    if (rows > max_int || inner > max_int || cols > max_int) {
++        return false;
++    }
++    const void * transposed_weights = ggml_cuda_f16_linear_weight_transpose(
++        ctx, weights, cols, inner);
++    if (transposed_weights == nullptr) {
++        return false;
++    }
++
++    cublasLtMatmulDesc_t operation = nullptr;
++    cublasLtMatrixLayout_t weights_layout = nullptr;
++    cublasLtMatrixLayout_t input_layout = nullptr;
++    cublasLtMatrixLayout_t output_layout = nullptr;
++    cublasLtMatmulPreference_t preference = nullptr;
++    auto destroy_descriptors = [&]() {
++        if (preference != nullptr) cublasLtMatmulPreferenceDestroy(preference);
++        if (output_layout != nullptr) cublasLtMatrixLayoutDestroy(output_layout);
++        if (input_layout != nullptr) cublasLtMatrixLayoutDestroy(input_layout);
++        if (weights_layout != nullptr) cublasLtMatrixLayoutDestroy(weights_layout);
++        if (operation != nullptr) cublasLtMatmulDescDestroy(operation);
++    };
++    auto checked = [&](cublasStatus_t status) {
++        if (status == CUBLAS_STATUS_SUCCESS) {
++            return true;
++        }
++        destroy_descriptors();
++        return false;
++    };
++
++    if (!checked(cublasLtMatmulDescCreate(&operation, CUBLAS_COMPUTE_32F, CUDA_R_32F))) return false;
++    const cublasLtEpilogue_t epilogue = CUBLASLT_EPILOGUE_BIAS;
++    void * bias_pointer = bias->data;
++    if (!checked(cublasLtMatmulDescSetAttribute(operation, CUBLASLT_MATMUL_DESC_EPILOGUE,
++                                                 &epilogue, sizeof(epilogue))) ||
++        !checked(cublasLtMatmulDescSetAttribute(operation, CUBLASLT_MATMUL_DESC_BIAS_POINTER,
++                                                 &bias_pointer, sizeof(bias_pointer))) ||
++        // The cached C-order W.T bytes map to column-major W[cols, inner].
++        // This is the layout validated bit-for-bit against PyTorch F.linear.
++        !checked(cublasLtMatrixLayoutCreate(&weights_layout, CUDA_R_16F, cols, inner, cols)) ||
++        !checked(cublasLtMatrixLayoutCreate(&input_layout, CUDA_R_16F, inner, rows, inner)) ||
++        !checked(cublasLtMatrixLayoutCreate(&output_layout, CUDA_R_16F, cols, rows, cols)) ||
++        !checked(cublasLtMatmulPreferenceCreate(&preference))) {
++        return false;
++    }
++
++    constexpr size_t workspace_bytes = 0;
++    if (!checked(cublasLtMatmulPreferenceSetAttribute(
++            preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
++            &workspace_bytes, sizeof(workspace_bytes)))) {
++        return false;
++    }
++    cublasLtMatmulHeuristicResult_t heuristic{};
++    int algorithm_count = 0;
++    if (!checked(cublasLtMatmulAlgoGetHeuristic(ctx.cublaslt_handle(), operation,
++                                                 weights_layout, input_layout,
++                                                 output_layout, output_layout,
++                                                 preference, 1, &heuristic,
++                                                 &algorithm_count)) || algorithm_count == 0) {
++        return false;
++    }
++
++    const float alpha = 1.0f;
++    const float beta = 0.0f;
++    const cublasStatus_t status = cublasLtMatmul(
++        ctx.cublaslt_handle(), operation, &alpha,
++        transposed_weights, weights_layout, input->data, input_layout,
++        &beta, dst->data, output_layout, dst->data, output_layout,
++        &heuristic.algo, nullptr, 0, ctx.stream());
++    destroy_descriptors();
++    return status == CUBLAS_STATUS_SUCCESS;
++}
++#endif
++
+ static bool ggml_cuda_should_fuse_mul_mat(const ggml_tensor * ffn_up,
+                                           const ggml_tensor * ffn_gate,
+                                           const ggml_tensor * glu,
+@@ -3269,6 +3449,55 @@ static bool ggml_cuda_can_fuse(const struct ggml_cgraph *                cgraph,
+     return false;
+ }
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++static int ggml_cuda_try_fuse_f16_linear_bias(ggml_backend_cuda_context & cuda_ctx,
++                                               ggml_cgraph * cgraph, int i) {
++    constexpr ggml_op ops[] = { GGML_OP_MUL_MAT, GGML_OP_CPY, GGML_OP_ADD, GGML_OP_CPY };
++    if (i + 3 >= cgraph->n_nodes) {
++        return 0;
++    }
++
++    const ggml_tensor * mul_mat = cgraph->nodes[i];
++    const ggml_tensor * bias_cast = cgraph->nodes[i + 1];
++    const ggml_tensor * add = cgraph->nodes[i + 2];
++    ggml_tensor * output_cast = cgraph->nodes[i + 3];
++    const int output_nodes[] = { i + 3 };
++    const bool graph_contract =
++        mul_mat->op != ops[0] || bias_cast->op != ops[1] ||
++        add->op != ops[2] || output_cast->op != ops[3] ||
++        (mul_mat->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 ||
++        (bias_cast->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 ||
++        (add->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 ||
++        (output_cast->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 ||
++        (mul_mat->flags & GGML_TENSOR_FLAG_OUTPUT) != 0 ||
++        (bias_cast->flags & GGML_TENSOR_FLAG_OUTPUT) != 0 ||
++        (add->flags & GGML_TENSOR_FLAG_OUTPUT) != 0 ||
++        ggml_node_get_use_count(cgraph, i) != 1 ||
++        // GGML_OP_CPY references its write target through src[1], so its
++        // use-count comprises that self-reference and the ADD consumer.
++        bias_cast->src[1] != bias_cast || ggml_node_get_use_count(cgraph, i + 1) != 2 ||
++        ggml_node_get_use_count(cgraph, i + 2) != 1;
++    if (graph_contract) {
++        return 0;
++    }
++    // The final CPY's src[1] is its own destination. Excluding that node
++    // avoids treating its write target as an input while still rejecting any
++    // overlap between the fused output and the actual external inputs.
++    if (!ggml_cuda_check_fusion_memory_ranges(cgraph, i, 3, output_nodes, 1)) {
++        return 0;
++    }
++
++    if (bias_cast->src[0] == nullptr || output_cast->src[0] != add ||
++        output_cast->src[1] != output_cast ||
++        !((add->src[0] == mul_mat && add->src[1] == bias_cast) ||
++          (add->src[1] == mul_mat && add->src[0] == bias_cast)) ||
++        bias_cast->type != GGML_TYPE_F32 || output_cast->type != GGML_TYPE_F16) {
++        return 0;
++    }
++    return ggml_cuda_mul_mat_f16_bias_cublaslt(cuda_ctx, mul_mat, bias_cast->src[0], output_cast) ? 3 : 0;
++}
++#endif
++
+ // try and fuse nodes and return the number of nodes to skip
+ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph, int i) {
+ 
+@@ -3279,6 +3508,13 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+ 
+     ggml_tensor * node = cgraph->nodes[i];
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++    const int fused_f16_linear_bias = ggml_cuda_try_fuse_f16_linear_bias(*cuda_ctx, cgraph, i);
++    if (fused_f16_linear_bias != 0) {
++        return fused_f16_linear_bias;
++    }
++#endif
++
+     // gated_delta_net -> cpy: scatter recurrent-state snapshots into the cache
+     if (node->op == GGML_OP_GATED_DELTA_NET) {
+         ggml_cuda_gated_delta_net_fused_cache fused_state_cpy;
+diff --git a/src/ggml-cuda/vendors/cuda.h b/src/ggml-cuda/vendors/cuda.h
+index 323c9801..86c1ed9c 100644
+--- a/src/ggml-cuda/vendors/cuda.h
++++ b/src/ggml-cuda/vendors/cuda.h
+@@ -3,6 +3,7 @@
+ #include <cuda_runtime.h>
+ #include <cuda.h>
+ #include <cublas_v2.h>
++#include <cublasLt.h>
+ #include <cuda_bf16.h>
+ #include <cuda_fp16.h>
+ 
 diff --git a/src/ggml-vulkan/ggml-vulkan.cpp b/src/ggml-vulkan/ggml-vulkan.cpp
-index f6cbaecb7f5461bfbdefe0326c9bfb9d4155e7ed..145f4225bb9821b3c57e27798d5b5ac2c4aa7489 100644
+index f6cbaecb..145f4225 100644
 --- a/src/ggml-vulkan/ggml-vulkan.cpp
 +++ b/src/ggml-vulkan/ggml-vulkan.cpp
 @@ -4654,10 +4654,6 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
@@ -236,9 +604,22 @@ index f6cbaecb7f5461bfbdefe0326c9bfb9d4155e7ed..145f4225bb9821b3c57e27798d5b5ac2
          case GGML_TYPE_Q5_0:
          case GGML_TYPE_Q5_1:
          case GGML_TYPE_Q8_0:
+diff --git a/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp b/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
+index caa0c889..ef510e21 100644
+--- a/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
++++ b/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
+@@ -837,6 +837,8 @@ void process_shaders() {
+         string_to_spv("cpy_f32_" + t, "copy_to_quant.comp", {{"DATA_A_" + to_uppercase(t), "1"}, {"S_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
+         string_to_spv("cpy_" + t + "_f32", "copy_from_quant.comp", {{"DATA_A_" + to_uppercase(t), "1"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
+     }
++    string_to_spv("cpy_q4_k_f32", "copy_from_quant_qk.comp",
++                  {{"DATA_A_Q4_K", "1"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
+ 
+     for (auto src : {std::pair{"f32", "float"}, std::pair{"f16", "float16_t"}}) {
+         for (std::string dst : {"f32", "f16", "bf16", "q1_0", "q2_0", "q4_0", "q4_1", "q5_0", "q5_1", "q8_0", "iq4_nl"}) {
 diff --git a/src/ggml-vulkan/vulkan-shaders/copy_from_quant_qk.comp b/src/ggml-vulkan/vulkan-shaders/copy_from_quant_qk.comp
 new file mode 100644
-index 0000000000000000000000000000000000000000..d1cd9e10e7666a56954f52e410d9ddc660dacdef
+index 00000000..d1cd9e10
 --- /dev/null
 +++ b/src/ggml-vulkan/vulkan-shaders/copy_from_quant_qk.comp
 @@ -0,0 +1,26 @@
@@ -268,16 +649,3 @@ index 0000000000000000000000000000000000000000..d1cd9e10e7666a56954f52e410d9ddc6
 +        data_d[dst_idx + j + 1] = v.y;
 +    }
 +}
-diff --git a/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp b/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
-index caa0c889a45bb2177b6602932ad32b57ecc1ac90..ef510e21a4f78f467905b9ebcc2480ac9bc99248 100644
---- a/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
-+++ b/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
-@@ -837,6 +837,8 @@ void process_shaders() {
-         string_to_spv("cpy_f32_" + t, "copy_to_quant.comp", {{"DATA_A_" + to_uppercase(t), "1"}, {"S_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
-         string_to_spv("cpy_" + t + "_f32", "copy_from_quant.comp", {{"DATA_A_" + to_uppercase(t), "1"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
-     }
-+    string_to_spv("cpy_q4_k_f32", "copy_from_quant_qk.comp",
-+                  {{"DATA_A_Q4_K", "1"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
- 
-     for (auto src : {std::pair{"f32", "float"}, std::pair{"f16", "float16_t"}}) {
-         for (std::string dst : {"f32", "f16", "bf16", "q1_0", "q2_0", "q4_0", "q4_1", "q5_0", "q5_1", "q8_0", "iq4_nl"}) {

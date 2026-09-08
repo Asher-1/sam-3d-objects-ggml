@@ -65,7 +65,7 @@ python -c "import moge" 2>/dev/null || \
 # CUDA extensions are compiled with the env's nvcc 12.1 for sm_86 (RTX 3060)
 export CUDA_HOME="${CONDA_PREFIX}"
 export TORCH_CUDA_ARCH_LIST="8.6"
-export MAX_JOBS="${MAX_JOBS:-24}"
+export MAX_JOBS="${MAX_JOBS:-6}"
 export FORCE_CUDA=1
 
 step "pytorch3d @75ebeeae (compiled, ~10-20 min)"
@@ -81,6 +81,21 @@ python -c "import gsplat" 2>/dev/null || \
     pip install --no-build-isolation \
         "git+https://github.com/nerfstudio-project/gsplat.git@2323de5905d5e90e035f792fe65bad0fedd413e7"
 
+# The official textured-GLB path imports these two CUDA extensions directly:
+# `nvdiffrast` for differentiable UV rasterization/texture sampling and the
+# Mip Gaussian rasterizer for its 100 baked observations. Pinning them makes a
+# frozen Python reference reproducible; the native release binary never links
+# against Python, Torch, or either extension.
+step "nvdiffrast @253ac4fc (official texture-bake reference)"
+python -c "import nvdiffrast.torch" 2>/dev/null || \
+    pip install --no-build-isolation \
+        "git+https://github.com/NVlabs/nvdiffrast.git@253ac4fcea7de5f396371124af597e6cc957bfae"
+
+step "Mip Gaussian rasterizer @dda02ab5 (official observation reference)"
+python -c "import diff_gaussian_rasterization" 2>/dev/null || \
+    pip install --no-build-isolation \
+        "git+https://github.com/autonomousvision/mip-splatting.git@dda02ab5ecf45d6edb8c540d9bb65c7e451345a9#subdirectory=submodules/diff-gaussian-rasterization"
+
 step "sam3d_objects (metadata only, --no-deps)"
 pip install --no-deps -e "${REPO_ROOT}"
 
@@ -88,8 +103,9 @@ step "hydra 1.3.2 patch (facebookresearch/hydra#2863 workaround)"
 python "${REPO_ROOT}/patching/hydra"
 
 step "import smoke test"
-python - <<'EOF'
+LIDRA_SKIP_INIT=true python - <<'EOF'
 import torch, xformers, spconv, kaolin, pytorch3d, gsplat, hydra, utils3d
+import nvdiffrast.torch, diff_gaussian_rasterization
 import sam3d_objects
 print("torch", torch.__version__, "cuda", torch.cuda.is_available())
 print("E2E_ENV_OK")

@@ -20,6 +20,7 @@ Usage (repo root, sam3d-objects env):
         --image notebook/images/.../image.png --mask-dir ... --mask-index 14
 """
 import argparse
+import hashlib
 import json
 import os
 import struct
@@ -115,7 +116,59 @@ def main():
     ap.add_argument("--config", default="checkpoints/hf/pipeline.yaml")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--skip-render", action="store_true", default=True)
+    ap.add_argument(
+        "--dump-mesh-decoder-reference",
+        action="store_true",
+        help=("save official sparse mesh-decoder stage tensors and coordinates; "
+              "the final 101-channel 256^3 feature tensor is large (about 700 MB)"),
+    )
+    ap.add_argument(
+        "--dump-mesh-decoder-blocks",
+        action="store_true",
+        help=("with --dump-mesh-decoder-reference, also save each of the 12 official "
+              "transformer block outputs to locate the first numerical divergence"),
+    )
+    ap.add_argument(
+        "--dump-mesh-decoder-attention-block",
+        type=int,
+        choices=range(12),
+        metavar="BLOCK",
+        help=("with --dump-mesh-decoder-reference, save the residual output after "
+              "attention in one transformer block; use it to separate attention "
+              "error from the following MLP"),
+    )
+    ap.add_argument(
+        "--dump-mesh-decoder-internals-block",
+        type=int,
+        choices=range(12),
+        metavar="BLOCK",
+        help=("with --dump-mesh-decoder-reference, save the APE, LayerNorm, QKV, "
+              "attention-value, output-projection, and residual boundaries for one "
+              "transformer block"),
+    )
+    ap.add_argument(
+        "--dump-final-pbr-reference",
+        action="store_true",
+        help=("run the official mesh postprocess and 1024px optimized texture bake, "
+              "then save the final PBR GLB and replay metadata; this is a reference-only "
+              "operation and is never used by the native runtime"),
+    )
+    ap.add_argument(
+        "--dump-bake-observations",
+        action="store_true",
+        help=("with --dump-final-pbr-reference, additionally save every official 1024px "
+              "Gaussian observation; the artifact is large"),
+    )
     args = ap.parse_args()
+    if args.dump_bake_observations and not args.dump_final_pbr_reference:
+        ap.error("--dump-bake-observations requires --dump-final-pbr-reference")
+    if (args.dump_mesh_decoder_attention_block is not None and
+            args.dump_mesh_decoder_internals_block is not None):
+        ap.error("--dump-mesh-decoder-attention-block and "
+                 "--dump-mesh-decoder-internals-block are mutually exclusive")
+    if (args.dump_mesh_decoder_blocks or args.dump_mesh_decoder_attention_block is not None or
+            args.dump_mesh_decoder_internals_block is not None):
+        args.dump_mesh_decoder_reference = True
 
     from loguru import logger
     logger.remove()  # quiet the per-step info spam
@@ -367,7 +420,195 @@ def main():
     dmp.t("slat_feats_final", slat.feats)   # already denormalized (*std+mean)
     dmp.i32("slat_coords", slat.coords)
 
-    outputs = pipeline.decode_slat(slat, ["gaussian", "mesh"])
+    # Capture sparse tensors at the C++ graph boundaries.  The hooks retain
+    # CPU copies only, so they do not change the official forward path nor its
+    # GPU memory lifetime.  Every feature tensor is emitted as F32 SAMT, while
+    # its recorded values retain the official module's F16 rounding.
+    mesh_decoder_stages = {}
+    mesh_decoder_hooks = []
+    if args.dump_mesh_decoder_reference:
+        def capture_mesh_stage(stage_name):
+            def hook(_module, _inputs, result):
+                if not hasattr(result, "feats") or not hasattr(result, "coords"):
+                    raise RuntimeError(f"mesh decoder {stage_name} hook returned no sparse tensor")
+                mesh_decoder_stages[stage_name] = (
+                    result.feats.detach().float().cpu(),
+                    result.coords.detach().int().cpu(),
+                )
+            return hook
+
+        diagnostic_block = (args.dump_mesh_decoder_internals_block
+                            if args.dump_mesh_decoder_internals_block is not None
+                            else args.dump_mesh_decoder_attention_block)
+        if diagnostic_block is not None:
+            attention_block = diagnostic_block
+            attention_input = {}
+
+            def capture_sparse_stage(stage_name, sparse):
+                if not hasattr(sparse, "feats") or not hasattr(sparse, "coords"):
+                    raise RuntimeError(f"mesh decoder {stage_name} is not sparse")
+                mesh_decoder_stages[stage_name] = (
+                    sparse.feats.detach().float().cpu(),
+                    sparse.coords.detach().int().cpu(),
+                )
+
+            def capture_feature_stage(stage_name, features):
+                sparse = attention_input.get("sparse")
+                if sparse is None or not isinstance(features, torch.Tensor):
+                    raise RuntimeError(f"mesh decoder {stage_name} has no tensor features")
+                mesh_decoder_stages[stage_name] = (
+                    features.detach().float().cpu(),
+                    sparse.coords.detach().int().cpu(),
+                )
+
+            def capture_attention_block_input(_module, inputs):
+                sparse = inputs[0]
+                if not hasattr(sparse, "feats") or not hasattr(sparse, "coords"):
+                    raise RuntimeError("mesh decoder transformer input is not sparse")
+                attention_input["sparse"] = sparse
+                if args.dump_mesh_decoder_internals_block is not None:
+                    capture_sparse_stage(f"block{attention_block}_ape", sparse)
+
+            def capture_norm1(_module, _inputs, result):
+                sparse = attention_input.get("sparse")
+                if sparse is None or not isinstance(result, torch.Tensor):
+                    raise RuntimeError("mesh decoder norm1 hook has no transformer input")
+                mesh_decoder_stages[f"block{attention_block}_norm1"] = (
+                    result.detach().float().cpu(),
+                    sparse.coords.detach().int().cpu(),
+                )
+
+            def capture_qkv(_module, _inputs, result):
+                capture_feature_stage(f"block{attention_block}_qkv", result)
+
+            def capture_attention_values(_module, inputs):
+                capture_feature_stage(f"block{attention_block}_attention_values", inputs[0])
+
+            def capture_attention_out(_module, _inputs, result):
+                capture_feature_stage(f"block{attention_block}_attention_out", result)
+
+            def capture_norm2(_module, _inputs, result):
+                capture_feature_stage(f"block{attention_block}_norm2", result)
+
+            def capture_mlp_stage(stage_name):
+                def hook(_module, _inputs, result):
+                    capture_sparse_stage(stage_name, result)
+                return hook
+
+            def capture_attention_residual(_module, _inputs, result):
+                sparse = attention_input.get("sparse")
+                if sparse is None:
+                    raise RuntimeError("mesh decoder attention ran before its block pre-hook")
+                if not hasattr(result, "feats") or not hasattr(result, "coords"):
+                    raise RuntimeError("mesh decoder attention returned no sparse tensor")
+                if not torch.equal(sparse.coords, result.coords):
+                    raise RuntimeError("mesh decoder attention changed sparse coordinates")
+                mesh_decoder_stages[f"block{attention_block}_attention"] = (
+                    (sparse.feats + result.feats).detach().float().cpu(),
+                    sparse.coords.detach().int().cpu(),
+                )
+
+            mesh_decoder_hooks.append(
+                mesh_dec.blocks[attention_block].register_forward_pre_hook(
+                    capture_attention_block_input
+                )
+            )
+            mesh_decoder_hooks.append(
+                mesh_dec.blocks[attention_block].attn.register_forward_hook(
+                    capture_attention_residual
+                )
+            )
+            if args.dump_mesh_decoder_internals_block is not None:
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].norm1.register_forward_hook(capture_norm1)
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].attn.to_qkv.register_forward_hook(capture_qkv)
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].attn.to_out.register_forward_pre_hook(
+                        capture_attention_values
+                    )
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].attn.to_out.register_forward_hook(
+                        capture_attention_out
+                    )
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].norm2.register_forward_hook(capture_norm2)
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].mlp.mlp[0].register_forward_hook(
+                        capture_mlp_stage(f"block{attention_block}_mlp0")
+                    )
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].mlp.mlp[1].register_forward_hook(
+                        capture_mlp_stage(f"block{attention_block}_gelu")
+                    )
+                )
+                mesh_decoder_hooks.append(
+                    mesh_dec.blocks[attention_block].mlp.mlp[2].register_forward_hook(
+                        capture_mlp_stage(f"block{attention_block}_mlp2")
+                    )
+                )
+
+        mesh_stage_modules = [("input_layer", mesh_dec.input_layer)]
+        if args.dump_mesh_decoder_blocks:
+            mesh_stage_modules.extend(
+                (f"block{index}", block) for index, block in enumerate(mesh_dec.blocks)
+            )
+        else:
+            mesh_stage_modules.append(("block11", mesh_dec.blocks[-1]))
+        mesh_stage_modules.extend((
+            ("upsample0", mesh_dec.upsample[0]),
+            ("upsample1", mesh_dec.upsample[1]),
+            ("raw", mesh_dec.out_layer),
+        ))
+        for stage_name, module in mesh_stage_modules:
+            mesh_decoder_hooks.append(module.register_forward_hook(capture_mesh_stage(stage_name)))
+
+    try:
+        outputs = pipeline.decode_slat(slat, ["gaussian", "mesh"])
+    finally:
+        for hook in mesh_decoder_hooks:
+            hook.remove()
+
+    if args.dump_mesh_decoder_reference:
+        required_mesh_stages = ("input_layer", "block11", "upsample0", "upsample1", "raw")
+        dumped_mesh_stages = (
+            ("input_layer", *[f"block{index}" for index in range(len(mesh_dec.blocks))],
+             "upsample0", "upsample1", "raw")
+            if args.dump_mesh_decoder_blocks else required_mesh_stages
+        )
+        diagnostic_stages = ()
+        if args.dump_mesh_decoder_internals_block is not None:
+            diagnostic_prefix = f"block{args.dump_mesh_decoder_internals_block}"
+            diagnostic_stages = (
+                f"{diagnostic_prefix}_ape", f"{diagnostic_prefix}_norm1",
+                f"{diagnostic_prefix}_qkv", f"{diagnostic_prefix}_attention_values",
+                f"{diagnostic_prefix}_attention_out", f"{diagnostic_prefix}_attention",
+                f"{diagnostic_prefix}_norm2", f"{diagnostic_prefix}_mlp0",
+                f"{diagnostic_prefix}_gelu", f"{diagnostic_prefix}_mlp2",
+            )
+        elif args.dump_mesh_decoder_attention_block is not None:
+            diagnostic_stages = (f"block{args.dump_mesh_decoder_attention_block}_attention",)
+        dumped_mesh_stages = (*dumped_mesh_stages, *diagnostic_stages)
+        required_mesh_stages = (*required_mesh_stages, *diagnostic_stages)
+        missing_mesh_stages = [name for name in required_mesh_stages if name not in mesh_decoder_stages]
+        if missing_mesh_stages:
+            raise RuntimeError(f"official mesh decoder hooks did not run: {missing_mesh_stages}")
+        for stage_name in dumped_mesh_stages:
+            features, coordinates = mesh_decoder_stages[stage_name]
+            dmp.t(f"mesh_decoder_{stage_name}_features", features)
+            dmp.i32(f"mesh_decoder_{stage_name}_coords", coordinates)
+        dmp.meta("mesh_decoder_reference", {
+            "schema": "sam3d.mesh-decoder-reference.v1",
+            "stages": list(dumped_mesh_stages),
+            "raw_channels": int(mesh_decoder_stages["raw"][0].shape[1]),
+            "subdivision_order": "torch.nonzero(ones(2,2,2)); z-fastest",
+        })
     for fmt, out_list in outputs.items():
         if out_list is None:
             continue
@@ -402,6 +643,231 @@ def main():
         dmp.meta("ply", os.path.abspath(ply_path))
     except Exception as e:  # noqa: BLE001
         print(f"[warn] PLY export failed: {e}")
+
+    if args.dump_final_pbr_reference:
+        # This deliberately runs the unmodified official postprocess path. It
+        # is a reference generator only and is never used by native inference.
+        from sam3d_objects.model.backbone.tdfy_dit.utils import postprocessing_utils
+
+        asset_dir = os.path.join(dmp.out_dir, "official_pbr_reference")
+        os.makedirs(asset_dir, exist_ok=True)
+        captured = {}
+        official_render_multiview = postprocessing_utils.render_multiview
+        official_fill_holes = postprocessing_utils._fill_holes
+        official_rasterize = postprocessing_utils.utils3d.torch.rasterize_triangle_faces
+        official_meshfix_type = postprocessing_utils._meshfix.PyTMesh
+        official_graph_type = postprocessing_utils.igraph.Graph
+        official_randint = np.random.randint
+        selected_views = []
+
+        def capture_render_multiview(*render_args, **render_kwargs):
+            observations, extrinsics, intrinsics = official_render_multiview(
+                *render_args, **render_kwargs
+            )
+            captured["observations"] = observations
+            captured["extrinsics"] = extrinsics
+            captured["intrinsics"] = intrinsics
+            captured["resolution"] = render_kwargs.get(
+                "resolution", render_args[1] if len(render_args) > 1 else 512
+            )
+            captured["nviews"] = render_kwargs.get(
+                "nviews", render_args[2] if len(render_args) > 2 else 30
+            )
+            return observations, extrinsics, intrinsics
+
+        def capture_randint(*randint_args, **randint_kwargs):
+            value = official_randint(*randint_args, **randint_kwargs)
+            if np.isscalar(value):
+                selected_views.append(int(value))
+            return value
+
+        class CaptureMeshFix:
+            """Delegate MeshFix while freezing the exact pre-repair mincut mesh."""
+
+            def __init__(self):
+                self._inner = official_meshfix_type()
+
+            def load_array(self, mesh_vertices, mesh_faces):
+                dmp.t("asset_mincut_vertices_zup", mesh_vertices)
+                dmp.i32("asset_mincut_faces", torch.from_numpy(mesh_faces))
+                captured["pre_repair_saved"] = True
+                return self._inner.load_array(mesh_vertices, mesh_faces)
+
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+        class CaptureGraph:
+            """Delegate igraph while preserving the official mincut side."""
+
+            def __init__(self, *graph_args, **graph_kwargs):
+                self._inner = official_graph_type(*graph_args, **graph_kwargs)
+
+            def mincut(self, *mincut_args, **mincut_kwargs):
+                cut = self._inner.mincut(*mincut_args, **mincut_kwargs)
+                face_count = captured.get("visibility_face_count")
+                if face_count is None:
+                    raise RuntimeError("official mincut ran outside the visibility capture")
+                candidates = sorted(vertex for vertex in cut.partition[0] if vertex < face_count)
+                dmp.i32("asset_mincut_candidate_faces", torch.tensor(candidates, dtype=torch.int32))
+                captured["mincut_candidate_count"] = len(candidates)
+                return cut
+
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+        def capture_fill_holes(fill_vertices, fill_faces, *fill_args, **fill_kwargs):
+            # Do not recreate _fill_holes here. Recording the face IDs from
+            # its own rasterize calls freezes the exact input consumed by the
+            # native visibility/mincut regression.
+            num_views = int(fill_kwargs.get("num_views", 500))
+            captured["visibility_face_count"] = int(fill_faces.shape[0])
+            visibility = torch.zeros(
+                fill_faces.shape[0], dtype=torch.int32, device=fill_faces.device
+            )
+            raster_calls = 0
+
+            def capture_rasterize(*raster_args, **raster_kwargs):
+                nonlocal raster_calls
+                buffers = official_rasterize(*raster_args, **raster_kwargs)
+                face_id = buffers["face_id"][0][buffers["mask"][0] > 0.95] - 1
+                face_id = torch.unique(face_id).long()
+                if face_id.numel() > 0:
+                    visibility[face_id] += 1
+                raster_calls += 1
+                return buffers
+
+            postprocessing_utils.utils3d.torch.rasterize_triangle_faces = capture_rasterize
+            try:
+                result = official_fill_holes(fill_vertices, fill_faces, *fill_args, **fill_kwargs)
+            finally:
+                postprocessing_utils.utils3d.torch.rasterize_triangle_faces = official_rasterize
+            if raster_calls != num_views:
+                raise RuntimeError(
+                    f"official _fill_holes rendered {raster_calls} views; expected {num_views}"
+                )
+            dmp.t("asset_decimated_vertices_zup", fill_vertices)
+            dmp.i32("asset_decimated_faces", fill_faces)
+            dmp.t("asset_decimated_visibility", visibility.float() / num_views)
+            captured["visibility_views"] = num_views
+            return result
+
+        postprocessing_utils.render_multiview = capture_render_multiview
+        postprocessing_utils._fill_holes = capture_fill_holes
+        postprocessing_utils._meshfix.PyTMesh = CaptureMeshFix
+        postprocessing_utils.igraph.Graph = CaptureGraph
+        np.random.seed(args.seed)
+        np.random.randint = capture_randint
+        try:
+            final_outputs = pipeline.postprocess_slat_output(
+                outputs,
+                with_mesh_postprocess=True,
+                with_texture_baking=True,
+                use_vertex_color=False,
+            )
+        finally:
+            postprocessing_utils.render_multiview = official_render_multiview
+            postprocessing_utils._fill_holes = official_fill_holes
+            postprocessing_utils.utils3d.torch.rasterize_triangle_faces = official_rasterize
+            postprocessing_utils._meshfix.PyTMesh = official_meshfix_type
+            postprocessing_utils.igraph.Graph = official_graph_type
+            np.random.randint = official_randint
+
+        final_mesh = final_outputs["glb"]
+        final_glb = os.path.join(asset_dir, "official_pbr.glb")
+        final_mesh.export(final_glb)
+        dmp.t("asset_postprocess_vertices", final_mesh.vertices)
+        dmp.i32("asset_postprocess_faces", torch.from_numpy(final_mesh.faces))
+        uvs = getattr(final_mesh.visual, "uv", None)
+        if uvs is None:
+            raise RuntimeError("official textured GLB unexpectedly has no UV coordinates")
+        dmp.t("asset_uv", uvs)
+
+        material = getattr(final_mesh.visual, "material", None)
+        texture = getattr(material, "baseColorTexture", None)
+        if texture is None:
+            raise RuntimeError("official textured GLB unexpectedly has no PBR base-color texture")
+        texture_path = os.path.join(asset_dir, "base_color.png")
+        texture.convert("RGBA").save(texture_path)
+
+        if "observations" not in captured:
+            raise RuntimeError("official texture bake did not call render_multiview")
+        if captured.get("visibility_views") != 1000:
+            raise RuntimeError("official mesh cleanup did not record the required 1000 visibility views")
+        if not captured.get("pre_repair_saved"):
+            raise RuntimeError("official mesh cleanup did not record the pre-MeshFix mincut mesh")
+        if "mincut_candidate_count" not in captured:
+            raise RuntimeError("official mesh cleanup did not record the mincut partition")
+        observations = captured["observations"]
+        extrinsics = np.stack([item.detach().cpu().numpy() for item in captured["extrinsics"]])
+        intrinsics = np.stack([item.detach().cpu().numpy() for item in captured["intrinsics"]])
+        # The NPZ remains convenient for Python, while SAMT makes the exact
+        # recorded camera sequence consumable by the native renderer without a
+        # NumPy/Python runtime dependency.
+        dmp.t("bake_extrinsics", extrinsics)
+        dmp.t("bake_intrinsics", intrinsics)
+        np.savez_compressed(
+            os.path.join(asset_dir, "bake_cameras.npz"),
+            extrinsics=extrinsics,
+            intrinsics=intrinsics,
+        )
+        if args.dump_bake_observations:
+            np.savez_compressed(
+                os.path.join(asset_dir, "bake_observations.npz"),
+                rgb=np.stack(observations),
+            )
+
+        observation_hashes = [
+            hashlib.sha256(np.ascontiguousarray(observation).tobytes()).hexdigest()
+            for observation in observations
+        ]
+        asset_manifest = {
+            "schema": "sam3d.official-pbr-reference.v1",
+            "source": "InferencePipeline.postprocess_slat_output",
+            "seed": args.seed,
+            "mesh_postprocess": {
+                "simplify_ratio": 0.95,
+                "fill_holes": True,
+                "fill_holes_resolution": 1024,
+                "fill_holes_num_views": 1000,
+                "visibility_frequency": "../asset_decimated_visibility.samt",
+                "visibility_frequency_views": captured["visibility_views"],
+                "mincut_vertices": "../asset_mincut_vertices_zup.samt",
+                "mincut_faces": "../asset_mincut_faces.samt",
+                "mincut_candidate_faces": "../asset_mincut_candidate_faces.samt",
+            },
+            "uv": {"parameterizer": "xatlas", "texture_size": 1024},
+            "bake": {
+                "mode": "opt",
+                "renderer": pipeline.rendering_engine,
+                "views": captured["nviews"],
+                "resolution": captured["resolution"],
+                "total_steps": 2500,
+                "optimizer": "Adam(beta1=0.5,beta2=0.9,lr=1e-2)",
+                "lr_schedule": "cosine(1e-2,1e-5)",
+                "lambda_tv": 0.01,
+                "selected_views": selected_views,
+                "observation_sha256": observation_hashes,
+                "observations_saved": args.dump_bake_observations,
+            },
+            "outputs": {
+                "glb": "official_pbr.glb",
+                "base_color": "base_color.png",
+                "cameras": "bake_cameras.npz",
+                "extrinsics_samt": "../bake_extrinsics.samt",
+                "intrinsics_samt": "../bake_intrinsics.samt",
+                "decimated_vertices_samt": "../asset_decimated_vertices_zup.samt",
+                "decimated_faces_samt": "../asset_decimated_faces.samt",
+                "decimated_visibility_samt": "../asset_decimated_visibility.samt",
+                "mincut_vertices_samt": "../asset_mincut_vertices_zup.samt",
+                "mincut_faces_samt": "../asset_mincut_faces.samt",
+                "mincut_candidate_faces_samt": "../asset_mincut_candidate_faces.samt",
+            },
+        }
+        with open(os.path.join(asset_dir, "manifest.json"), "w") as handle:
+            json.dump(asset_manifest, handle, indent=2)
+        dmp.meta("official_pbr_reference", os.path.relpath(asset_dir, dmp.out_dir))
+        dmp.meta("official_pbr_glb", os.path.relpath(final_glb, dmp.out_dir))
+        dmp.meta("official_pbr_texture", os.path.relpath(texture_path, dmp.out_dir))
 
     print(f"[stage2] done in {time.perf_counter()-t0:.1f} s")
 

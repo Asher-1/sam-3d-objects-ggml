@@ -5,8 +5,11 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
+#include <jpeglib.h>
+
 #include <algorithm>
 #include <array>
+#include <csetjmp>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -43,6 +46,95 @@ struct PngSink {
     std::vector<uint8_t> bytes;
 };
 
+struct JpegErrorManager {
+    jpeg_error_mgr base;
+    jmp_buf jump_buffer;
+    char message[JMSG_LENGTH_MAX]{};
+};
+
+extern "C" void on_jpeg_error(j_common_ptr cinfo) {
+    auto* error = reinterpret_cast<JpegErrorManager*>(cinfo->err);
+    (*cinfo->err->format_message)(cinfo, error->message);
+    longjmp(error->jump_buffer, 1);
+}
+
+bool has_jpeg_signature(const std::string& path) {
+    std::array<unsigned char, 2> signature{};
+    FILE* file = std::fopen(path.c_str(), "rb");
+    if (file == nullptr) return false;
+    const bool is_jpeg = std::fread(signature.data(), 1, signature.size(), file) ==
+                             signature.size() &&
+                         signature[0] == 0xFF && signature[1] == 0xD8;
+    std::fclose(file);
+    return is_jpeg;
+}
+
+bool load_jpeg_rgba(const std::string& path, RgbaImage& out, std::string& error) {
+    FILE* file = std::fopen(path.c_str(), "rb");
+    if (file == nullptr) {
+        error = "cannot open JPEG image '" + path + "'";
+        return false;
+    }
+
+    jpeg_decompress_struct decompressor{};
+    JpegErrorManager jpeg_error{};
+    std::vector<JSAMPLE> scanline;
+    bool created = false;
+    decompressor.err = jpeg_std_error(&jpeg_error.base);
+    jpeg_error.base.error_exit = on_jpeg_error;
+    if (setjmp(jpeg_error.jump_buffer) != 0) {
+        if (created) jpeg_destroy_decompress(&decompressor);
+        std::fclose(file);
+        error = "cannot decode JPEG image '" + path + "': " + jpeg_error.message;
+        return false;
+    }
+
+    jpeg_create_decompress(&decompressor);
+    created = true;
+    jpeg_stdio_src(&decompressor, file);
+    jpeg_read_header(&decompressor, TRUE);
+    // The official input loader returns eight-bit RGB for JPEG. Request that
+    // color space explicitly instead of accepting a library-selected layout.
+    decompressor.out_color_space = JCS_RGB;
+    jpeg_start_decompress(&decompressor);
+    if (decompressor.output_width == 0 || decompressor.output_height == 0 ||
+        decompressor.output_components != 3) {
+        error = "JPEG decoder did not produce RGB pixels for '" + path + "'";
+        jpeg_destroy_decompress(&decompressor);
+        std::fclose(file);
+        return false;
+    }
+
+    const size_t width = decompressor.output_width;
+    const size_t height = decompressor.output_height;
+    if (width > std::numeric_limits<size_t>::max() / height / 4) {
+        error = "JPEG image dimensions overflow the RGBA buffer for '" + path + "'";
+        jpeg_destroy_decompress(&decompressor);
+        std::fclose(file);
+        return false;
+    }
+    out.width = static_cast<int>(width);
+    out.height = static_cast<int>(height);
+    out.rgba.resize(width * height * 4);
+    scanline.resize(width * 3);
+    while (decompressor.output_scanline < decompressor.output_height) {
+        JSAMPROW row = scanline.data();
+        jpeg_read_scanlines(&decompressor, &row, 1);
+        const size_t y = static_cast<size_t>(decompressor.output_scanline - 1);
+        uint8_t* destination = out.rgba.data() + y * width * 4;
+        for (size_t x = 0; x < width; ++x) {
+            destination[x * 4 + 0] = scanline[x * 3 + 0];
+            destination[x * 4 + 1] = scanline[x * 3 + 1];
+            destination[x * 4 + 2] = scanline[x * 3 + 2];
+            destination[x * 4 + 3] = 255;
+        }
+    }
+    jpeg_finish_decompress(&decompressor);
+    jpeg_destroy_decompress(&decompressor);
+    std::fclose(file);
+    return true;
+}
+
 void write_png_callback(void* context, void* data, int size) {
     auto* sink = static_cast<PngSink*>(context);
     const auto* bytes = static_cast<const uint8_t*>(data);
@@ -77,6 +169,8 @@ std::string json_number(float value) {
 }  // namespace
 
 bool load_rgba_image(const std::string& path, RgbaImage& out, std::string& error) {
+    if (has_jpeg_signature(path)) return load_jpeg_rgba(path, out, error);
+
     int width = 0;
     int height = 0;
     int channels = 0;
@@ -90,6 +184,20 @@ bool load_rgba_image(const std::string& path, RgbaImage& out, std::string& error
     out.height = height;
     out.rgba.assign(pixels, pixels + size);
     stbi_image_free(pixels);
+    return true;
+}
+
+bool write_rgba_png(const std::string& path, const RgbaImage& image, std::string& error) {
+    if (image.width <= 0 || image.height <= 0 ||
+        image.rgba.size() != static_cast<size_t>(image.width) * image.height * 4) {
+        error = "PNG output must be a non-empty RGBA image";
+        return false;
+    }
+    if (!stbi_write_png(path.c_str(), image.width, image.height, 4, image.rgba.data(),
+                        image.width * 4)) {
+        error = "stb_image_write failed to write PNG '" + path + "'";
+        return false;
+    }
     return true;
 }
 

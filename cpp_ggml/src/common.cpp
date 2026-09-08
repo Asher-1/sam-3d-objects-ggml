@@ -84,6 +84,18 @@ bool save_raw_tensor_f32(const std::string& path, const std::vector<int64_t>& ne
     return save_raw_tensor(path, t);
 }
 
+bool save_raw_tensor_i32(const std::string& path, const std::vector<int64_t>& ne,
+                         const int32_t* data) {
+    RawTensor t;
+    t.ne = ne;
+    t.type = GGML_TYPE_I32;
+    size_t n = 1;
+    for (int64_t d : ne) n *= static_cast<size_t>(d);
+    t.data.resize(n * sizeof(int32_t));
+    memcpy(t.data.data(), data, n * sizeof(int32_t));
+    return save_raw_tensor(path, t);
+}
+
 bool load_raw_tensor(const std::string& path, RawTensor& out) {
     FILE* f = fopen(path.c_str(), "rb");
     if (!f) return false;

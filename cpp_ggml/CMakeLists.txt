@@ -21,6 +21,36 @@ option(SAM3D_GGML_VULKAN  "Enable Vulkan backend in ggml"  OFF)
 option(SAM3D_GGML_METAL   "Enable Metal backend in ggml"   OFF)
 option(SAM3D_GGML_HIPBLAS "Enable HIPBLAS backend in ggml" OFF)
 
+# The official textured-GLB path renders source Gaussians with the CUDA
+# rasterizer used by SAM 3D Objects.  It is deliberately unavailable in a
+# Vulkan-only build: the upstream reference itself is CUDA-only and pretending
+# otherwise would hide a backend transfer or a Python fallback.
+set(_sam3d_native_pbr_default OFF)
+if(SAM3D_GGML_CUDA)
+    set(_sam3d_native_pbr_default ON)
+endif()
+option(SAM3D_GGML_NATIVE_PBR
+       "Build the native CUDA Gaussian renderer and textured-GLB stages"
+       ${_sam3d_native_pbr_default})
+option(SAM3D_GGML_MESHFIX_GPL
+       "Enable GPL-3.0 pymeshfix TMesh boundary repair for exact official output"
+       OFF)
+if(SAM3D_GGML_NATIVE_PBR AND NOT SAM3D_GGML_CUDA)
+    message(FATAL_ERROR
+        "SAM3D_GGML_NATIVE_PBR requires SAM3D_GGML_CUDA=ON: the official "
+        "Gaussian renderer and optimized texture bake are CUDA implementations.")
+endif()
+if(SAM3D_GGML_MESHFIX_GPL AND NOT SAM3D_GGML_NATIVE_PBR)
+    message(FATAL_ERROR
+        "SAM3D_GGML_MESHFIX_GPL requires SAM3D_GGML_NATIVE_PBR=ON")
+endif()
+if(SAM3D_GGML_NATIVE_PBR)
+    # ggml enables CUDA in its own subdirectory. The native renderer owns .cu
+    # sources in this directory, so the top-level project must enable the
+    # language as well for CMake to generate compile and archive rules.
+    enable_language(CUDA)
+endif()
+
 set(_sam3d_gpu_backends 0)
 foreach(_backend SAM3D_GGML_CUDA SAM3D_GGML_METAL SAM3D_GGML_VULKAN SAM3D_GGML_HIPBLAS)
     if(${_backend})
@@ -31,9 +61,11 @@ if(_sam3d_gpu_backends GREATER 1)
     message(FATAL_ERROR "Select at most one GPU backend per build directory")
 endif()
 
-# ggml uses CMake's `native` CUDA architecture only with CMake >=3.24. On older
-# CMake, select the attached GPU instead of compiling a broad arch list.
-if(SAM3D_GGML_CUDA AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES AND CMAKE_VERSION VERSION_LESS 3.24)
+# Keep a clean CUDA configuration reproducible across CMake versions. CMake
+# otherwise leaves this empty before its first CUDA try-compile, which also
+# makes unrelated feature checks (such as OpenMP) fail. An explicit caller
+# selection always wins over this local attached-GPU fallback.
+if(SAM3D_GGML_CUDA AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     find_program(NVIDIA_SMI nvidia-smi)
     if(NVIDIA_SMI)
         execute_process(
@@ -111,9 +143,93 @@ add_library(sam3d_stb INTERFACE)
 target_include_directories(sam3d_stb INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ggml/examples)
 
+# Native counterpart of the official Python xatlas.parametrize call. The
+# vendored source is an unmodified MIT-licensed xatlas snapshot; see its
+# headers for the complete license text and provenance.
+find_package(Threads REQUIRED)
+find_package(JPEG REQUIRED)
+add_library(sam3d_xatlas STATIC third_party/xatlas/xatlas.cpp)
+target_include_directories(sam3d_xatlas PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xatlas)
+target_link_libraries(sam3d_xatlas PUBLIC Threads::Threads)
+
+if(SAM3D_GGML_NATIVE_PBR)
+    find_package(CUDAToolkit REQUIRED)
+    find_package(VTK 9.3 CONFIG REQUIRED COMPONENTS
+        CommonCore CommonDataModel CommonExecutionModel FiltersCore)
+    find_package(OpenCV 4.2 REQUIRED COMPONENTS core photo)
+    set(SAM3D_MIP_GAUSSIAN_DIR
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/mip-splatting-diff-gaussian-rasterization)
+    if(NOT EXISTS ${SAM3D_MIP_GAUSSIAN_DIR}/cuda_rasterizer/rasterizer_impl.cu)
+        message(FATAL_ERROR
+            "Missing native Gaussian rasterizer. Restore "
+            "third_party/mip-splatting-diff-gaussian-rasterization from this checkout.")
+    endif()
+    # These upstream CUDA files are intentionally compiled verbatim. The
+    # wrapper in src/gaussian_renderer.cu owns SAM3D-specific file I/O and
+    # camera construction; it never changes renderer math.
+    add_library(sam3d_mip_gaussian_rasterizer STATIC
+        ${SAM3D_MIP_GAUSSIAN_DIR}/cuda_rasterizer/backward.cu
+        ${SAM3D_MIP_GAUSSIAN_DIR}/cuda_rasterizer/forward.cu
+        ${SAM3D_MIP_GAUSSIAN_DIR}/cuda_rasterizer/rasterizer_impl.cu)
+    target_include_directories(sam3d_mip_gaussian_rasterizer
+        PUBLIC ${SAM3D_MIP_GAUSSIAN_DIR}/cuda_rasterizer
+        PRIVATE ${SAM3D_MIP_GAUSSIAN_DIR}/third_party/glm)
+    target_link_libraries(sam3d_mip_gaussian_rasterizer PUBLIC CUDA::cudart)
+    set_target_properties(sam3d_mip_gaussian_rasterizer PROPERTIES
+        CXX_STANDARD 17 CUDA_STANDARD 17 CUDA_EXTENSIONS OFF)
+
+    # The official postprocess invokes `pymeshfix.PyTMesh` directly. Its
+    # underlying TMesh source is GPL-3.0-or-commercial, so exact boundary
+    # repair is a deliberate opt-in and never enters the default runtime.
+    if(SAM3D_GGML_MESHFIX_GPL)
+        include(FetchContent)
+        # We only consume the upstream source files below. Direct populate is
+        # intentional here: MakeAvailable() would configure pymeshfix's Python
+        # extension and introduce an unrelated Python build dependency.
+        if(POLICY CMP0169)
+            cmake_policy(SET CMP0169 OLD)
+        endif()
+        FetchContent_Declare(sam3d_meshfix_source
+            GIT_REPOSITORY https://github.com/pyvista/pymeshfix.git
+            GIT_TAG 79adef9dd54e7f2c5fa9ba5b8bdb378a80946cea
+            GIT_SHALLOW FALSE)
+        FetchContent_GetProperties(sam3d_meshfix_source)
+        if(NOT sam3d_meshfix_source_POPULATED)
+            FetchContent_Populate(sam3d_meshfix_source)
+        endif()
+        set(_sam3d_meshfix_dir ${sam3d_meshfix_source_SOURCE_DIR}/src)
+        add_library(sam3d_meshfix_gpl STATIC
+            ${_sam3d_meshfix_dir}/checkAndRepair.cpp
+            ${_sam3d_meshfix_dir}/coordinates.cpp
+            ${_sam3d_meshfix_dir}/detectIntersections.cpp
+            ${_sam3d_meshfix_dir}/edge.cpp
+            ${_sam3d_meshfix_dir}/graph.cpp
+            ${_sam3d_meshfix_dir}/heap.cpp
+            ${_sam3d_meshfix_dir}/holeFilling.cpp
+            ${_sam3d_meshfix_dir}/io.cpp
+            ${_sam3d_meshfix_dir}/jqsort.cpp
+            ${_sam3d_meshfix_dir}/list.cpp
+            ${_sam3d_meshfix_dir}/marchIntersections.cpp
+            ${_sam3d_meshfix_dir}/matrix.cpp
+            ${_sam3d_meshfix_dir}/orientation.c
+            ${_sam3d_meshfix_dir}/point.cpp
+            ${_sam3d_meshfix_dir}/tin.cpp
+            ${_sam3d_meshfix_dir}/tmesh.cpp
+            ${_sam3d_meshfix_dir}/triangle.cpp
+            ${_sam3d_meshfix_dir}/vertex.cpp)
+        target_include_directories(sam3d_meshfix_gpl PUBLIC ${_sam3d_meshfix_dir})
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            target_compile_definitions(sam3d_meshfix_gpl PUBLIC IS64BITPLATFORM)
+        endif()
+        set_target_properties(sam3d_meshfix_gpl PROPERTIES
+            CXX_STANDARD 17 CXX_EXTENSIONS OFF)
+    endif()
+endif()
+
 set(SAM3DGGML_SOURCES
     src/common.cpp
     src/asset_io.cpp
+    src/image_preprocess.cpp
     src/gguf_loader.cpp
     src/backend.cpp
     src/graph_builder.cpp
@@ -125,8 +241,20 @@ set(SAM3DGGML_SOURCES
     src/sparse_ops.cpp
     src/slat_flow_graph.cpp
     src/gs_decoder_graph.cpp
+    src/mesh_decoder_graph.cpp
+    src/flexicubes.cpp
+    src/mesh_uv.cpp
+    src/mesh_boundary_repair.cpp
     src/session.cpp
 )
+
+if(SAM3D_GGML_NATIVE_PBR)
+    list(APPEND SAM3DGGML_SOURCES
+        src/mesh_postprocess.cpp
+        src/texture_inpaint.cpp
+        src/gaussian_renderer.cpp
+        src/gaussian_renderer.cu)
+endif()
 
 if(SAM3D_GGML_SHARED)
     add_library(sam3dggml SHARED ${SAM3DGGML_SOURCES})
@@ -154,7 +282,16 @@ target_include_directories(sam3dggml
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(sam3dggml
     PUBLIC  ggml
-    PRIVATE sam3d_stb)
+    PRIVATE sam3d_stb sam3d_xatlas JPEG::JPEG)
+if(SAM3D_GGML_NATIVE_PBR)
+    target_link_libraries(sam3dggml PRIVATE sam3d_mip_gaussian_rasterizer VTK::FiltersCore
+                                            opencv_core opencv_photo)
+    target_compile_definitions(sam3dggml PUBLIC SAM3D_NATIVE_PBR_CUDA)
+    if(SAM3D_GGML_MESHFIX_GPL)
+        target_link_libraries(sam3dggml PRIVATE sam3d_meshfix_gpl)
+        target_compile_definitions(sam3dggml PRIVATE SAM3D_USE_MESHFIX_GPL)
+    endif()
+endif()
 
 find_package(OpenMP QUIET)
 if(OpenMP_CXX_FOUND)
@@ -192,6 +329,42 @@ if(SAM3D_GGML_BUILD_TESTS)
         target_link_libraries(sam3d-asset-io-test PRIVATE sam3dggml)
         add_test(NAME sam3d_ggml_native_glb_asset
                  COMMAND $<TARGET_FILE:sam3d-asset-io-test>)
+        add_executable(sam3d-image-preprocess-test src/image_preprocess_test.cpp)
+        target_link_libraries(sam3d-image-preprocess-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_native_image_preprocess
+                 COMMAND $<TARGET_FILE:sam3d-image-preprocess-test>)
+        add_executable(sam3d-mesh-tables-test src/mesh_tables_test.cpp)
+        target_link_libraries(sam3d-mesh-tables-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_mesh_subdivide_tables
+                 COMMAND $<TARGET_FILE:sam3d-mesh-tables-test>)
+        add_executable(sam3d-flexicubes-test src/flexicubes_test.cpp)
+        target_link_libraries(sam3d-flexicubes-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_flexicubes_synthetic_mesh
+                 COMMAND $<TARGET_FILE:sam3d-flexicubes-test>)
+        add_executable(sam3d-mesh-uv-test src/mesh_uv_test.cpp)
+        target_link_libraries(sam3d-mesh-uv-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_xatlas_uv
+                 COMMAND $<TARGET_FILE:sam3d-mesh-uv-test>)
+        if(SAM3D_GGML_NATIVE_PBR)
+            add_executable(sam3d-mesh-postprocess-test src/mesh_postprocess_test.cpp)
+            target_link_libraries(sam3d-mesh-postprocess-test PRIVATE sam3dggml)
+            add_test(NAME sam3d_ggml_vtk_mesh_simplify
+                     COMMAND $<TARGET_FILE:sam3d-mesh-postprocess-test>)
+            add_executable(sam3d-texture-inpaint-test src/texture_inpaint_test.cpp)
+            target_link_libraries(sam3d-texture-inpaint-test PRIVATE sam3dggml)
+            add_test(NAME sam3d_ggml_native_telea_inpaint
+                     COMMAND $<TARGET_FILE:sam3d-texture-inpaint-test>)
+            add_executable(sam3d-gaussian-renderer-test src/gaussian_renderer_test.cpp)
+            target_link_libraries(sam3d-gaussian-renderer-test PRIVATE sam3dggml)
+            add_test(NAME sam3d_ggml_native_gaussian_renderer
+                     COMMAND $<TARGET_FILE:sam3d-gaussian-renderer-test>)
+            if(SAM3D_GGML_MESHFIX_GPL)
+                add_executable(sam3d-mesh-boundary-repair-test src/mesh_boundary_repair_test.cpp)
+                target_link_libraries(sam3d-mesh-boundary-repair-test PRIVATE sam3dggml)
+                add_test(NAME sam3d_ggml_meshfix_boundary_repair
+                         COMMAND $<TARGET_FILE:sam3d-mesh-boundary-repair-test>)
+            endif()
+        endif()
         if(Python3_Interpreter_FOUND)
             add_test(NAME sam3d_ggml_python_scripts
                      COMMAND ${Python3_EXECUTABLE} -m py_compile
@@ -212,8 +385,25 @@ if(SAM3D_GGML_BUILD_TESTS)
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/validate_ss_gguf_trajectory.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/moge_parity_ref.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/moge_block_parity.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_native_preprocess.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/dump_e2e_stages.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/dump_mesh_decoder_reference.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_official_pbr_reference.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_official_pbr_references.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_mesh_decoder_reference.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_mesh_attention_semantics.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_flexicubes_reference.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_native_gaussian_renderer.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_official_pbr_reference.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_mesh_visibility_reference.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_meshfix_reference.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_mesh_export.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_flexicubes_tables.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_native_runtime.py)
+            add_test(NAME sam3d_ggml_flexicubes_table_generation
+                     COMMAND ${Python3_EXECUTABLE}
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_flexicubes_tables.py
+                             --check)
             if(SAM3D_GGML_BUILD_CLI
                AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/data/e2e/decode_mesh_vertices.samt"
                AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/data/e2e/decode_mesh_faces.samt"

@@ -477,6 +477,14 @@ def convert_slat_decoder_mesh(ckpt_dir, out_dir, dtype):
     w.add_uint32("meshdec.window_size", int(yconf.get("window_size", 8)))
     rep = yconf["representation_config"]
     w.add_uint32("meshdec.use_color", int(rep.get("use_color", False)))
+    # ``SLatMeshDecoder(use_fp16=True)`` does not cast the whole module.  The
+    # input and output SparseLinear layers stay F32; transformer Linear
+    # layers and SparseConv3d layers become F16; GroupNorm32 stays F32.  Keep
+    # this contract in GGUF instead of treating an F16 export as a blanket
+    # storage conversion, otherwise stage parity is lost before FlexiCubes.
+    official_mixed_fp16 = dtype == "f16"
+    if official_mixed_fp16:
+        w.add_string("meshdec.precision_contract", "official-use-fp16-v1")
 
     # upsample ResBlocks use dense nn.Conv3d: GGUF caps tensors at 4 dims,
     # so flatten (OC, IC, KD, KH, KW) -> (K^3, OC*IC) rows with IC fastest,
@@ -492,7 +500,15 @@ def convert_slat_decoder_mesh(ckpt_dir, out_dir, dtype):
         t = tensor
         if key.endswith(".weight") and tensor.ndim == 5:
             t = np.ascontiguousarray(conv3d_weight(tensor.float()))
-        write_tensor(w, "meshdec." + key, t, dtype)
+        storage_dtype = None
+        if official_mixed_fp16:
+            is_transformer = key.startswith("blocks.")
+            is_sparse_conv = ".conv." in key
+            if is_transformer or is_sparse_conv:
+                storage_dtype = "f16"
+            else:
+                storage_dtype = "f32"
+        write_tensor(w, "meshdec." + key, t, dtype, storage_dtype=storage_dtype)
         n += 1
     finish_gguf(w)
     return out_path, n

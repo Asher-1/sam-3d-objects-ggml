@@ -241,5 +241,89 @@ bool GsTables::build(const int32_t* coords, int64_t n_fine) {
     return true;
 }
 
-}  // namespace sam3d
+namespace {
 
+using CoordKey = std::tuple<int32_t, int32_t, int32_t, int32_t>;
+
+bool build_mesh_conv_table(MeshConvLevel& level) {
+    if (level.n <= 0 || level.coords.size() != static_cast<size_t>(level.n) * 4) {
+        return false;
+    }
+
+    std::map<CoordKey, int32_t> index;
+    for (int64_t row = 0; row < level.n; ++row) {
+        const int32_t* coord = &level.coords[static_cast<size_t>(row) * 4];
+        if (coord[1] < 0 || coord[2] < 0 || coord[3] < 0 ||
+            coord[1] >= level.resolution || coord[2] >= level.resolution ||
+            coord[3] >= level.resolution) {
+            return false;
+        }
+        if (!index.emplace(CoordKey{coord[0], coord[1], coord[2], coord[3]},
+                           static_cast<int32_t>(row)).second) {
+            return false;
+        }
+    }
+
+    level.conv.assign(static_cast<size_t>(level.n) * 27, static_cast<int32_t>(level.n));
+    for (int64_t row = 0; row < level.n; ++row) {
+        const int32_t* coord = &level.coords[static_cast<size_t>(row) * 4];
+        for (int offset = 0; offset < 27; ++offset) {
+            const int32_t dx = offset / 9 - 1;
+            const int32_t dy = (offset / 3) % 3 - 1;
+            const int32_t dz = offset % 3 - 1;
+            const auto it = index.find(CoordKey{
+                coord[0], coord[1] + dx, coord[2] + dy, coord[3] + dz});
+            if (it != index.end()) {
+                level.conv[static_cast<size_t>(row) * 27 + offset] = it->second;
+            }
+        }
+    }
+    return true;
+}
+
+bool subdivide_mesh_level(const MeshConvLevel& input, MeshConvLevel& output) {
+    if (input.n <= 0 || input.n > INT32_MAX / 8 ||
+        input.coords.size() != static_cast<size_t>(input.n) * 4) {
+        return false;
+    }
+    output.n = input.n * 8;
+    output.resolution = input.resolution * 2;
+    output.coords.resize(static_cast<size_t>(output.n) * 4);
+    for (int64_t parent = 0; parent < input.n; ++parent) {
+        const int32_t* source = &input.coords[static_cast<size_t>(parent) * 4];
+        for (int child = 0; child < 8; ++child) {
+            // torch.nonzero over a [2, 2, 2] tensor: x, y, z lexicographic.
+            const int32_t dx = child / 4;
+            const int32_t dy = (child / 2) % 2;
+            const int32_t dz = child % 2;
+            int32_t* target = &output.coords[static_cast<size_t>(parent * 8 + child) * 4];
+            target[0] = source[0];
+            target[1] = source[1] * 2 + dx;
+            target[2] = source[2] * 2 + dy;
+            target[3] = source[3] * 2 + dz;
+        }
+    }
+    return build_mesh_conv_table(output);
+}
+
+}  // namespace
+
+bool MeshTables::build(const int32_t* coords, int64_t n_fine, int base_resolution) {
+    if (coords == nullptr || n_fine <= 0 || base_resolution <= 0) {
+        return false;
+    }
+    if (!swin.build(coords, n_fine)) {
+        return false;
+    }
+
+    levels[0].n = n_fine;
+    levels[0].resolution = base_resolution;
+    levels[0].coords.assign(coords, coords + static_cast<size_t>(n_fine) * 4);
+    if (!build_mesh_conv_table(levels[0])) {
+        return false;
+    }
+    return subdivide_mesh_level(levels[0], levels[1]) &&
+           subdivide_mesh_level(levels[1], levels[2]);
+}
+
+}  // namespace sam3d

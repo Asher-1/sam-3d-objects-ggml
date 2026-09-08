@@ -44,6 +44,8 @@ struct RawTensor {
 bool save_raw_tensor(const std::string& path, const RawTensor& t);
 bool save_raw_tensor_f32(const std::string& path, const std::vector<int64_t>& ne,
                          const float* data);
+bool save_raw_tensor_i32(const std::string& path, const std::vector<int64_t>& ne,
+                         const int32_t* data);
 bool load_raw_tensor(const std::string& path, RawTensor& out);
 
 // helper to append a float element/row to a vector
