@@ -82,7 +82,7 @@ ggml_tensor* DinoGraph::build(ggml_tensor* img) {
     const int64_t n_patch = G * Gv;
     const int64_t N = 1 + n_reg + n_patch;    // cls + registers + patches
     const int64_t kdim = 3 * P * P;
-    const bool manual_attn = getenv("SAM3D_MANUAL_ATTN") != nullptr;
+    const bool manual_attn = manual_attention;
 
     // Dino wrapper normalization (normalize_images=true): per-channel
     // (x - mean) / std, broadcast over the channel dim of (W, H, 3). The
@@ -118,7 +118,7 @@ ggml_tensor* DinoGraph::build(ggml_tensor* img) {
     // row stride must follow the weight dtype (F16 in f16 GGUF files):
     // sizeof(float) here would make half the output channels read past the
     // tensor into neighbouring weights (NaN/garbage patches)
-    ggml_tensor* w2d = ggml_view_2d(ctx, w, kdim, C, kdim * sizeof(float), 0);
+    ggml_tensor* w2d = ggml_view_2d(ctx, w, kdim, C, kdim * ggml_element_size(w), 0);
     ggml_tensor* img1 = ggml_view_2d(ctx, img, 1, ggml_nelements(img),
                                      sizeof(float), 0);
     ggml_tensor* patches = ggml_get_rows(ctx, img1, tids);   // (1, kdim*n_patch)
@@ -152,6 +152,10 @@ ggml_tensor* DinoGraph::build(ggml_tensor* img) {
     const int64_t D = C / n_heads;
     for (int i = 0; i < (int)depth; i++) {
         const std::string b = prefix + ".backbone.blocks." + std::to_string(i);
+        // LayerNorm runs in F32; the projections consume F32 inputs against
+        // the F32-upcast weights (the official DINO contract is true F32: its
+        // own F16-autocast output is bit-identical, so an F16 mirror only
+        // adds rounding noise on the |x|~600 outlier channels).
         ggml_tensor* h = gb_layer_norm(ctx, xfull, m->get(b + ".norm1.weight"),
                                        m->get(b + ".norm1.bias"), 1e-6f);
         if (debug_stage == "b0_norm1" && i == 0) return h;
@@ -188,13 +192,19 @@ ggml_tensor* DinoGraph::build(ggml_tensor* img) {
             if (debug_stage == "b0_scores" && i == 0) return sc;
             sc = ggml_soft_max(ctx, sc);                      // over ne[0]=keys
             if (debug_stage == "b0_probs" && i == 0) return sc;
-            // out[d,q,h] = sum_s v[d,s,h]*p[s,q,h]: contract over keys with a
-            // materialized transposed v (mul_mat rejects TRANSPOSE as src0)
             ggml_tensor* vt = ggml_cont(ctx, ggml_transpose(ctx, v));
             att = ggml_mul_mat(ctx, vt, sc);                  // (D, N, H)
         } else {
-            // fused flash attention (F32 accumulators; k/v cast to F16 KV)
-            att = gb_attention(ctx, q, k, v, scale, true);    // (D, N, H)
+            // Fused flash attention with the F32-KV strict contract. The
+            // default flash path casts K/V to F16, and on the DINOv2
+            // outlier-carrying residual stream that rounding compounds into a
+            // cond-token MAE of 0.4 against the official receipt; with K/V
+            // kept in F32 and GGML_PREC_F32 the tokens match the official
+            // ones to the F32 GEMM-order band - the same repair the MoGe and
+            // SS condition chains needed. The official depth/DINO models run
+            // F32 end to end.
+            att = gb_attention(ctx, q, k, v, scale, true,
+                               AttentionOptions{/*strict_kv=*/true});    // (D, H, N)
         }
         // merge heads: flash output is (D, H, N) with N fastest (token-major
         // head concat) -> straight reshape; manual output is (D, N, H) and

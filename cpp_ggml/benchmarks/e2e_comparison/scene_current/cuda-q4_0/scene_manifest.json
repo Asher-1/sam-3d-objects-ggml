@@ -1,0 +1,28 @@
+{
+  "schema": "sam3d.scene-native.v1",
+  "gaussians_total": 11864256,
+  "render": {"frames": 300, "radius": 1.000000, "fov": 60.000000, "resolution": 512},
+  "objects": [
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_00/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_00/pose.json", "gaussians": 879008},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_01/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_01/pose.json", "gaussians": 379840},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_02/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_02/pose.json", "gaussians": 258880},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_03/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_03/pose.json", "gaussians": 1021344},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_04/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_04/pose.json", "gaussians": 348480},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_05/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_05/pose.json", "gaussians": 645824},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_08/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_08/pose.json", "gaussians": 341568},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_09/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_09/pose.json", "gaussians": 922400},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_12/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_12/pose.json", "gaussians": 869344},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_13/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_13/pose.json", "gaussians": 1107840},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_14/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_14/pose.json", "gaussians": 761280},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_15/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_15/pose.json", "gaussians": 316544},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_17/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_17/pose.json", "gaussians": 475296},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_19/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_19/pose.json", "gaussians": 214368},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_20/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_20/pose.json", "gaussians": 353152},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_22/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_22/pose.json", "gaussians": 225920},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_23/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_23/pose.json", "gaussians": 1316672},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_24/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_24/pose.json", "gaussians": 980384},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_25/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_25/pose.json", "gaussians": 247296},
+    {"ply": "output/scene-benchmark/cuda-q4_0/objects/obj_26/output.ply", "pose": "output/scene-benchmark/cuda-q4_0/objects/obj_26/pose.json", "gaussians": 198816}
+  ],
+  "outputs": {"posed_ply": "output/scene-benchmark/cuda-q4_0/scene_posed.ply", "frames_dir": "output/scene-benchmark/cuda-q4_0/frames"}
+}

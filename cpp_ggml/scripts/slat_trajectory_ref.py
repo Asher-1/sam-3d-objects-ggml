@@ -13,33 +13,18 @@ import struct
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt as load_samt
+from samt_io import write_samt_f32
 import torch
 
 from gguf_torch_loader import replace_backbone_from_gguf
 
 
-SAMT_MAGIC = b"SAMT"
 
 
-def load_samt(path):
-    with open(path, "rb") as stream:
-        if stream.read(4) != SAMT_MAGIC:
-            raise ValueError(f"{path}: invalid SAMT header")
-        n_dims, = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{n_dims}q", stream.read(8 * n_dims))
-        value_type, = struct.unpack("<i", stream.read(4))
-        dtype = "<f4" if value_type == 0 else "<i4"
-        return shape, np.frombuffer(stream.read(), dtype=dtype)
 
 
-def write_samt_f32(path, shape, values):
-    data = np.ascontiguousarray(values, dtype="<f4")
-    with open(path, "wb") as stream:
-        stream.write(SAMT_MAGIC)
-        stream.write(struct.pack("<i", len(shape)))
-        stream.write(struct.pack(f"<{len(shape)}q", *shape))
-        stream.write(struct.pack("<i", 0))
-        stream.write(data.tobytes())
+
 
 
 def load_generator(checkpoint, config, device, gguf=None, weight_report=None):

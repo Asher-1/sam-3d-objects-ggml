@@ -1,0 +1,43 @@
+{
+  "schema": "sam3d.full-glb-gate.v2",
+  "passed": true,
+  "performance_targets": {
+    "cuda-f16": {
+      "latency_ms": 147427.44269547984,
+      "speedup_vs_pytorch": 1.9259
+    },
+    "cuda-q8_0": {
+      "latency_ms": 147858.93952750484,
+      "speedup_vs_pytorch": 1.9203
+    },
+    "cuda-q4_k": {
+      "latency_ms": 146186.59580749227,
+      "speedup_vs_pytorch": 1.9423
+    },
+    "vulkan-f16": {
+      "latency_ms": 180272.36721653026,
+      "speedup_vs_pytorch": 1.575
+    },
+    "vulkan-q8_0": {
+      "latency_ms": 199273.53622898227,
+      "speedup_vs_pytorch": 1.4248
+    },
+    "vulkan-q4_k": {
+      "latency_ms": 182662.0731005096,
+      "speedup_vs_pytorch": 1.5544
+    },
+    "cuda_q4_k_vs_q8_0": {
+      "q4_k_ms": 146186.59580749227,
+      "q8_0_ms": 147858.93952750484,
+      "ratio": 0.9887,
+      "q4_k_faster": true
+    },
+    "vulkan_q4_k_vs_q8_0": {
+      "q4_k_ms": 182662.0731005096,
+      "q8_0_ms": 199273.53622898227,
+      "ratio": 0.9166,
+      "q4_k_faster": true
+    }
+  },
+  "failures": []
+}

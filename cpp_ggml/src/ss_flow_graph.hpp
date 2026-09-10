@@ -29,7 +29,19 @@ struct SsFlowGraph {
     std::string debug_stage;  // proj_in | block<N> | t_emb
     // Strict SS parity uses an explicit F32 QK^T -> softmax -> V graph. It is
     // scoped to this diffusion graph rather than a process-wide diagnostic.
+    // The delivery default is the F16-KV flash path; the session always
+    // assigns this field from the CLI contract, and strict stays the pinned
+    // parity-diagnostic value.
     bool strict_attention = false;
+    // Mirror the official torch.autocast(cuda, float16) boundary: linear
+    // chains run F16 tensor-core GEMMs and widen back to the F32 main chain.
+    // Only the CUDA backend profits — its F32 GEMM lowers to a slow non-TF32
+    // cuBLAS path, while Vulkan's F32 coopmat (TF32-class) loses more to the
+    // extra casts than it gains, so the host keeps this off for Vulkan.
+    bool f16_autocast = false;
+    // A/B bisect opt-outs; both default to the official parity contract.
+    bool keep_quant_gemm = false;   // consume quantized projection weights directly
+    bool fuse_quant_qkv = false;    // fused 3C-wide quantized QKV GEMM
     std::string prefix = "dit";
     int64_t n_cond_tokens = 7528;  // host sets from the cond SAMT shape
     std::vector<ggml_tensor*> inputs;

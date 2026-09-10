@@ -15,31 +15,17 @@ import os
 import struct
 
 import numpy as np
+from samt_io import read_samt as load_samt
+from samt_io import write_samt_f32
 import torch
 
 from gguf_torch_loader import replace_backbone_from_gguf
 
-SAMT_MAGIC = b"SAMT"
 
 
-def load_samt(path):
-    with open(path, "rb") as f:
-        f.read(4)
-        nd = struct.unpack("<i", f.read(4))[0]
-        ne = struct.unpack(f"<{nd}q", f.read(8 * nd))
-        dt = struct.unpack("<i", f.read(4))[0]
-        data = np.frombuffer(f.read(), dtype="<f4" if dt == 0 else "<i4")
-    return ne, data
 
 
-def write_samt_f32(path, ne, data):
-    data = np.ascontiguousarray(data, dtype="<f4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))
-        f.write(struct.pack("<i", 0))
-        f.write(data.tobytes())
+
 
 
 MODS = ["6drotation_normalized", "scale", "shape", "translation",
@@ -145,6 +131,14 @@ def main():
 
         blk0.adaLN_modulation.register_forward_hook(tok_hook("b0_adaln"))
         blk0.self_attn.register_forward_hook(tok_hook("b0_attn"))
+
+        def self_attn_pre_hook(_, args):
+            """Capture the actual QKV input after norm1 and AdaLN modulation."""
+            values = args[0]
+            for name, value in values.items():
+                cap[f"b0_attn_in_{name}"] = value.detach().float().cpu()
+
+        blk0.self_attn.register_forward_pre_hook(self_attn_pre_hook)
         for mn in ["shape", "6drotation_normalized"]:
             blk0.norm2[mn].register_forward_hook(tok_hook(f"b0_n2_{mn}"))
             blk0.cross_attn[mn].register_forward_hook(tok_hook(f"b0_x_{mn}"))
@@ -166,6 +160,7 @@ def main():
                 if not capture_enabled:
                     return
                 channels = out.shape[-1] // 3
+                cap[f"b0_qkv_{_mn}"] = out.detach().float().cpu()
                 cap[f"b0_qpre_{_mn}"] = out[..., :channels].detach().float().cpu()
 
             blk0.self_attn.to_qkv[mn].register_forward_hook(qkv_hook)
@@ -205,7 +200,9 @@ def main():
                        [1024, 4096], cap["shape"][0].cpu())
         write_samt_f32(os.path.join(args.out_dir, "ss_b0_pose.samt"),
                        [1024, 4], cap["6drotation_normalized"][0].cpu())
-        for k in ["b0_adaln", "b0_attn_shape", "b0_attn_6drotation_normalized",
+        for k in ["b0_adaln", "b0_attn_in_shape", "b0_attn_in_6drotation_normalized",
+                  "b0_qkv_shape", "b0_qkv_6drotation_normalized",
+                  "b0_attn_shape", "b0_attn_6drotation_normalized",
                   "b0_n2_shape", "b0_n2_6drotation_normalized",
                   "b0_x_shape", "b0_x_6drotation_normalized",
                   "b0_mlp_shape", "b0_mlp_6drotation_normalized",

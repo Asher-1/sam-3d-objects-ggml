@@ -49,6 +49,7 @@ if "--require-exclusive-gpu" in sys.argv:
 
 import imageio
 import numpy as np
+from samt_io import write_samt_f32
 import torch
 
 from inference import (  # noqa: E402  (notebook helpers)
@@ -60,19 +61,10 @@ from inference import (  # noqa: E402  (notebook helpers)
     render_video,
 )
 
-SAMT_MAGIC = b"SAMT"
+
 GGML_TYPE_F32 = 0
 
 
-def write_samt_f32(path, ne, data):
-    """ne in ggml order (ne[0] fastest); data is the C-contiguous buffer."""
-    data = np.ascontiguousarray(data, dtype="<f4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))
-        f.write(struct.pack("<i", GGML_TYPE_F32))
-        f.write(data.tobytes())
 
 
 def stats(values):

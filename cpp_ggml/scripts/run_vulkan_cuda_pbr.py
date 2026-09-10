@@ -75,10 +75,10 @@ def main() -> int:
     parser.add_argument("--mask", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True,
                         help="new or empty directory for this handoff")
-    parser.add_argument("--dtype", choices=("f16", "q8_0", "q4_0"), required=True)
+    parser.add_argument("--dtype", choices=("f16", "q8_0", "q4_k"), required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--threads", type=int, default=6)
-    parser.add_argument("--ss-attention", choices=("normal", "strict"), default="strict")
+    parser.add_argument("--ss-attention", choices=("normal", "strict"), default="normal")
     parser.add_argument("--rng-distribution-blocks", type=int,
                         help="CUDA-observed PyTorch Philox distribution block count")
     parser.add_argument("--noise-dir", type=Path,

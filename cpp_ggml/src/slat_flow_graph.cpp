@@ -16,46 +16,81 @@ static ggml_tensor* as_f32(ggml_context* ctx, ggml_tensor* t) {
     return t;
 }
 
-// CUDA and Vulkan both execute Q8_0 x F32 directly. Keeping quantized matrix
-// weights in their GGUF representation avoids materializing an F32 copy of
-// every transformer projection in the graph allocator. Non-quantized models
-// retain the established F32 compute path.
-static ggml_tensor* matmul_weight(ggml_context* ctx, ggml_tensor* t,
-                                  bool attention_projection = false,
-                                  bool conv_projection = false) {
-    // Keep the compact GGUF as the source of truth, while allowing a
-    // reproducible F32 projection path for quantization parity bisects.
-    // This is strictly opt-in: it must not change the normal Q4/Q8 graph.
-    const bool dequant_q4 =
-        (attention_projection && getenv("SAM3D_E2E_Q4_DEQUANT_ATTN") != nullptr) ||
-        (conv_projection && getenv("SAM3D_E2E_Q4_DEQUANT_CONV") != nullptr);
-    const bool dequant_q8 =
-        (attention_projection && getenv("SAM3D_E2E_Q8_DEQUANT_ATTN") != nullptr) ||
-        (conv_projection && getenv("SAM3D_E2E_Q8_DEQUANT_CONV") != nullptr);
-    const bool dequant_all_q8 = getenv("SAM3D_E2E_Q8_DEQUANT_ALL") != nullptr &&
-        t->type == GGML_TYPE_Q8_0;
-    const bool dequantize = (t->type == GGML_TYPE_Q4_0 && dequant_q4) ||
-        (t->type == GGML_TYPE_Q8_0 && (dequant_q8 || dequant_all_q8));
-    return (ggml_is_quantized(t->type) && !dequantize)
-        ? t : as_f32(ctx, t);
+// SLatFlowModel leaves input_layer, timestep embedding and output_layer in
+// F32. Its input/output residual blocks and transformer torso are converted
+// with convert_module_to_f16(). Preserve every observable F16 boundary: the
+// Python LayerNorm32 implementation promotes only for the normalization and
+// then converts back to the activation dtype.
+static ggml_tensor* as_f16(ggml_context* ctx, ggml_tensor* t) {
+    if (ggml_is_quantized(t->type)) t = ggml_cast(ctx, t, GGML_TYPE_F32);
+    return t->type == GGML_TYPE_F16 ? t : ggml_cast(ctx, t, GGML_TYPE_F16);
 }
 
-// Slice output rows from a [input_channels, output_channels] matrix. The
-// byte offset must use nb[1]: multiplying logical elements by ggml_type_size
-// is wrong for block-quantized rows.
-static ggml_tensor* matrix_rows(ggml_context* ctx, ggml_tensor* weight,
-                                int64_t row_start, int64_t row_count) {
-    GGML_ASSERT(row_start >= 0 && row_count >= 0);
-    GGML_ASSERT(row_start + row_count <= weight->ne[1]);
-    return ggml_view_2d(ctx, weight, weight->ne[0], row_count, weight->nb[1],
-                        static_cast<size_t>(row_start) * weight->nb[1]);
+static ggml_tensor* linear_fp16(ggml_context* ctx, ggml_tensor* weight,
+                                ggml_tensor* bias, ggml_tensor* input,
+                                bool strict_accumulation = true) {
+    ggml_tensor* out = ggml_mul_mat(ctx, as_f16(ctx, weight), as_f16(ctx, input));
+    // The explicit F32 accumulation matches the observed dense Linear
+    // boundary more closely. Sparse convolution is the exception: official
+    // spconv implicit-GEMM uses a different Tensor Core reduction topology
+    // and opts out at its call site below.
+    if (strict_accumulation) ggml_mul_mat_set_prec(out, GGML_PREC_F32);
+    if (bias) out = ggml_add(ctx, out, as_f32(ctx, as_f16(ctx, bias)));
+    return as_f16(ctx, out);
 }
 
-// h*(1+s) + sh; mod (C, 1) stays the second operand.
-static ggml_tensor* modulate(ggml_context* ctx, ggml_tensor* h,
-                             ggml_tensor* scale, ggml_tensor* shift) {
-    ggml_tensor* t = ggml_add(ctx, ggml_mul(ctx, h, scale), h);
-    return ggml_add(ctx, t, shift);
+static ggml_tensor* layer_norm32_fp16(ggml_context* ctx, ggml_tensor* input,
+                                      ggml_tensor* weight, ggml_tensor* bias,
+                                      float eps) {
+    return as_f16(ctx, gb_layer_norm(ctx, as_f32(ctx, input),
+                                     weight ? as_f32(ctx, weight) : nullptr,
+                                     bias ? as_f32(ctx, bias) : nullptr, eps));
+}
+
+static ggml_tensor* silu_fp16(ggml_context* ctx, ggml_tensor* input) {
+    return as_f16(ctx, ggml_silu(ctx, as_f16(ctx, input)));
+}
+
+static ggml_tensor* gelu_fp16(ggml_context* ctx, ggml_tensor* input) {
+    // The official SparseFeedForwardNet uses GELU(approximate="tanh").
+    return as_f16(ctx, ggml_gelu(ctx, as_f16(ctx, input)));
+}
+
+static ggml_tensor* modulate_fp16(ggml_context* ctx, ggml_tensor* input,
+                                  ggml_tensor* scale, ggml_tensor* shift,
+                                  ggml_tensor* one) {
+    // Keep PyTorch's F16 operation order. Rewriting h * (1 + scale) as
+    // h * scale + h is algebraically valid but rounds at a different point.
+    one = as_f16(ctx, one);
+    ggml_tensor* scale_plus_one = as_f16(ctx, ggml_add(ctx, as_f16(ctx, scale), one));
+    ggml_tensor* value = as_f16(ctx, ggml_mul(ctx, as_f16(ctx, input), scale_plus_one));
+    return as_f16(ctx, ggml_add(ctx, value, as_f16(ctx, shift)));
+}
+
+static ggml_tensor* residual_fp16(ggml_context* ctx, ggml_tensor* left,
+                                  ggml_tensor* right) {
+    return as_f16(ctx, ggml_add(ctx, as_f32(ctx, left), as_f32(ctx, right)));
+}
+
+static ggml_tensor* rms_norm_head_fp16(ggml_context* ctx, ggml_tensor* input,
+                                       ggml_tensor* gamma, float head_dim) {
+    return as_f16(ctx, gb_rms_norm_head(ctx, as_f32(ctx, input),
+                                        as_f32(ctx, gamma), head_dim));
+}
+
+// The official SLatFlowModel keeps input_layer, the timestep embedder and
+// output_layer in F32 modules for every checkpoint format; the same-GGUF
+// oracle therefore dequantizes their weights before the F32 projection. A
+// quantized GGML GEMM additionally quantizes the activation and is measurably
+// not equivalent: with the quantized output_layer the Q8 single step reaches
+// MAE 0.0060 against the oracle while the dequantized path lands at 0.00089,
+// inside the oracle's own repeat-run band (0.0028). Dequantize by default;
+// SAM3D_E2E_KEEP_QUANT_GEMM restores the compact-GGUF path for A/B bisects.
+static ggml_tensor* matmul_weight(ggml_context* ctx, ggml_tensor* t, bool keep_quant_gemm) {
+    if (ggml_is_quantized(t->type) && keep_quant_gemm) {
+        return t;
+    }
+    return as_f32(ctx, t);
 }
 
 std::vector<ggml_tensor*> SlatFlowGraph::build() {
@@ -88,6 +123,18 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
                                       {27 * nf});
     ggml_tensor* idx_conv_c = add_i32(tb->conv_coarse, "conv_coarse_idx",
                                       {27 * nc});
+    ggml_tensor* idx_spconv_f = add_i32(tb->conv_fine_spconv,
+                                        "conv_fine_spconv_idx", {27, nf});
+    ggml_tensor* idx_spconv_c = add_i32(tb->conv_coarse_spconv,
+                                        "conv_coarse_spconv_idx", {27, nc});
+    ggml_tensor* mask_spconv_f = add_i32(tb->conv_fine_mask,
+                                         "conv_fine_spconv_mask", {nf});
+    ggml_tensor* mask_spconv_c = add_i32(tb->conv_coarse_mask,
+                                         "conv_coarse_spconv_mask", {nc});
+    ggml_tensor* argsort_spconv_f = add_i32(tb->conv_fine_argsort,
+                                            "conv_fine_spconv_argsort", {nf});
+    ggml_tensor* argsort_spconv_c = add_i32(tb->conv_coarse_argsort,
+                                            "conv_coarse_spconv_argsort", {nc});
 
     // per-channel-width zero sentinel rows for the gathers
     auto zero_row = [&](int64_t cw, const char* name) {
@@ -101,6 +148,15 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
     ggml_tensor* z256 = zero_row(2 * io_ch, "zero256");
     ggml_tensor* z1024 = zero_row(C, "zero1024");
     ggml_tensor* z2048 = zero_row(2 * C, "zero2048");
+    // GraphContext deliberately uses no_alloc. Model-independent scalar
+    // constants therefore follow the same explicit-input lifetime as tables
+    // and sentinel rows rather than allocating host data while building.
+    ggml_tensor* fp16_one = g->input_f32("fp16_one", {1, 1});
+    inputs.push_back(fp16_one);
+    auto one_data = std::make_shared<std::vector<int32_t>>(1);
+    const float one_value = 1.0f;
+    std::memcpy(one_data->data(), &one_value, sizeof(one_value));
+    table_data.push_back(std::move(one_data));
 
     // SubM conv as one GEMM: gather 27 neighbour rows (missing -> sentinel);
     // the gathered layout (n, o, c) with c fastest == (27*C, N) ne, matching
@@ -112,10 +168,20 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
     auto conv = [&](ggml_tensor* feat, const std::string& wname,
                     const std::string& bname, ggml_tensor* idx, int64_t n) {
         const int64_t cw = feat->ne[0];
-        ggml_tensor* zero = zero_for(cw);
+        ggml_tensor* zero = as_f16(ctx, zero_for(cw));
+        ggml_tensor* weight = m->get(wname.c_str());
+        ggml_tensor* bias = m->get(bname.c_str());
+
+        if (use_cuda_spconv) {
+            ggml_tensor* sp_idx = n == nf ? idx_spconv_f : idx_spconv_c;
+            ggml_tensor* sp_mask = n == nf ? mask_spconv_f : mask_spconv_c;
+            ggml_tensor* sp_argsort = n == nf ? argsort_spconv_f : argsort_spconv_c;
+            return ggml_sam3d_sparse_conv_f16(
+                ctx, as_f16(ctx, feat), as_f16(ctx, weight), as_f16(ctx, bias),
+                sp_idx, sp_mask, sp_argsort);
+        }
+
         ggml_tensor* xc = ggml_concat(ctx, feat, zero, 1);          // (C, n+1)
-        ggml_tensor* weight = matmul_weight(ctx, m->get(wname.c_str()), false, true);
-        ggml_tensor* bias = as_f32(ctx, m->get(bname.c_str()));
 
         // Quantized CUDA GEMMs quantize their full activation matrix into a
         // temporary Q8 buffer. The first decoder convolution otherwise needs
@@ -127,7 +193,7 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
         if (n <= tile_tokens) {
             ggml_tensor* gat = ggml_get_rows(ctx, xc, idx);         // (C, 27n)
             gat = ggml_reshape_2d(ctx, gat, cw * 27, n);
-            return gb_linear(ctx, weight, bias, gat);
+            return linear_fp16(ctx, weight, bias, gat, false);
         }
 
         const std::vector<int32_t>* host_idx = idx == idx_conv_f
@@ -148,45 +214,36 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
             table_data.push_back(std::move(slice));
             ggml_tensor* gat = ggml_get_rows(ctx, xc, idx_tile);
             gat = ggml_reshape_2d(ctx, gat, cw * 27, count);
-            ggml_tensor* tile = gb_linear(ctx, weight, bias, gat);
+            ggml_tensor* tile = linear_fp16(ctx, weight, bias, gat, false);
             result = result ? ggml_concat(ctx, result, tile, 1) : tile;
         }
         return result;
     };
 
-    // 2x mean-pool downsample (torch scatter mean over present children;
-    // blocks are partial so the children table is (8, nc) with sentinels)
+    // The reference performs a sparse F16 scatter_reduce(mean), including
+    // the initial zero in each output row's denominator. A fixed gather/add
+    // tree has a different rounding history, so pass the original fine-to-
+    // coarse mapping to the dedicated operator instead. The divisor table
+    // carries the count itself: the reference divides in F32 opmath rather
+    // than multiplying a rounded reciprocal.
     auto downsample = [&](ggml_tensor* feat) {
-        const int64_t cw = feat->ne[0];
-        ggml_tensor* zero = zero_for(cw);
-        ggml_tensor* xc = ggml_concat(ctx, feat, zero, 1);
-        ggml_tensor* idx = add_i32(tb->coarse_children, "coarse_children",
-                                   {8 * nc});
-        ggml_tensor* gat = ggml_get_rows(ctx, xc, idx);            // (C, 8nc)
-        gat = ggml_reshape_3d(ctx, gat, cw, 8, nc);
-        ggml_tensor* sum = nullptr;
-        for (int j = 0; j < 8; j++) {
-            ggml_tensor* vj = ggml_view_3d(ctx, gat, cw, 1, nc,
-                                           gat->nb[1], gat->nb[2],
-                                           (size_t)j * gat->nb[1]);
-            // the child slice strides 8*cw per token: materialize before the
-            // reshape (ggml reshape requires contiguous inputs)
-            vj = ggml_reshape_2d(ctx, ggml_cont(ctx, vj), cw, nc);
-            sum = sum ? ggml_add(ctx, sum, vj) : vj;
-        }
-        ggml_tensor* inv = g->input_f32("coarse_inv_count", {1, nc});
-        inputs.push_back(inv);
+        ggml_tensor* counts = g->input_f32("coarse_count", {1, nc});
+        inputs.push_back(counts);
         table_data.push_back(std::make_shared<std::vector<int32_t>>(
-            (const int32_t*)tb->coarse_inv_count.data(),
-            (const int32_t*)(tb->coarse_inv_count.data() + nc)));
-        return ggml_mul(ctx, sum, inv);
+            (const int32_t*)tb->coarse_count.data(),
+            (const int32_t*)(tb->coarse_count.data() + nc)));
+        return ggml_sam3d_sparse_scatter_mean(ctx, as_f16(ctx, feat), idx_f2c, counts);
     };
 
-    // 2x nearest upsample (fine_i = coarse[fine_to_coarse[i]])
+    // 2x nearest upsample (fine_i = coarse[fine_to_coarse[i]]). idx_f2c only
+    // addresses the nc real rows, so the zero-stuffing concat of the original
+    // graph is dead input here - gather straight from `feat` (this also
+    // avoids a Vulkan get_rows shape that reads back garbage on several
+    // drivers). The gather runs in F32 to match the official spconv
+    // accumulator contract.
     auto upsample = [&](ggml_tensor* feat) {
-        ggml_tensor* xc = ggml_concat(ctx, feat, zero_for(feat->ne[0]), 1);
-        ggml_tensor* gat = ggml_get_rows(ctx, xc, idx_f2c);        // (C, nf)
-        return ggml_reshape_2d(ctx, gat, feat->ne[0], nf);
+        ggml_tensor* gat = ggml_get_rows(ctx, as_f32(ctx, feat), idx_f2c);      // (C, nf)
+        return as_f16(ctx, ggml_reshape_2d(ctx, gat, feat->ne[0], nf));
     };
 
     // ---------------- timestep embedding ----------------
@@ -200,16 +257,29 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
     table_data.push_back(freq_buf);
     ggml_tensor* tf = ggml_mul(ctx, ggml_repeat(ctx, t, freqs), freqs);
     ggml_tensor* emb = ggml_concat(ctx, ggml_cos(ctx, tf), ggml_sin(ctx, tf), 0);
+    // The official SLatFlowModel keeps the timestep embedder as an F32 module
+    // for every checkpoint format; the same-GGUF oracle therefore runs this
+    // projection with dequantized F32 weights. A quantized GGML GEMV would
+    // quantize the activation into Q8 and is measurably not equivalent: that
+    // mismatch is the first Q8/Q4 divergence boundary (t=0 makes the identity
+    // frequencies exact, so only the weight representation differs).
     ggml_tensor* t_emb = gb_linear(
-        ctx, matmul_weight(ctx, m->get(prefix + ".t_embedder.mlp.0.weight")),
+        ctx, as_f32(ctx, m->get(prefix + ".t_embedder.mlp.0.weight")),
         as_f32(ctx, m->get(prefix + ".t_embedder.mlp.0.bias")), emb);
     t_emb = ggml_silu(ctx, t_emb);
     t_emb = gb_linear(ctx,
-                      matmul_weight(ctx, m->get(prefix + ".t_embedder.mlp.2.weight")),
+                      as_f32(ctx, m->get(prefix + ".t_embedder.mlp.2.weight")),
                       as_f32(ctx, m->get(prefix + ".t_embedder.mlp.2.bias")),
                       t_emb);  // (C, 1)
-    const bool dump_block_outputs = getenv("SAM3D_DEBUG_DUMP_BLOCKS") != nullptr;
-    const bool fuse_quant_qkv = getenv("SAM3D_E2E_FUSE_QUANT_QKV") != nullptr;
+    const bool dump_block_outputs = this->dump_block_outputs;
+    // SLatFlowModel casts the F32 embedding and external condition once at
+    // the torso boundary, before either reaches a converted module.
+    t_emb = as_f16(ctx, t_emb);
+    if (debug_stage == "t_emb") return {t_emb};
+    // Keep `cond` itself as the CLI-uploaded F32 graph input. Replacing this
+    // member pointer with the cast node works only until cross-attention makes
+    // that node live, at which point the uploader would misclassify it.
+    ggml_tensor* cond_f16 = as_f16(ctx, cond);
 
     // sparse res block: [down/up] -> norm1(affine) -> silu -> conv1 ->
     // norm2(no affine) -> *(1+scale)+shift -> silu -> conv2 -> + skip
@@ -217,10 +287,19 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
                          bool down, bool up, bool* dbg_early) {
         const bool trace_input_block1 = dump_block_outputs &&
             b == prefix + ".input_blocks.1";
+        const auto debug_endpoint = [&](const char* canonical_suffix,
+                                        const char* short_suffix = nullptr) {
+            if (debug_stage == b + "_" + canonical_suffix) return true;
+            const std::string input_prefix = prefix + ".input_blocks.";
+            if (b.rfind(input_prefix, 0) != 0) return false;
+            const std::string index = b.substr(input_prefix.size());
+            return debug_stage == "ib" + index + "_" +
+                (short_suffix ? short_suffix : canonical_suffix);
+        };
         if (down) {
             xin = downsample(xin);
             if (trace_input_block1) debug_block_outputs.push_back(xin);
-            if (debug_stage == b + "_down") {
+            if (debug_endpoint("down", "updown")) {
                 if (dbg_early) *dbg_early = true;
                 return xin;
             }
@@ -235,50 +314,77 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
         const bool coarse = down || up;
         const int64_t n = coarse ? nc : nf;
         ggml_tensor* idx = coarse ? idx_conv_c : idx_conv_f;
-        ggml_tensor* e = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".emb_layers.1.weight")),
-            as_f32(ctx, m->get(b + ".emb_layers.1.bias")),
-            ggml_silu(ctx, t_emb));  // (2*cout, 1)
+        ggml_tensor* e = linear_fp16(
+            ctx, m->get(b + ".emb_layers.1.weight"),
+            m->get(b + ".emb_layers.1.bias"), silu_fp16(ctx, t_emb));  // (2*cout, 1)
         ggml_tensor* scale = ggml_view_2d(ctx, e, cout, 1, e->nb[1], 0);
         ggml_tensor* shift = ggml_view_2d(ctx, e, cout, 1, e->nb[1],
-                                          cout * sizeof(float));
-        ggml_tensor* hh = gb_layer_norm(
-            ctx, xin, as_f32(ctx, m->get(b + ".norm1.weight")),
-            as_f32(ctx, m->get(b + ".norm1.bias")), 1e-6f);
-        hh = ggml_silu(ctx, hh);
-        if (trace_input_block1) debug_block_outputs.push_back(hh);
-        hh = conv(hh, b + ".conv1.conv.weight", b + ".conv1.conv.bias", idx, n);
-        if (trace_input_block1) debug_block_outputs.push_back(hh);
-        if (debug_stage == b + "_conv1") {
+                                          cout * ggml_element_size(e));
+        // Keep the pre-affine boundary observable for parity diagnosis. This
+        // endpoint is not part of the normal graph and only exists when an
+        // explicit SAM3D_DEBUG_STAGE request stops evaluation here.
+        if (debug_endpoint("norm1_raw") || debug_endpoint("norm1_raw_f32")) {
+            if (dbg_early) *dbg_early = true;
+            ggml_tensor* raw_norm = ggml_norm(ctx, as_f32(ctx, xin), 1e-6f);
+            return debug_endpoint("norm1_raw_f32") ? raw_norm : as_f16(ctx, raw_norm);
+        }
+        ggml_tensor* hh = layer_norm32_fp16(
+            ctx, xin, m->get(b + ".norm1.weight"),
+            m->get(b + ".norm1.bias"), 1e-6f);
+        if (debug_endpoint("norm1")) {
             if (dbg_early) *dbg_early = true;
             return hh;
         }
-        hh = gb_layer_norm(ctx, hh, nullptr, nullptr, 1e-6f);
-        hh = modulate(ctx, hh, scale, shift);
-        hh = ggml_silu(ctx, hh);
+        hh = silu_fp16(ctx, hh);
+        if (debug_endpoint("silu1")) {
+            if (dbg_early) *dbg_early = true;
+            return hh;
+        }
+        if (trace_input_block1) debug_block_outputs.push_back(hh);
+        hh = conv(hh, b + ".conv1.conv.weight", b + ".conv1.conv.bias", idx, n);
+        if (trace_input_block1) debug_block_outputs.push_back(hh);
+        if (debug_endpoint("conv1")) {
+            if (dbg_early) *dbg_early = true;
+            return hh;
+        }
+        hh = layer_norm32_fp16(ctx, hh, nullptr, nullptr, 1e-6f);
+        if (debug_endpoint("norm2")) {
+            if (dbg_early) *dbg_early = true;
+            return hh;
+        }
+        hh = modulate_fp16(ctx, hh, scale, shift, fp16_one);
+        hh = silu_fp16(ctx, hh);
+        if (debug_endpoint("silu2")) {
+            if (dbg_early) *dbg_early = true;
+            return hh;
+        }
         if (trace_input_block1) debug_block_outputs.push_back(hh);
         hh = conv(hh, b + ".conv2.conv.weight", b + ".conv2.conv.bias", idx, n);
         if (trace_input_block1) debug_block_outputs.push_back(hh);
-        if (debug_stage == b + "_conv2") {
+        if (debug_endpoint("conv2")) {
             if (dbg_early) *dbg_early = true;
             return hh;
         }
         ggml_tensor* skip = xin;
         if (xin->ne[0] != cout)
-            skip = gb_linear(
-                ctx, matmul_weight(ctx, m->get(b + ".skip_connection.weight")),
-                as_f32(ctx, m->get(b + ".skip_connection.bias")), xin);
+            skip = linear_fp16(ctx, m->get(b + ".skip_connection.weight"),
+                               m->get(b + ".skip_connection.bias"), xin);
         if (trace_input_block1) debug_block_outputs.push_back(skip);
-        ggml_tensor* out = ggml_add(ctx, hh, skip);
+        ggml_tensor* out = residual_fp16(ctx, hh, skip);
+        if (debug_endpoint("out")) {
+            if (dbg_early) *dbg_early = true;
+            return out;
+        }
         if (trace_input_block1) debug_block_outputs.push_back(out);
         return out;
     };
 
     // ---------------- input stage ----------------
     ggml_tensor* h = gb_linear(
-        ctx, matmul_weight(ctx, m->get(prefix + ".input_layer.weight")),
+        ctx, matmul_weight(ctx, m->get(prefix + ".input_layer.weight"), keep_quant_gemm),
         as_f32(ctx, m->get(prefix + ".input_layer.bias")), x);  // (128, nf)
     if (debug_stage == "input_layer") return {h};
+    h = as_f16(ctx, h);
     if (dump_block_outputs) debug_block_outputs.push_back(h);
 
     bool early = false;
@@ -297,110 +403,72 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
     table_data.push_back(std::make_shared<std::vector<int32_t>>(
         (const int32_t*)tb->ape.data(),
         (const int32_t*)(tb->ape.data() + tb->ape.size())));
-    h = ggml_add(ctx, skip1, ape);
+    h = as_f16(ctx, ggml_add(ctx, skip1, as_f16(ctx, ape)));
     if (debug_stage == "ape") return {h};
     if (debug_stage == "block_in") return {h};
 
     for (int i = 0; i < (int)n_blocks; i++) {
         const std::string b = prefix + ".blocks." + std::to_string(i);
-        ggml_tensor* six = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".adaLN_modulation.1.weight")),
-            as_f32(ctx, m->get(b + ".adaLN_modulation.1.bias")),
-            ggml_silu(ctx, t_emb));
+        ggml_tensor* six = linear_fp16(
+            ctx, m->get(b + ".adaLN_modulation.1.weight"),
+            m->get(b + ".adaLN_modulation.1.bias"), silu_fp16(ctx, t_emb));
         if (i == 0 && debug_stage == "b0_adaln") return {six};
         ggml_tensor* shift_msa = ggml_view_2d(ctx, six, C, 1, six->nb[1], 0);
         ggml_tensor* scale_msa = ggml_view_2d(ctx, six, C, 1, six->nb[1],
-                                              C * sizeof(float));
+                                              C * ggml_element_size(six));
         ggml_tensor* gate_msa = ggml_view_2d(ctx, six, C, 1, six->nb[1],
-                                             2 * (size_t)C * sizeof(float));
+                                             2 * (size_t)C * ggml_element_size(six));
         ggml_tensor* shift_mlp = ggml_view_2d(ctx, six, C, 1, six->nb[1],
-                                              3 * (size_t)C * sizeof(float));
+                                              3 * (size_t)C * ggml_element_size(six));
         ggml_tensor* scale_mlp = ggml_view_2d(ctx, six, C, 1, six->nb[1],
-                                              4 * (size_t)C * sizeof(float));
+                                              4 * (size_t)C * ggml_element_size(six));
         ggml_tensor* gate_mlp = ggml_view_2d(ctx, six, C, 1, six->nb[1],
-                                             5 * (size_t)C * sizeof(float));
+                                             5 * (size_t)C * ggml_element_size(six));
 
-        ggml_tensor* hs = gb_layer_norm(ctx, h, nullptr, nullptr, 1e-6f);
-        hs = modulate(ctx, hs, scale_msa, shift_msa);
+        ggml_tensor* hs = layer_norm32_fp16(ctx, h, nullptr, nullptr, 1e-6f);
+        hs = modulate_fp16(ctx, hs, scale_msa, shift_msa, fp16_one);
         if (debug_stage == "b" + std::to_string(i) + "_attn_in") return {hs};
-        // A 3C-wide quantized GEMM can select a different CUDA/Vulkan
-        // reduction kernel than three C-wide projections. Keep the established
-        // narrow quantized path until a complete E2E equivalence test approves
-        // a fused quantized kernel.
-        ggml_tensor* wqkv = matmul_weight(
-            ctx, m->get(b + ".self_attn.to_qkv.weight"), true);
-        ggml_tensor* bqkv = ggml_cont(ctx, as_f32(ctx, m->get(b + ".self_attn.to_qkv.bias")));
+        // The reference torso applies one F16 QKV projection, then splits its
+        // rounded result. This is also the compatibility path for Q8/Q4: the
+        // same-GGUF Torch oracle dequantizes before loading its F16 module.
+        ggml_tensor* wqkv = m->get(b + ".self_attn.to_qkv.weight");
+        ggml_tensor* bqkv = m->get(b + ".self_attn.to_qkv.bias");
         ggml_tensor *q, *k, *v;
-        if (ggml_is_quantized(wqkv->type)) {
-            if (fuse_quant_qkv) {
-                ggml_tensor* qkv = gb_linear(ctx, wqkv, bqkv, hs);
-                if (debug_stage == "b" + std::to_string(i) + "_qpre") {
-                    return {ggml_cont(ctx, ggml_view_2d(ctx, qkv, C, nc, qkv->nb[1], 0))};
-                }
-                if (i == 0 && debug_stage == "b0_qkv") return {qkv};
-                gb_split_qkv(ctx, qkv, n_heads, &q, &k, &v);
-            } else {
-                ggml_tensor* wq = matrix_rows(ctx, wqkv, 0, C);
-                ggml_tensor* wk = matrix_rows(ctx, wqkv, C, C);
-                ggml_tensor* wv = matrix_rows(ctx, wqkv, 2 * C, C);
-                q = gb_linear(ctx, wq, ggml_view_1d(ctx, bqkv, C, 0), hs);
-                k = gb_linear(ctx, wk, ggml_view_1d(ctx, bqkv, C, C * sizeof(float)), hs);
-                v = gb_linear(ctx, wv, ggml_view_1d(ctx, bqkv, C, 2 * C * sizeof(float)), hs);
-                if (debug_stage == "b" + std::to_string(i) + "_qpre") return {ggml_cont(ctx, q)};
-                if (i == 0 && debug_stage == "b0_qkv") return {gb_linear(ctx, wqkv, bqkv, hs)};
-                auto heads3 = [&](ggml_tensor* t) {
-                    return ggml_permute(ctx, ggml_reshape_3d(ctx, t, Hd, n_heads, nc), 0, 2, 1, 3);
-                };
-                q = heads3(q);
-                k = heads3(k);
-                v = heads3(v);
-            }
-        } else {
-            ggml_tensor* qkv = gb_linear(ctx, wqkv, bqkv, hs);
-            if (debug_stage == "b" + std::to_string(i) + "_qpre") {
-                return {ggml_cont(ctx, ggml_view_2d(ctx, qkv, C, nc, qkv->nb[1], 0))};
-            }
-            if (i == 0 && debug_stage == "b0_qkv") return {qkv};
-            gb_split_qkv(ctx, qkv, n_heads, &q, &k, &v);
+        ggml_tensor* qkv = linear_fp16(ctx, wqkv, bqkv, hs);
+        if (debug_stage == "b" + std::to_string(i) + "_qpre") {
+            return {ggml_cont(ctx, ggml_view_2d(ctx, qkv, C, nc, qkv->nb[1], 0))};
         }
-        q = gb_rms_norm_head(
-            ctx, q, as_f32(ctx, m->get(b + ".self_attn.q_rms_norm.gamma")),
+        if (i == 0 && debug_stage == "b0_qkv") return {qkv};
+        gb_split_qkv(ctx, qkv, n_heads, &q, &k, &v);
+        q = rms_norm_head_fp16(
+            ctx, q, m->get(b + ".self_attn.q_rms_norm.gamma"),
             (float)Hd);
         if (i == 0 && debug_stage == "b0_qrms") {
             return {ggml_cont(ctx, q)};
         }
-        k = gb_rms_norm_head(
-            ctx, k, as_f32(ctx, m->get(b + ".self_attn.k_rms_norm.gamma")),
+        k = rms_norm_head_fp16(
+            ctx, k, m->get(b + ".self_attn.k_rms_norm.gamma"),
             (float)Hd);
         const float attn_scale = 1.0f / sqrtf((float)Hd);
-        ggml_tensor* out = gb_attention(ctx, q, k, v, attn_scale, true);
+        ggml_tensor* out = as_f16(ctx, gb_attention(ctx, q, k, v, attn_scale, true));
         out = ggml_reshape_2d(ctx, out, C, nc);
-        out = gb_linear(ctx,
-                        matmul_weight(ctx, m->get(b + ".self_attn.to_out.weight"), true),
-                        as_f32(ctx, m->get(b + ".self_attn.to_out.bias")), out);
+        out = linear_fp16(ctx, m->get(b + ".self_attn.to_out.weight"),
+                          m->get(b + ".self_attn.to_out.bias"), out);
         if (i == 0 && debug_stage == "b0_attn_out") return {out};
-        h = ggml_add(ctx, h, ggml_mul(ctx, out, gate_msa));
+        h = residual_fp16(ctx, h, as_f16(ctx, ggml_mul(ctx, out, gate_msa)));
         if (i == 0 && debug_stage == "b0_res") return {h};
 
         // cross attention (no rms norm on cross)
-        ggml_tensor* hc = gb_layer_norm(
-            ctx, h, as_f32(ctx, m->get(b + ".norm2.weight")),
-            as_f32(ctx, m->get(b + ".norm2.bias")), 1e-6f);
-        ggml_tensor* cq = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".cross_attn.to_q.weight"), true),
-            as_f32(ctx, m->get(b + ".cross_attn.to_q.bias")), hc);
-        ggml_tensor* wkv = matmul_weight(
-            ctx, m->get(b + ".cross_attn.to_kv.weight"), true);
-        ggml_tensor* bkv = as_f32(ctx, m->get(b + ".cross_attn.to_kv.bias"));
+        ggml_tensor* hc = layer_norm32_fp16(
+            ctx, h, m->get(b + ".norm2.weight"),
+            m->get(b + ".norm2.bias"), 1e-6f);
+        ggml_tensor* cq = linear_fp16(
+            ctx, m->get(b + ".cross_attn.to_q.weight"),
+            m->get(b + ".cross_attn.to_q.bias"), hc);
+        ggml_tensor* wkv = m->get(b + ".cross_attn.to_kv.weight");
+        ggml_tensor* bkv = m->get(b + ".cross_attn.to_kv.bias");
         ggml_tensor *ck, *cv;
-        if (ggml_is_quantized(wkv->type)) {
-            ck = gb_linear(ctx, matrix_rows(ctx, wkv, 0, C),
-                           ggml_view_1d(ctx, bkv, C, 0), cond);
-            cv = gb_linear(ctx, matrix_rows(ctx, wkv, C, C),
-                           ggml_view_1d(ctx, bkv, C, C * sizeof(float)), cond);
-        } else {
-            gb_split_kv(ctx, gb_linear(ctx, wkv, bkv, cond), &ck, &cv);
-        }
+        gb_split_kv(ctx, linear_fp16(ctx, wkv, bkv, cond_f16), &ck, &cv);
         auto heads = [&](ggml_tensor* t2, int64_t n) {
             ggml_tensor* r = ggml_reshape_3d(ctx, t2, Hd, n_heads, n);
             return ggml_permute(ctx, r, 0, 2, 1, 3);
@@ -410,25 +478,24 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
         cq = heads(cq, n_q);
         ck = heads(ck, n_kv);
         cv = heads(cv, n_kv);
-        ggml_tensor* co = gb_attention(ctx, cq, ck, cv, attn_scale, true);
+        ggml_tensor* co = as_f16(ctx, gb_attention(ctx, cq, ck, cv, attn_scale, true));
         co = ggml_reshape_2d(ctx, co, C, n_q);
-        co = gb_linear(ctx,
-                       matmul_weight(ctx, m->get(b + ".cross_attn.to_out.weight"), true),
-                       as_f32(ctx, m->get(b + ".cross_attn.to_out.bias")), co);
+        co = linear_fp16(ctx, m->get(b + ".cross_attn.to_out.weight"),
+                         m->get(b + ".cross_attn.to_out.bias"), co);
         if (i == 0 && debug_stage == "b0_cross_out") return {co};
-        h = ggml_add(ctx, h, co);
+        h = residual_fp16(ctx, h, co);
         if (i == 0 && debug_stage == "b0_cross_res") return {h};
 
         // MLP branch
-        ggml_tensor* hm = gb_layer_norm(ctx, h, nullptr, nullptr, 1e-6f);
-        hm = modulate(ctx, hm, scale_mlp, shift_mlp);
-        hm = gb_linear(ctx, matmul_weight(ctx, m->get(b + ".mlp.mlp.0.weight")),
-                       as_f32(ctx, m->get(b + ".mlp.mlp.0.bias")), hm);
-        hm = ggml_gelu(ctx, hm);
-        hm = gb_linear(ctx, matmul_weight(ctx, m->get(b + ".mlp.mlp.2.weight")),
-                       as_f32(ctx, m->get(b + ".mlp.mlp.2.bias")), hm);
+        ggml_tensor* hm = layer_norm32_fp16(ctx, h, nullptr, nullptr, 1e-6f);
+        hm = modulate_fp16(ctx, hm, scale_mlp, shift_mlp, fp16_one);
+        hm = linear_fp16(ctx, m->get(b + ".mlp.mlp.0.weight"),
+                         m->get(b + ".mlp.mlp.0.bias"), hm);
+        hm = gelu_fp16(ctx, hm);
+        hm = linear_fp16(ctx, m->get(b + ".mlp.mlp.2.weight"),
+                         m->get(b + ".mlp.mlp.2.bias"), hm);
         if (i == 0 && debug_stage == "b0_mlp_out") return {hm};
-        h = ggml_add(ctx, h, ggml_mul(ctx, hm, gate_mlp));
+        h = residual_fp16(ctx, h, as_f16(ctx, ggml_mul(ctx, hm, gate_mlp)));
         if (dump_block_outputs) debug_block_outputs.push_back(h);
         if (debug_stage == "block" + std::to_string(i)) return {h};
     }
@@ -440,73 +507,82 @@ std::vector<ggml_tensor*> SlatFlowGraph::build() {
     // 256->128, 128->128; skip = Linear(256->128).
     {
         const std::string b = prefix + ".out_blocks.0";
-        ggml_tensor* xin = ggml_concat(ctx, h, skip1, 0);  // (2048, nc)
+        ggml_tensor* xin = as_f16(ctx, ggml_concat(ctx, h, skip1, 0));  // (2048, nc)
         xin = upsample(xin);                               // (2048, nf)
+        if (debug_stage == "ob0_up_out") return {xin};
         if (dump_block_outputs) debug_block_outputs.push_back(xin);
-        ggml_tensor* e = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".emb_layers.1.weight")),
-            as_f32(ctx, m->get(b + ".emb_layers.1.bias")),
-            ggml_silu(ctx, t_emb));
+        ggml_tensor* e = linear_fp16(
+            ctx, m->get(b + ".emb_layers.1.weight"),
+            m->get(b + ".emb_layers.1.bias"), silu_fp16(ctx, t_emb));
         ggml_tensor* scale = ggml_view_2d(ctx, e, io_ch, 1, e->nb[1], 0);
         ggml_tensor* shift = ggml_view_2d(ctx, e, io_ch, 1, e->nb[1],
-                                          io_ch * sizeof(float));
-        ggml_tensor* hh = gb_layer_norm(
-            ctx, xin, as_f32(ctx, m->get(b + ".norm1.weight")),
-            as_f32(ctx, m->get(b + ".norm1.bias")), 1e-6f);
-        hh = ggml_silu(ctx, hh);
+                                          io_ch * ggml_element_size(e));
+        ggml_tensor* hh = layer_norm32_fp16(
+            ctx, xin, m->get(b + ".norm1.weight"),
+            m->get(b + ".norm1.bias"), 1e-6f);
+        if (debug_stage == "ob0_norm1") return {hh};
+        hh = silu_fp16(ctx, hh);
         if (dump_block_outputs) debug_block_outputs.push_back(hh);
         hh = conv(hh, b + ".conv1.conv.weight", b + ".conv1.conv.bias",
                   idx_conv_f, nf);
         if (dump_block_outputs) debug_block_outputs.push_back(hh);
         if (debug_stage == "ob0_conv1") return {hh};
-        hh = gb_layer_norm(ctx, hh, nullptr, nullptr, 1e-6f);
-        hh = modulate(ctx, hh, scale, shift);
-        hh = ggml_silu(ctx, hh);
+        hh = layer_norm32_fp16(ctx, hh, nullptr, nullptr, 1e-6f);
+        if (debug_stage == "ob0_norm2") return {hh};
+        hh = modulate_fp16(ctx, hh, scale, shift, fp16_one);
+        if (debug_stage == "ob0_mod") return {hh};
+        hh = silu_fp16(ctx, hh);
+        if (debug_stage == "ob0_silu2") return {hh};
         hh = conv(hh, b + ".conv2.conv.weight", b + ".conv2.conv.bias",
                   idx_conv_f, nf);
         if (dump_block_outputs) debug_block_outputs.push_back(hh);
-        ggml_tensor* skip = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".skip_connection.weight")),
-            as_f32(ctx, m->get(b + ".skip_connection.bias")), xin);
+        if (debug_stage == "ob0_conv2") return {hh};
+        ggml_tensor* skip = linear_fp16(ctx, m->get(b + ".skip_connection.weight"),
+                                         m->get(b + ".skip_connection.bias"), xin);
         if (dump_block_outputs) debug_block_outputs.push_back(skip);
-        h = ggml_add(ctx, hh, skip);  // (128, nf)
+        if (debug_stage == "ob0_skip") return {skip};
+        if (debug_stage == "ob0_hh") return {hh};
+        h = residual_fp16(ctx, hh, skip);  // (128, nf)
         if (dump_block_outputs) debug_block_outputs.push_back(h);  // out block 0
+        if (debug_stage == "ob0_residual") return {h};
     }
     {
         const std::string b = prefix + ".out_blocks.1";
-        ggml_tensor* xin = ggml_concat(ctx, h, skip0, 0);  // (256, nf)
-        ggml_tensor* e = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".emb_layers.1.weight")),
-            as_f32(ctx, m->get(b + ".emb_layers.1.bias")),
-            ggml_silu(ctx, t_emb));
+        ggml_tensor* xin = as_f16(ctx, ggml_concat(ctx, h, skip0, 0));  // (256, nf)
+        if (debug_stage == "ob1_xin") return {xin};
+        ggml_tensor* e = linear_fp16(
+            ctx, m->get(b + ".emb_layers.1.weight"),
+            m->get(b + ".emb_layers.1.bias"), silu_fp16(ctx, t_emb));
         ggml_tensor* scale = ggml_view_2d(ctx, e, io_ch, 1, e->nb[1], 0);
         ggml_tensor* shift = ggml_view_2d(ctx, e, io_ch, 1, e->nb[1],
-                                          io_ch * sizeof(float));
-        ggml_tensor* hh = gb_layer_norm(
-            ctx, xin, as_f32(ctx, m->get(b + ".norm1.weight")),
-            as_f32(ctx, m->get(b + ".norm1.bias")), 1e-6f);
-        hh = ggml_silu(ctx, hh);
+                                          io_ch * ggml_element_size(e));
+        ggml_tensor* hh = layer_norm32_fp16(
+            ctx, xin, m->get(b + ".norm1.weight"),
+            m->get(b + ".norm1.bias"), 1e-6f);
+        if (debug_stage == "ob1_norm1") return {hh};
+        hh = silu_fp16(ctx, hh);
         hh = conv(hh, b + ".conv1.conv.weight", b + ".conv1.conv.bias",
                   idx_conv_f, nf);
         if (debug_stage == "ob1_conv1") return {hh};
-        hh = gb_layer_norm(ctx, hh, nullptr, nullptr, 1e-6f);
-        hh = modulate(ctx, hh, scale, shift);
-        hh = ggml_silu(ctx, hh);
+        hh = layer_norm32_fp16(ctx, hh, nullptr, nullptr, 1e-6f);
+        hh = modulate_fp16(ctx, hh, scale, shift, fp16_one);
+        hh = silu_fp16(ctx, hh);
         hh = conv(hh, b + ".conv2.conv.weight", b + ".conv2.conv.bias",
                   idx_conv_f, nf);
         if (debug_stage == "ob1_conv2") return {hh};
-        ggml_tensor* skip = gb_linear(
-            ctx, matmul_weight(ctx, m->get(b + ".skip_connection.weight")),
-            as_f32(ctx, m->get(b + ".skip_connection.bias")), xin);
-        h = ggml_add(ctx, hh, skip);
+        ggml_tensor* skip = linear_fp16(ctx, m->get(b + ".skip_connection.weight"),
+                                         m->get(b + ".skip_connection.bias"), xin);
+        h = residual_fp16(ctx, hh, skip);
         if (dump_block_outputs) debug_block_outputs.push_back(h);  // out block 1
     }
 
     if (debug_stage == "pre_final") return {h};
-    h = gb_layer_norm(ctx, h, nullptr, nullptr, 1e-6f);
+    // The final functional layer norm observes the F16 torso result; the
+    // unconverted output linear then receives its explicit F32 promotion.
+    h = layer_norm32_fp16(ctx, h, nullptr, nullptr, 1e-6f);
     if (dump_block_outputs) debug_block_outputs.push_back(h);  // final LayerNorm
-    h = gb_linear(ctx, matmul_weight(ctx, m->get(prefix + ".out_layer.weight")),
-                  as_f32(ctx, m->get(prefix + ".out_layer.bias")), h);
+    h = gb_linear(ctx, matmul_weight(ctx, m->get(prefix + ".out_layer.weight"), keep_quant_gemm),
+                  as_f32(ctx, m->get(prefix + ".out_layer.bias")), as_f32(ctx, h));
     return {h};
 }
 

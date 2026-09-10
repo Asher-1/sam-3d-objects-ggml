@@ -82,13 +82,21 @@ __global__ void duplicateWithKeys(
 		return;
 
 	// Generate no key/value pair for invisible Gaussians
-	if (radii[idx] > 0)
+	// Local delta (gsplat parity): per-axis radii and the same elliptical
+	// tile range as intersect_tile_kernel, see UPSTREAM.md.
+	if (radii[2 * idx] > 0)
 	{
 		// Find this Gaussian's offset in buffer for writing keys/values.
 		uint32_t off = (idx == 0) ? 0 : offsets[idx - 1];
+		const float radius_x = (float)radii[2 * idx];
+		const float radius_y = (float)radii[2 * idx + 1];
+		const float tile_fx = points_xy[idx].x / 16.0f;
+		const float tile_fy = points_xy[idx].y / 16.0f;
 		uint2 rect_min, rect_max;
-
-		getRect(points_xy[idx], radii[idx], rect_min, rect_max, grid);
+		rect_min.x = min(max(0u, (uint32_t)floorf(tile_fx - radius_x / 16.0f)), grid.x);
+		rect_min.y = min(max(0u, (uint32_t)floorf(tile_fy - radius_y / 16.0f)), grid.y);
+		rect_max.x = min(max(0u, (uint32_t)ceilf(tile_fx + radius_x / 16.0f)), grid.x);
+		rect_max.y = min(max(0u, (uint32_t)ceilf(tile_fy + radius_y / 16.0f)), grid.y);
 
 		// For each tile that the bounding rect overlaps, emit a 
 		// key/value pair. The key is |  tile ID  |      depth      |,
@@ -157,7 +165,8 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char*& ch
 	GeometryState geom;
 	obtain(chunk, geom.depths, P, 128);
 	obtain(chunk, geom.clamped, P * 3, 128);
-	obtain(chunk, geom.internal_radii, P, 128);
+	
+	obtain(chunk, geom.internal_radii, 2 * P, 128);
 	obtain(chunk, geom.means2D, P, 128);
 	obtain(chunk, geom.cov3D, P * 6, 128);
 	obtain(chunk, geom.conic_opacity, P, 128);

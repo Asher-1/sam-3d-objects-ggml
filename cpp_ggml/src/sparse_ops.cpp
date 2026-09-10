@@ -20,7 +20,7 @@ using Key = std::tuple<int32_t, int32_t, int32_t>;
 
 }  // namespace
 
-bool SlatTables::build(const int32_t* coords, int64_t n_fine, int channels) {
+bool SlatTables::build(const int32_t* coords, int64_t n_fine, int channels, bool dump_tables) {
     nf = n_fine;
     if (nf <= 0) return false;
 
@@ -52,7 +52,7 @@ bool SlatTables::build(const int32_t* coords, int64_t n_fine, int channels) {
             counts[(size_t)c]++;
         }
 
-    coarse_inv_count.resize((size_t)nc);
+    coarse_count.resize((size_t)nc);
     // children table (c*8+j): gather rows for the mean-pool; a coarse cell's
     // 2x2x2 block is often partial, missing slots -> sentinel (nf = zero row)
     std::vector<int32_t> cnts((size_t)nc, 0);
@@ -66,8 +66,10 @@ bool SlatTables::build(const int32_t* coords, int64_t n_fine, int channels) {
         const int32_t k = cnts[(size_t)c];
         // NOTE: torch scatter_reduce(reduce="mean") averages over the written
         // values PLUS the initial zero row, i.e. sum/(count+1) - this quirk
-        // is part of the reference behaviour and must be reproduced.
-        coarse_inv_count[(size_t)c] = 1.0f / (float)(k + 1);
+        // is part of the reference behaviour and must be reproduced. The
+        // divisor itself is stored (not a reciprocal) because the reference
+        // divides in F32 opmath instead of multiplying a rounded inverse.
+        coarse_count[(size_t)c] = (float)(k + 1);
         // pack children compactly (keep the used slots first)
         int w = 0;
         for (int j = 0; j < 8; j++) {
@@ -78,7 +80,7 @@ bool SlatTables::build(const int32_t* coords, int64_t n_fine, int channels) {
     }
     }
 
-    if (getenv("SAM3D_DBG_TABLE")) {
+    if (dump_tables) {
         fprintf(stderr, "[tbl] first 12 coarse keys:\n");
         int printed = 0;
         for (const auto& [bk, row] : coarse_index) {
@@ -114,6 +116,43 @@ bool SlatTables::build(const int32_t* coords, int64_t n_fine, int channels) {
     };
     build_conv(fine_index, nf, conv_fine);
     build_conv(coarse_index, nc, conv_coarse);
+
+    auto build_spconv = [](const std::vector<int32_t>& token_major,
+                           int64_t n, std::vector<int32_t>& offset_major,
+                           std::vector<int32_t>& masks,
+                           std::vector<int32_t>& argsort) {
+        offset_major.assign((size_t)(27 * n), -1);
+        masks.assign((size_t)n, 0);
+        argsort.resize((size_t)n);
+        for (int64_t token = 0; token < n; token++) {
+            argsort[(size_t)token] = (int32_t)token;
+            for (int offset = 0; offset < 27; offset++) {
+                const int32_t row = token_major[(size_t)(token * 27 + offset)];
+                if (row >= 0 && row < n) {
+                    offset_major[(size_t)(offset * n + token)] = row;
+                    masks[(size_t)token] |= (int32_t)(1u << offset);
+                }
+            }
+        }
+
+        // spconv's implicit-GEMM path stable-sorts the per-output mask and
+        // passes the matching source-row permutation to the Cumm kernel.
+        // The kernel uses both buffers together; an unsorted mask paired with
+        // identity indices selects unrelated sparse rows and causes error to
+        // accumulate across diffusion blocks.
+        std::stable_sort(argsort.begin(), argsort.end(), [&](int32_t lhs, int32_t rhs) {
+            return masks[(size_t)lhs] < masks[(size_t)rhs];
+        });
+        std::vector<int32_t> sorted_masks((size_t)n);
+        for (int64_t sorted = 0; sorted < n; ++sorted) {
+            sorted_masks[(size_t)sorted] = masks[(size_t)argsort[(size_t)sorted]];
+        }
+        masks = std::move(sorted_masks);
+    };
+    build_spconv(conv_fine, nf, conv_fine_spconv, conv_fine_mask,
+                 conv_fine_argsort);
+    build_spconv(conv_coarse, nc, conv_coarse_spconv, conv_coarse_mask,
+                 conv_coarse_argsort);
 
     // ---- AbsolutePositionEmbedder for the coarse grid -------------------
     // per-axis: outer(coord, freqs) -> [sin | cos] (2*freq_dim per axis),

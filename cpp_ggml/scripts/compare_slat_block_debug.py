@@ -4,8 +4,11 @@
 ``slat_step_ref.py`` exports official checkpoint observations for the exact
 stage names listed below. A matching native capture is produced with one
 ``SAM3D_DEBUG_STAGE`` invocation of ``sam3d-cli slat-step`` per directory.
-The comparison requires both the GGML/SAMT shape and payload layout to match;
-equal element counts alone are insufficient evidence of an aligned operator.
+The comparison requires both the GGML/SAMT layout and payload order to match.
+Only two explicit serialization differences are accepted: a trailing singleton
+dimension, and the known block-0 Q layout where ggml coalesces heads into the
+channel dimension. Equal element counts alone are insufficient evidence of an
+aligned operator.
 
 The report records whether the reference uses the original checkpoint or the
 candidate GGUF's dequantized backbone weights. This prevents a boundary result
@@ -19,6 +22,7 @@ import struct
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt as load_samt
 
 
 # (native debug stage, official reference basename). These names are public
@@ -37,22 +41,6 @@ STAGES: tuple[tuple[str, str], ...] = (
 )
 
 
-def load_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        if rank < 0:
-            raise ValueError(f"{path}: invalid negative rank {rank}")
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (value_type,) = struct.unpack("<i", stream.read(4))
-        if value_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {value_type}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    expected = int(np.prod(shape))
-    if values.size != expected:
-        raise ValueError(f"{path}: payload size {values.size} does not match {shape}")
-    return shape, values
 
 
 def error(reference: np.ndarray, actual: np.ndarray) -> dict[str, float]:
@@ -64,6 +52,51 @@ def error(reference: np.ndarray, actual: np.ndarray) -> dict[str, float]:
         "rmse": float(np.sqrt(np.square(delta).mean())),
         "max_abs": float(np.abs(delta).max()),
     }
+
+
+def trailing_singleton_layout_equivalent(
+        reference_shape: tuple[int, ...], actual_shape: tuple[int, ...]) -> bool:
+    """Accept only rank differences made of terminal dimensions of size one.
+
+    SAMT payloads are flat and written in ggml's native element order. Removing
+    a trailing singleton dimension leaves that order unchanged, unlike any
+    transpose, reshape, or non-singleton dimension change.
+    """
+    def without_trailing_singletons(shape: tuple[int, ...]) -> tuple[int, ...]:
+        while len(shape) > 1 and shape[-1] == 1:
+            shape = shape[:-1]
+        return shape
+
+    return (int(np.prod(reference_shape)) == int(np.prod(actual_shape))
+            and without_trailing_singletons(reference_shape)
+            == without_trailing_singletons(actual_shape))
+
+
+def align_known_layout(stage: str, reference_shape: tuple[int, ...],
+                       actual_shape: tuple[int, ...], actual: np.ndarray) -> tuple[np.ndarray, str]:
+    """Return native values in the reference payload layout for known Q tensors.
+
+    PyTorch stores block-0 Q tensors as [token, head, head_dim] and writes
+    SAMT dimensions in reverse. ggml stores Q before RMS norm as
+    [head_dim * head, token], then after RMS norm as [head_dim, token, head].
+    These are the same logical tensor only under the exact shape contracts
+    checked below. No generic reshape or transpose is accepted.
+    """
+    if reference_shape == actual_shape:
+        return actual, "exact"
+    if trailing_singleton_layout_equivalent(reference_shape, actual_shape):
+        return actual, "trailing_singleton"
+    if stage == "b0_qpre" and len(reference_shape) == 3 and len(actual_shape) == 2:
+        head_dim, heads, tokens = reference_shape
+        if actual_shape == (head_dim * heads, tokens):
+            return actual, "coalesced_heads"
+    if stage == "b0_qrms" and len(reference_shape) == 3 and len(actual_shape) == 3:
+        head_dim, heads, tokens = reference_shape
+        if actual_shape == (head_dim, tokens, heads):
+            native = actual.reshape(heads, tokens, head_dim)
+            return native.transpose(1, 0, 2).copy().reshape(-1), "head_token_permute"
+    raise ValueError(
+        f"tensor shape mismatch for {stage}: {reference_shape} vs {actual_shape}")
 
 
 def main() -> int:
@@ -93,13 +126,13 @@ def main() -> int:
             raise FileNotFoundError(f"missing debug pair: {reference_path}, {actual_path}")
         reference_shape, reference = load_samt(reference_path)
         actual_shape, actual = load_samt(actual_path)
-        if reference_shape != actual_shape:
-            raise ValueError(
-                f"tensor shape mismatch for {stage}: {reference_shape} vs {actual_shape}")
+        actual, layout_mapping = align_known_layout(
+            stage, reference_shape, actual_shape, actual)
         rows.append({
             "stage": stage,
             "reference_shape": list(reference_shape),
             "actual_shape": list(actual_shape),
+            "layout_mapping": layout_mapping,
             "elements": int(reference.size),
             **error(reference, actual),
         })
@@ -116,7 +149,7 @@ def main() -> int:
             failures.append({"stage": row["stage"], "limits": failed_limits})
 
     payload = {
-        "schema": "sam3d.slat_block0_debug_comparison.v1",
+        "schema": "sam3d.slat_block0_debug_comparison.v2",
         "reference_weight_scope": args.reference_weight_scope,
         "candidate_weight_scope": "gguf",
         "max_stage_mae": args.max_stage_mae,

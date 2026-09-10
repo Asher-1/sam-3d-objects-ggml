@@ -166,6 +166,33 @@ not a claim that raw neural inference is identical. Fresh raw outputs after
 the fix, current charts and the remaining-issues analysis are linked from
 [benchmarks](cpp_ggml/benchmarks/README.md).
 
+### Full-scene multi-object reconstruction
+
+The multi-object demo flow is also fully native: pass `--mask-dir` and every
+`<idx>.png` mask under it is reconstructed as an independent single-object
+run by the same binary, then the pure-C++ `scene-assemble` command applies
+the official `make_scene` pose semantics, normalizes the composed scene and
+renders a 300-frame orbit with the same CUDA Gaussian rasterizer as the
+100-view bake. No Python, Torch or cuDNN is loaded at runtime.
+
+```bash
+bash run_ggml.sh --skip-build --backend cuda --dtype q8_0 \
+  --mask-dir notebook/images/shutterstock_stylish_kidsroom_1640806567 \
+  --mask-indices 14,17 --out-dir output/scene-ggml
+```
+
+A 27-object kidsroom scene benchmark (official PyTorch reference versus
+native CUDA F16/Q8_0/Q4_0 on one shared 300-frame orbit) is published in
+[`benchmarks/e2e_comparison/scene_current/`](cpp_ggml/benchmarks/e2e_comparison/scene_current/README.md).
+After the MoGe strict-KV repair, native variants run the complete scene in
+42-44 minutes with a median free-run pose drift of 1.4-1.9 degrees for
+F16/Q8_0; seven objects still diverge in every dtype and are documented
+there.
+
+| Native CUDA Q8_0 scene orbit | Reference versus native |
+| --- | --- |
+| ![Native scene orbit](cpp_ggml/benchmarks/e2e_comparison/scene_current/cuda-q8_0/orbit_contact_sheet.png) | ![Side-by-side frame](cpp_ggml/benchmarks/e2e_comparison/scene_current/cuda-q8_0/side_by_side_frame_0000.png) |
+
 ### Model families and practical advantages
 
 The GGUF directory contains the complete stage matrix, so users can choose a

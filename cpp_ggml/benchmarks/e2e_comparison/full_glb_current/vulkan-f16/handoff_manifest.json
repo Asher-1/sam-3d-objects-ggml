@@ -8,7 +8,7 @@
   },
   "dtype": "f16",
   "sampling_mode": "native-seed",
-  "ss_attention": "strict",
+  "ss_attention": "normal",
   "rng_distribution_blocks": 168,
   "neural_backend": "vulkan",
   "pbr_backend": "cuda",
@@ -23,8 +23,8 @@
     "cuda_pbr": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli"
   },
   "binary_sha256": {
-    "vulkan": "068a080418958ba3f4647c5611b041097b45adcdc55a7f73897735ebbf6a403c",
-    "cuda_pbr": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021"
+    "vulkan": "4ca5e628eb5ba7c4f2d6fc0e73c2068b1632409bbde9b9d1adef239dbbc4883c",
+    "cuda_pbr": "5cc6195663ef14c507da8ab74d9b386df4ef38e4aa069f1553f34e397035f258"
   },
   "input_sha256": {
     "image": "72785412200dcb9f5c6bc4eaa3018172293f67836627708e6bce78150109af15",
@@ -33,47 +33,47 @@
   "neural_artifacts_unchanged": true,
   "artifacts": {
     "ply": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_output.ply",
-      "sha256": "2ef5a945b7bff6cd89a5d1f6113aa0b35af4b34cf627da6707434d765e9e5b7d"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_output.ply",
+      "sha256": "cb18d2d3f21b9a43112c286f08243f7974088641547b00fde148d4df4e5a1a1a"
     },
     "mesh_vertices": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_vertices.samt",
-      "sha256": "75a929a2c0e121d3b4b1005cbc3678a360587b2b5b96520f082327db87937229"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_vertices.samt",
+      "sha256": "2fe3d81965330ce0108b671ea8b9e528d2c91948eb4e2a577ccc6ff1262bd1c7"
     },
     "mesh_faces": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_faces.samt",
-      "sha256": "856fd3865e391594b630d744350ae90b1b4d25f11bad5c4edcf3f334adda5f8f"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_faces.samt",
+      "sha256": "f71e618e0345179ebdc49b24a79241a45202f110c60822c5d1e0d656c7bb21d4"
     },
     "pose": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_pose.json",
-      "sha256": "9d7dac7819de7dde4af41dd76c702508df61663329c1fa92561c252f99cac396"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_pose.json",
+      "sha256": "abd4457560c81b05f4242b23ae34561b91ae030014c75bfbb99035b515af4f30"
     },
     "dtype_contract": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
-      "sha256": "0d3e206536345402c2826a8d31bba7d46d6a9c8a44f47b10328441a9a9108bf1"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
+      "sha256": "427ba6d999e34dd14605ba239f397827f851dc80ea4e76465bd5f276e0941bc4"
     },
     "glb": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb",
-      "sha256": "8aebd1a94fa54af65e3504f956a2ce20577267d39715c8f75a9fb029816d9122"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb",
+      "sha256": "7a3161aeab6c3e9b01f161ac767f5c1411e36e71232ec53de6c900b1c4fbfcd2"
     },
     "texture": {
-      "path": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/cuda_pbr.base_color.png",
-      "sha256": "07674f83e7dfe38030964c2d820c25bb2824fcb2fa05b802e55c0c4c76613ddb"
+      "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/cuda_pbr.base_color.png",
+      "sha256": "2c840dce56bce6ebe09bde6f166ba4fe03993fc3b6c94dbd676cdc1fa1db4042"
     }
   },
   "steps": [
     {
       "name": "vulkan_image_to_gaussian_and_raw_mesh",
-      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend vulkan --dtype f16 --seed 42 --threads 6 --ss-attention strict --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_output.ply --mesh-vertices-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_vertices.samt --mesh-faces-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_faces.samt --pose-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_pose.json --dtype-contract-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
+      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend vulkan --dtype f16 --seed 42 --threads 6 --ss-attention normal --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_output.ply --mesh-vertices-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_vertices.samt --mesh-faces-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_faces.samt --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
       "returncode": 0,
-      "elapsed_ms": 212660.17887101043,
+      "elapsed_ms": 180520.07443498587,
       "status": "PASS"
     },
     {
       "name": "cuda_pbr_assemble_from_vulkan_artifacts",
-      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli pbr-assemble --vertices /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_vertices.samt --faces /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_faces.samt --ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_output.ply --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb --views 100 --resolution 1024 --texture-size 1024 --steps 2500 --seed 42",
+      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli pbr-assemble --vertices /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_vertices.samt --faces /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_flexicubes_faces.samt --ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_output.ply --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb --views 100 --resolution 1024 --texture-size 1024 --steps 2500 --seed 42",
       "returncode": 0,
-      "elapsed_ms": 23384.386757039465,
+      "elapsed_ms": 34020.06257098401,
       "status": "PASS"
     }
   ]

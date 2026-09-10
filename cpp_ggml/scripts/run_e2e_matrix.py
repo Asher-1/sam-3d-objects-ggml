@@ -67,8 +67,8 @@ def ggml_variants() -> list[dict[str, str]]:
             {"id": f"{backend}-q8", "backend": backend, "dtype": "q8_0",
              "runner": f"GGML {backend.upper()} q8_0 native image input",
              "quantization_policy": "Q8_0 GGUF for every generative stage; fixed MoGe preprocessing model recorded separately"},
-            {"id": f"{backend}-q4", "backend": backend, "dtype": "q4_0",
-             "runner": f"GGML {backend.upper()} q4_0 native image input",
+            {"id": f"{backend}-q4", "backend": backend, "dtype": "q4_k",
+             "runner": f"GGML {backend.upper()} q4_k native image input",
              "quantization_policy": "Q4_0 GGUF for every generative stage; fixed MoGe preprocessing model recorded separately"},
         ))
     return variants

@@ -4,7 +4,57 @@
 
 #include "common.hpp"
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#define SAM3D_GGUF_MMAP 1
+#endif
+
 namespace sam3d {
+
+// Map the GGUF file read-only. The mapping gives every tensor upload a single
+// host->device copy from page-cache-backed memory (no intermediate fread
+// buffer) and lets repeated stage loads inside one batch process reuse the
+// OS cache instead of re-reading multi-gigabyte weight files.
+struct GGUFFileMapping {
+    const uint8_t* data = nullptr;
+    size_t size = 0;
+
+    bool open(const std::string& path) {
+#ifdef SAM3D_GGUF_MMAP
+        int fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0) return false;
+        struct stat st;
+        if (fstat(fd, &st) != 0) {
+            ::close(fd);
+            return false;
+        }
+        size = static_cast<size_t>(st.st_size);
+        void* mapped = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+        ::close(fd);
+        if (mapped == MAP_FAILED) {
+            size = 0;
+            return false;
+        }
+        data = static_cast<const uint8_t*>(mapped);
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    void close() {
+#ifdef SAM3D_GGUF_MMAP
+        if (data) munmap(const_cast<uint8_t*>(data), size);
+#endif
+        data = nullptr;
+        size = 0;
+    }
+
+    ~GGUFFileMapping() { close(); }
+};
 
 GGUFModel::~GGUFModel() {
     if (buf_) ggml_backend_buffer_free(buf_);
@@ -48,24 +98,42 @@ bool GGUFModel::load(const std::string& path, ggml_backend_buffer_type_t buft) {
     // gguf_get_tensor_offset is relative to the data section, which itself
     // starts at gguf_get_data_offset in the file.
     const size_t data_base = gguf_get_data_offset(gguf_);
-    FILE* f = fopen(path.c_str(), "rb");
-    if (!f) return false;
+    GGUFFileMapping mapping;
+    FILE* f = nullptr;
+    if (mapping.open(path)) {
+        LOGD("loaded %s via mmap", path.c_str());
+    } else {
+        f = fopen(path.c_str(), "rb");
+        if (!f) return false;
+    }
     std::vector<uint8_t> chunk;
     for (size_t i = 0; i < n_tensors; i++) {
         const char* name = gguf_get_tensor_name(gguf_, i);
         ggml_tensor* t = tensors_[name];
         const size_t offset = gguf_get_tensor_offset(gguf_, i);
         const size_t nbytes = ggml_nbytes(t);
-        chunk.resize(nbytes);
-        if (fseek(f, (long)(data_base + offset), SEEK_SET) != 0 ||
-            fread(chunk.data(), 1, nbytes, f) != nbytes) {
-            LOGE("failed to read tensor '%s' from %s", name, path.c_str());
-            fclose(f);
-            return false;
+        const void* src = nullptr;
+        if (mapping.data) {
+            if (data_base + offset + nbytes > mapping.size) {
+                LOGE("tensor '%s' exceeds the mapping of %s", name, path.c_str());
+                if (f) fclose(f);
+                return false;
+            }
+            src = mapping.data + data_base + offset;
+        } else {
+            chunk.resize(nbytes);
+            if (fseek(f, (long)(data_base + offset), SEEK_SET) != 0 ||
+                fread(chunk.data(), 1, nbytes, f) != nbytes) {
+                LOGE("failed to read tensor '%s' from %s", name, path.c_str());
+                fclose(f);
+                return false;
+            }
+            src = chunk.data();
         }
-        ggml_backend_tensor_set(t, chunk.data(), 0, nbytes);
+        ggml_backend_tensor_set(t, src, 0, nbytes);
     }
-    fclose(f);
+    if (f) fclose(f);
+    mapping.close();
     ggml_backend_buffer_set_usage(buf_, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
 
     LOGD("loaded %s: %zu tensors, %.1f MB", path.c_str(), n_tensors, total / 1.0e6);

@@ -26,6 +26,16 @@ DEFAULT_STAGES = (
 )
 
 
+def canonical_type_name(name: str) -> str:
+    """Map a recorded ggml type name onto the CLI/weights spelling.
+
+    ggml names Q4_K weights "q4_K" (ggml.c type_name), while model files and
+    every runner argument spell the variant "q4_k".  Comparison is therefore
+    case-insensitive; all other quantized names already agree in case.
+    """
+    return name.lower()
+
+
 def fail(message: str) -> None:
     raise SystemExit(f"dtype contract verification failed: {message}")
 
@@ -56,7 +66,7 @@ def main() -> int:
     if not isinstance(model_dtypes, dict):
         fail("model_dtypes must be an object")
     if args.expected_weight_type is not None:
-        declared_types = {str(value) for value in model_dtypes.values()}
+        declared_types = {canonical_type_name(str(value)) for value in model_dtypes.values()}
         if declared_types != {args.expected_weight_type}:
             fail("recorded model dtypes do not match the requested homogeneous run: " +
                  ", ".join(sorted(declared_types)))
@@ -91,7 +101,7 @@ def main() -> int:
         stages.add(stage)
         total_nodes += nodes
         if operation == "MUL_MAT":
-            observed_mul_mat_types.update(inputs)
+            observed_mul_mat_types.update(canonical_type_name(value) for value in inputs)
 
     required_stages = set(args.require_stage)
     if not args.no_default_stages:
@@ -102,7 +112,7 @@ def main() -> int:
     if not observed_mul_mat_types:
         fail("no observed MUL_MAT entries")
     if (args.expected_weight_type is not None and
-            args.expected_weight_type not in observed_mul_mat_types):
+            canonical_type_name(args.expected_weight_type) not in observed_mul_mat_types):
         fail("expected MUL_MAT source type " + args.expected_weight_type +
              ", observed " + ", ".join(sorted(observed_mul_mat_types)))
 

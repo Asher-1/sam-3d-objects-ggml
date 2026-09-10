@@ -20,25 +20,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from samt_io import read_samt
 
 
 MODALITIES = ["6drotation_normalized", "scale", "shape", "translation", "translation_scale"]
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (dimensions,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{dimensions}q", stream.read(8 * dimensions))
-        (kind,) = struct.unpack("<i", stream.read(4))
-        if kind != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {kind}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    expected = int(np.prod(shape))
-    if values.size != expected:
-        raise ValueError(f"{path}: expected {expected} values, got {values.size}")
-    return tuple(int(dimension) for dimension in shape), values
 
 
 def error(reference: tuple[tuple[int, ...], np.ndarray],
@@ -241,28 +228,23 @@ def main() -> int:
         debug_dir = temporary_dir / "debug"
         debug_dir.mkdir()
         env = os.environ.copy()
-        env.update({
-            "SAM3D_BACKEND": args.backend,
-            "SAM3D_E2E_DTYPE": args.dtype,
-            "SAM3D_E2E_STAGE": "ss",
-            "SAM3D_E2E_SS_FLOW_ONLY": "1",
-            # Keep the canonical 25-step Euler schedule but stop after the
-            # requested prefix. This makes a one-step deployment probe cheap
-            # without changing the timestep or delta of that first step.
-            "SAM3D_E2E_SS_STEPS": str(args.steps),
-            "SAM3D_E2E_SS_COND_PATH": str(cond_tokens.resolve()),
-        })
-        if args.ss_attention == "strict":
-            env["SAM3D_SS_STRICT_ATTN"] = "1"
-        else:
-            env.pop("SAM3D_SS_STRICT_ATTN", None)
         lib_dir = executable.parents[1] / "lib"
         if lib_dir.is_dir():
             env["LD_LIBRARY_PATH"] = str(lib_dir) + os.pathsep + env.get("LD_LIBRARY_PATH", "")
         command = [str(executable.resolve()), "e2e", "--model", str(args.models_dir.resolve()),
                    str(args.e2e_dir.resolve()), "--out", str(temporary_dir / "ss"),
                    "--noise-dir", str(args.e2e_dir.resolve()), "--dbg-dir", str(debug_dir),
-                   "--seed", str(args.seed), "--threads", str(args.threads)]
+                   "--seed", str(args.seed), "--threads", str(args.threads),
+                   "--backend", args.backend,
+                   "--dtype", args.dtype,
+                   "--stage", "ss", "--ss-flow-only",
+                   # Keep the canonical 25-step Euler schedule but stop after the
+                   # requested prefix. This makes a one-step deployment probe cheap
+                   # without changing the timestep or delta of that first step.
+                   "--ss-steps", str(args.steps),
+                   "--ss-cond-path", str(cond_tokens.resolve())]
+        if args.ss_attention != "strict":
+            command.append("--ss-fast-attention")
         print("+", " ".join(command), flush=True)
         subprocess.run(command, env=env, check=True)
         rows = compare(args.torch_dir, debug_dir, args.steps)

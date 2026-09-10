@@ -285,6 +285,19 @@ if [[ "$1" == "bootstrap" ]]; then
     if [[ -z "${SAM3D_PYTHON:-}" ]]; then
         bash "${SCRIPT_DIR}/setup_pt_ref_env.sh"
     fi
+    # Weights are large downloads: point at the exact next commands instead of
+    # failing deep inside a later e2e run.
+    models_dir="${CPP_ROOT}/models/gguf"
+    missing=""
+    for stage in ss_generator ss_decoder slat_generator slat_decoder_gs slat_decoder_mesh; do
+        [[ -s "${models_dir}/${stage}-f16.gguf" ]] || missing="${missing} ${stage}-f16.gguf"
+    done
+    [[ -s "${models_dir}/moge_vitl-f16.gguf" ]] || missing="${missing} moge_vitl-f16.gguf"
+    if [[ -n "$missing" ]]; then
+        echo "NOTE: model weights not found:${missing}"
+        echo "  bash cpp_ggml/scripts/download_gguf.sh --dtype f16   # generative GGUF weights"
+        echo "  bash cpp_ggml/scripts/prepare_moge_gguf.sh --dtype f16  # MoGe GGUF"
+    fi
     echo "bootstrap complete"
     exit 0
 fi

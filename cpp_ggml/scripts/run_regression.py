@@ -20,24 +20,11 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt
 
 from gpu_exclusivity import require_exclusive_gpu
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as f:
-        if f.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (nd,) = struct.unpack("<i", f.read(4))
-        ne = struct.unpack(f"<{nd}q", f.read(8 * nd))
-        (kind,) = struct.unpack("<i", f.read(4))
-        if kind != 0:
-            raise ValueError(f"{path}: reference must be F32 (type={kind})")
-        values = np.frombuffer(f.read(), dtype="<f4").copy()
-    expected = int(np.prod(ne))
-    if values.size != expected:
-        raise ValueError(f"{path}: expected {expected} values, got {values.size}")
-    return ne, values
 
 
 def is_ss_latent_shape(shape: tuple[int, ...]) -> bool:

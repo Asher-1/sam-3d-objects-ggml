@@ -1,8 +1,0 @@
-{
-  "effective_metallic_factor": 1.0,
-  "native_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.glb",
-  "official_material_contract": "PASS",
-  "structural_contract": "PASS",
-  "triangle_count": 26010,
-  "vertex_count": 17074
-}

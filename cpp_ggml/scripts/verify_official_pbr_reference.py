@@ -12,17 +12,9 @@ import struct
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt_shape
 
 
-def read_samt_shape(path: Path) -> tuple[int, ...]:
-    with path.open("rb") as handle:
-        if handle.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        ndim = struct.unpack("<i", handle.read(4))[0]
-        if ndim <= 0 or ndim > 8:
-            raise ValueError(f"{path}: invalid SAMT dimension count {ndim}")
-        shape = struct.unpack(f"<{ndim}q", handle.read(ndim * 8))
-    return tuple(reversed(shape))
 
 
 def require_file(root: Path, name: str) -> Path:

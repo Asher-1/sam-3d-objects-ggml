@@ -16,6 +16,7 @@
 #include "ss_decoder_graph.hpp"
 #include "slat_flow_graph.hpp"
 #include "sparse_ops.hpp"
+#include "e2e_options.hpp"
 #include "gs_decoder_graph.hpp"
 #include "mesh_decoder_runner.hpp"
 #include "flexicubes.hpp"
@@ -29,6 +30,7 @@
 #include "pytorch_cuda_rng.hpp"
 #endif
 #include "graph_builder.hpp"
+#include <fstream>
 #include "gguf_loader.hpp"
 #include "backend.hpp"
 #include "common.hpp"
@@ -88,18 +90,32 @@ std::vector<float> as_chw(const RawTensor& t) {
 }
 
 struct Stage {
-    std::unique_ptr<Backend> backend;
+    std::unique_ptr<Backend> owned_backend;
+    // Points at owned_backend, or at a caller-owned shared backend when the
+    // session reuses one backend across requests. Never null while open.
+    Backend* backend = nullptr;
     std::unique_ptr<GGUFModel> model;
 
     bool open(const std::string& gguf, const char* be_name, int nthreads,
-              const char* profile_label = nullptr) {
-        backend = Backend::create(be_name, nthreads);
+              const char* profile_label = nullptr, Backend* shared_backend = nullptr) {
+        if (shared_backend) {
+            backend = shared_backend;
+        } else {
+            owned_backend = Backend::create(be_name, nthreads);
+            backend = owned_backend.get();
+        }
         if (!backend) return false;
         backend->set_profile_label(profile_label ? profile_label : "unlabeled");
         model = std::make_unique<GGUFModel>();
         return model->load(gguf, backend->weights_buffer_type());
     }
-    void close() { model.reset(); backend.reset(); }   // frees GPU memory
+    void close() {
+        // Frees the GPU weights regardless of ownership; the shared backend
+        // itself stays alive for the next stage/request.
+        model.reset();
+        owned_backend.reset();
+        backend = nullptr;
+    }
 };
 
 struct EulerStep {
@@ -300,18 +316,38 @@ namespace {
 // batched DINO forwards: ONE graph per call, several (prefix, image) pairs
 // sharing the same weights model - avoids the multi-alloc CUDA graph-capture
 // trouble of running many small graphs on one backend.
+struct DinoDbg {
+    bool enabled = false;
+    std::string debug_stage;
+    std::string out_path;
+};
+
 std::vector<std::vector<float>> run_dino_batch(
         Stage& st, const std::vector<std::pair<std::string, const RawImg*>>& jobs,
-        bool prenorm, int64_t& out_n) {
+        bool prenorm, int64_t& out_n, const DinoDbg* dbg = nullptr,
+        bool manual_attention = false) {
     GraphContext gctx;
     struct Job { DinoGraph dg; ggml_tensor* in; ggml_tensor* out; };
+    // dbg: build/run only the first DINO job and write its debug_stage
+    // boundary tensor to out_path for parity bisects (mixed-size debug
+    // graphs cannot share one batched allocation).
+    const bool dino_dbg = dbg && dbg->enabled;
+    const char* dino_dbg_out = dbg ? dbg->out_path.c_str() : nullptr;
     std::vector<Job> js;
     for (auto& [prefix, img] : jobs) {
+        if (dino_dbg && !js.empty()) break;
         js.emplace_back();
         js.back().dg.g = &gctx;
         js.back().dg.m = st.model.get();
         js.back().dg.prefix = prefix;
         js.back().dg.prenorm = prenorm;
+        // The condition DINO contract is the explicit F32 attention form; the
+        // flash path (F16 K/V) measurably perturbs the outlier channels and
+        // collapses the SS occupancy decision downstream.
+        js.back().dg.manual_attention = manual_attention;
+        // optional per-boundary parity dumps, same contract as the other
+        // condition-chain graphs
+        if (dbg && !dbg->debug_stage.empty()) js.back().dg.debug_stage = dbg->debug_stage;
         js.back().in = gctx.input_f32("image", {img->c, img->w, img->h});
         js.back().dg.inputs.push_back(js.back().in);
         js.back().dg.table_data.push_back(nullptr);
@@ -342,6 +378,15 @@ std::vector<std::vector<float>> run_dino_batch(
     std::vector<std::vector<float>> outs(js.size());
     for (size_t k = 0; k < js.size(); k++) st.backend->get_tensor_f32(js[k].out, outs[k]);
     out_n = js[0].out->ne[1];
+    if (dino_dbg && dino_dbg_out) {
+        const auto& t = js[0].out;
+        std::ofstream df(dino_dbg_out, std::ios::binary);
+        df.write(reinterpret_cast<const char*>(outs[0].data()),
+                 std::streamsize(outs[0].size() * sizeof(float)));
+        df.close();
+        LOGI("dino dbg: wrote %s raw f32 (ne %lldx%lld, %zu floats)", dino_dbg_out,
+             (long long)t->ne[0], (long long)t->ne[1], outs[0].size());
+    }
     return outs;
 }
 
@@ -528,33 +573,6 @@ bool load_f32_vector(const std::string& path, size_t expected_elements,
     return true;
 }
 
-// The condition encoders are the numerical-sensitive boundary between the
-// image and the diffusion stages.  Keep their attention in the explicit F32
-// formulation while leaving the long SS/SLat flow on the flash path.  An
-// existing SAM3D_MANUAL_ATTN setting still wins and enables the diagnostic
-// formulation for every attention graph.
-class ScopedConditionAttention {
-public:
-    ScopedConditionAttention() {
-        const char* requested = getenv("SAM3D_COND_STRICT_ATTN");
-        const char* existing = getenv("SAM3D_MANUAL_ATTN");
-        if (requested && !existing) {
-            setenv("SAM3D_MANUAL_ATTN", "1", 1);
-            changed_ = true;
-        }
-    }
-
-    ~ScopedConditionAttention() {
-        if (changed_) unsetenv("SAM3D_MANUAL_ATTN");
-    }
-
-    ScopedConditionAttention(const ScopedConditionAttention&) = delete;
-    ScopedConditionAttention& operator=(const ScopedConditionAttention&) = delete;
-
-private:
-    bool changed_ = false;
-};
-
 // Replaying an official SLat noise tensor by position, rather than by its
 // compact token index, makes an SS-boundary change reproducible. Most target
 // cells retain the exact official initial state; cells introduced by the
@@ -693,33 +711,39 @@ bool write_gaussian_ply(const std::string& path, int64_t n_gs,
 // e2e command
 // ---------------------------------------------------------------------------
 
-int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
-            const std::string& noise_dir, const std::string& out_ply,
-            const std::string& dbg_dir, const std::string& out_pbr,
-            const std::string& out_mesh_vertices, const std::string& out_mesh_faces,
-            const std::string& out_pose, const std::string& out_dtype_contract,
-            unsigned seed, int nthreads) {
-    const char* be = getenv("SAM3D_BACKEND");
-    const char* be_name = be ? be : "auto";
-    const char* dtx = getenv("SAM3D_E2E_DTYPE");
-    const std::string dt = dtx ? dtx : "f32";
-    const char* ss_dtx = getenv("SAM3D_E2E_SS_DTYPE");
-    const std::string ss_dt = ss_dtx ? ss_dtx : dt;
+// Every e2e knob is an explicit field: the CLI fills this struct from argv
+// flags, and the pipeline reads no process environment at all. This keeps
+// the stage contracts discoverable, unit-testable and free of the leaked-
+// environment failure mode.
+
+
+int cmd_e2e(const E2eOptions& opt) {
+    const std::string& models_dir = opt.models_dir;
+    const std::string& cond_dir = opt.cond_dir;
+    const std::string& noise_dir = opt.noise_dir;
+    const std::string& dbg_dir = opt.dbg_dir;
+    const std::string& out_ply = opt.out_ply;
+    const std::string& out_pbr = opt.out_pbr;
+    const std::string& out_mesh_vertices = opt.out_mesh_vertices;
+    const std::string& out_mesh_faces = opt.out_mesh_faces;
+    const std::string& out_pose = opt.out_pose;
+    const std::string& out_dtype_contract = opt.out_dtype_contract;
+    const char* be_name = opt.backend.c_str();
+    const std::string dt = opt.dtype;
+    const std::string ss_dt = opt.ss_dtype.empty() ? dt : opt.ss_dtype;
     // The occupancy decoder determines the sparse support consumed by every
     // later stage. Keep it independently selectable so Q4 flow experiments
     // can retain this small, threshold-sensitive model without promoting the
     // multi-gigabyte SS transformer.
-    const char* ss_decoder_dtx = getenv("SAM3D_E2E_SS_DECODER_DTYPE");
-    const std::string ss_decoder_dt = ss_decoder_dtx ? ss_decoder_dtx : ss_dt;
+    const std::string ss_decoder_dt = opt.ss_decoder_dtype.empty() ? ss_dt : opt.ss_decoder_dtype;
     // Keep the structured-latent generator independently selectable for
     // quantization localization. The default preserves the homogeneous E2E
-    // model family selected by SAM3D_E2E_DTYPE.
-    const char* slat_dtx = getenv("SAM3D_E2E_SLAT_DTYPE");
-    const std::string slat_dt = slat_dtx ? slat_dtx : dt;
-    const char* gs_dtx = getenv("SAM3D_E2E_GS_DTYPE");
-    const std::string gs_dt = gs_dtx ? gs_dtx : dt;
-    const char* mesh_dtx = getenv("SAM3D_E2E_MESH_DTYPE");
-    const std::string mesh_dt = mesh_dtx ? mesh_dtx : dt;
+    // model family selected by `dtype`.
+    const std::string slat_dt = opt.slat_dtype.empty() ? dt : opt.slat_dtype;
+    const std::string gs_dt = opt.gs_dtype.empty() ? dt : opt.gs_dtype;
+    const std::string mesh_dt = opt.mesh_dtype.empty() ? dt : opt.mesh_dtype;
+    const unsigned seed = opt.seed;
+    const int nthreads = opt.threads;
     const auto valid_dtype = [](const std::string& dtype) {
         return dtype == "f32" || dtype == "f16" || dtype == "q4_0" ||
                dtype == "q4_1" || dtype == "q4_k" || dtype == "q8_0";
@@ -777,18 +801,17 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     //   slat: SLat flow/Gaussian decoder -> PLY
     // This prevents a prior model's CUDA allocator pool from consuming the
     // memory required by the next model's graph. "flow" remains compatible.
-    const char* stage_env = getenv("SAM3D_E2E_STAGE");
-    const bool cond_stage = stage_env && std::string(stage_env) == "cond";
-    const bool ss_stage = stage_env && std::string(stage_env) == "ss";
-    const bool slat_stage = stage_env && std::string(stage_env) == "slat";
-    const bool flow_stage_env = stage_env && std::string(stage_env) == "flow";
+    const bool cond_stage = opt.stage == "cond";
+    const bool ss_stage = opt.stage == "ss";
+    const bool slat_stage = opt.stage == "slat";
+    const bool flow_stage_env = opt.stage == "flow";
 
     // ---------------- stage A: sparse structure --------------------------
     // The SLat process receives coordinates and does not need SS weights.
     Stage ss;
     if (!flow_stage_env && !slat_stage) {
         if (!ss.open(models_dir + "/ss_generator-" + ss_dt + ".gguf", be_name, nthreads,
-                     "condition_ss_generator")) {
+                     "condition_ss_generator", static_cast<Backend*>(opt.shared_backend))) {
             LOGE("e2e: failed to load ss_generator"); return 1;
         }
         LOGI("e2e: ss_generator loaded (%s)", ss_dt.c_str());
@@ -796,29 +819,24 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
 
     // SKIP_COND=1: no embedder graphs at all (cond from SAMT)
     // SKIP_COND=2: only the fuser graph (dino/pp tokens from the dbg dumps)
-    if (flow_stage_env || ss_stage || slat_stage) {
-        // Isolated flow stages consume tokens written by the cond process.
-        setenv("SAM3D_E2E_SKIP_COND", "1", 1);
-    }
-    const int skip_cond = getenv("SAM3D_E2E_SKIP_COND")
-                              ? atoi(getenv("SAM3D_E2E_SKIP_COND")) : 0;
+    // Isolated flow stages consume tokens written by the cond process.
+    const int skip_cond = (flow_stage_env || ss_stage || slat_stage)
+        ? 1 : (opt.fuser_only ? 2 : 0);
     CondInputs ci;
     std::vector<float> ss_cond;
     std::vector<float> slat_cond;
     if (skip_cond >= 1) {
         if (!slat_stage) {
-            const char* ss_cond_path_env = getenv("SAM3D_E2E_SS_COND_PATH");
-            const std::string ss_cond_path = ss_cond_path_env
-                ? ss_cond_path_env : cond_dir + "/ss_cond_tokens.samt";
+            const std::string ss_cond_path = opt.ss_cond_path.empty()
+                ? cond_dir + "/ss_cond_tokens.samt" : opt.ss_cond_path;
             RawTensor ct;
             if (!load_raw_tensor(ss_cond_path, ct) || ct.type != GGML_TYPE_F32) return 1;
             ss_cond.assign(reinterpret_cast<const float*>(ct.data.data()),
                            reinterpret_cast<const float*>(ct.data.data()) + ct.data.size() / 4);
         }
         if (flow_stage_env || slat_stage) {
-            const char* slat_cond_path_env = getenv("SAM3D_E2E_SLAT_COND_PATH");
-            const std::string slat_cond_path = slat_cond_path_env
-                ? slat_cond_path_env : cond_dir + "/slat_cond_tokens.samt";
+            const std::string slat_cond_path = opt.slat_cond_path.empty()
+                ? cond_dir + "/slat_cond_tokens.samt" : opt.slat_cond_path;
             RawTensor st3;
             if (!load_raw_tensor(slat_cond_path, st3) || st3.type != GGML_TYPE_F32) return 1;
             slat_cond.assign(reinterpret_cast<const float*>(st3.data.data()),
@@ -832,11 +850,14 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     LOGI("e2e: condition inputs %lldx%lld", (long long)ci.W, (long long)ci.H);
 
     if (cond_stage) {
-        ScopedConditionAttention condition_attention;
         int64_t nd = 0;
+        DinoDbg dino_dbg_cfg;
+        dino_dbg_cfg.enabled = opt.dino_dbg;
+        dino_dbg_cfg.debug_stage = opt.debug_stage;
+        dino_dbg_cfg.out_path = opt.dino_dbg_out;
         auto d4 = run_dino_batch(ss, {{"cemb.emb0", &ci.image}, {"cemb.emb0", &ci.rgb_image},
                                       {"cemb.emb1", &ci.mask3}, {"cemb.emb1", &ci.rgb_image_mask3}},
-                                 false, nd);
+                                 false, nd, &dino_dbg_cfg, opt.cond_manual_attention);
         if (d4.empty() || d4[0].empty()) { LOGE("e2e-cond: dino failed"); return 1; }
         auto p2 = run_pointpatch_batch(ss, "cemb.emb2", {{&ci.pointmap, {ci.W, ci.H}},
                                                          {&ci.rgb_pointmap, {ci.W, ci.H}}});
@@ -865,11 +886,11 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
 
         Stage slat_emb;
         if (!slat_emb.open(models_dir + "/slat_generator-" + slat_dt + ".gguf", be_name,
-                           nthreads, "condition_slat_generator"))
+                           nthreads, "condition_slat_generator", static_cast<Backend*>(opt.shared_backend)))
             return 1;
         auto sd = run_dino_batch(slat_emb, {{"cemb.emb0", &ci.image}, {"cemb.emb0", &ci.rgb_image},
                                             {"cemb.emb1", &ci.mask3}, {"cemb.emb1", &ci.rgb_image_mask3}},
-                                 true, nd);
+                                 true, nd, nullptr, opt.cond_manual_attention);
         if (sd.empty() || sd[0].empty()) { LOGE("e2e-cond: slat dino failed"); return 1; }
         std::vector<float> slat_out;
         {
@@ -899,12 +920,15 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
 
 
     if (!skip_cond) {
-    ScopedConditionAttention condition_attention;
     // 4 DINO forwards: emb0(image), emb0(rgb_image), emb1(mask), emb1(rgb_mask)
     int64_t n_dino = 0;
+    DinoDbg dino_dbg_cfg;
+    dino_dbg_cfg.enabled = opt.dino_dbg;
+    dino_dbg_cfg.debug_stage = opt.debug_stage;
+    dino_dbg_cfg.out_path = opt.dino_dbg_out;
     auto d = run_dino_batch(ss, {{"cemb.emb0", &ci.image}, {"cemb.emb0", &ci.rgb_image},
                                  {"cemb.emb1", &ci.mask3}, {"cemb.emb1", &ci.rgb_image_mask3}},
-                            false, n_dino);
+                            false, n_dino, nullptr, opt.cond_manual_attention);
     if (d.empty() || d[0].empty()) { LOGE("e2e: dino forward failed"); return 1; }
     std::vector<float> d_img = std::move(d[0]), d_rgb = std::move(d[1]);
     std::vector<float> d_mask = std::move(d[2]), d_rgbm = std::move(d[3]);
@@ -959,7 +983,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     // A strict replay consumes immutable official support. The dedicated SLat
     // stage likewise starts from coordinates produced by the dedicated SS
     // process, so neither path allocates SS model state in this process.
-    const bool strict_reference_coords = getenv("SAM3D_E2E_REFERENCE_COORDS") != nullptr;
+    const bool strict_reference_coords = opt.reference_coords;
     std::vector<int32_t> coords;  // (N,4) [b, x, y, z], z fastest
     uint32_t distribution_blocks = 0;
 #if defined(SAM3D_USE_CUDA)
@@ -981,7 +1005,9 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
 #else
     const bool uses_cuda_rng = pytorch_cuda_rng != nullptr;
 #endif
-    if (!uses_cuda_rng) {
+    if (opt.philox_blocks > 0) {
+        distribution_blocks = opt.philox_blocks;
+    } else if (!uses_cuda_rng) {
         std::string rng_contract_error;
         if (!pytorch_philox_distribution_blocks_from_environment(distribution_blocks,
                                                                  rng_contract_error)) {
@@ -1047,14 +1073,20 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
 
     Stage ssf;
     if (!ssf.open(models_dir + "/ss_generator-" + ss_dt + ".gguf", be_name, nthreads,
-                  "ss_flow")) {
+                  "ss_flow", static_cast<Backend*>(opt.shared_backend))) {
         LOGE("e2e: failed to reload ss_generator for the flow stage"); return 1;
     }
     GraphContext fg;
     SsFlowGraph sfg;
     sfg.g = &fg; sfg.m = ssf.model.get();
     sfg.n_cond_tokens = 7528;
-    sfg.strict_attention = getenv("SAM3D_SS_STRICT_ATTN") != nullptr;
+    // The official SS backbone is an F32 model (use_fp16=false): its
+    // attention contract is F32 SDPA, so K/V stay in F32 by default.
+    sfg.strict_attention = opt.ss_strict_attention;
+    // Mirror torch.autocast(float16) on CUDA only: its F32 GEMM lowers to a
+    // slow non-TF32 cuBLAS path, while Vulkan's F32 coopmat loses more to
+    // the extra casts than the F16 tiles gain (measured 44.5 vs 42.3 min).
+    sfg.f16_autocast = std::strcmp(be_name, "cuda") == 0;
     auto outs = sfg.build();   // dict order: 6drot, scale, shape, translation, ts
     ggml_cgraph* fgraph = ggml_new_graph_custom(fg.ctx(), 32768, false);
     for (auto* o : outs) { ggml_set_output(o); ggml_build_forward_expand(fgraph, o); }
@@ -1068,8 +1100,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     // input, so the path remains opt-in until buffer lifetime is proven.
     const bool cache_vulkan_ss_tables =
         strstr(ssf.backend->backend_name(), "Vulkan") != nullptr &&
-        getenv("SAM3D_E2E_ENABLE_VULKAN_SS_TABLE_CACHE") != nullptr &&
-        getenv("SAM3D_E2E_DISABLE_VULKAN_TABLE_CACHE") == nullptr;
+        opt.vulkan_ss_table_cache && !opt.vulkan_table_cache;
     auto up_scalar = [&](ggml_tensor* t, float v) {
         return !t->buffer || ssf.backend->set_input_f32(t, &v, 1);
     };
@@ -1104,7 +1135,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
         if (!up_scalar(sfg.d, 0.0f)) return false;
         if (!up(sfg.cond, zero_cond ? zeros_cond : ss_cond)) return false;
         if (!cache_vulkan_ss_tables && !upload_ss_tables()) return false;
-        if (getenv("SAM3D_E2E_VERIFY")) {
+        if (opt.verify) {
             float rb_t = -9;
             std::vector<float> rb_t1(1), rb_c(4), rb_x(4);
             ssf.backend->get_tensor_f32(sfg.t, rb_t1);
@@ -1122,13 +1153,10 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
         for (size_t i = 0; i < outs.size(); i++) ssf.backend->get_tensor_f32(outs[i], v[i]);
     };
 
-    int ss_steps = kSsSteps;
-    if (const char* steps_env = getenv("SAM3D_E2E_SS_STEPS")) {
-        ss_steps = atoi(steps_env);
-        if (ss_steps < 1 || ss_steps > kSsSteps) {
-            LOGE("e2e: SAM3D_E2E_SS_STEPS must be in [1, %d], got %s", kSsSteps, steps_env);
-            return 1;
-        }
+    int ss_steps = opt.ss_steps;
+    if (ss_steps < 1 || ss_steps > kSsSteps) {
+        LOGE("e2e: --ss-steps must be in [1, %d], got %d", kSsSteps, ss_steps);
+        return 1;
     }
     const auto ss_schedule = make_euler_schedule(kSsSteps, kSsRescaleT);
     for (int step = 0; step < ss_steps; ++step) {
@@ -1146,16 +1174,12 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
             for (size_t oi = 0; oi < outs.size(); oi++) {
                 save_raw_tensor_f32(dbg_dir + "/e2e_ss_vc" + std::to_string(step) + "_" +
                                         std::to_string(oi) + ".samt",
-                                    ggml_n_dims(outs[oi]) == 2
-                                        ? std::vector<int64_t>{outs[oi]->ne[0], outs[oi]->ne[1]}
-                                        : std::vector<int64_t>{outs[oi]->ne[0]},
+                                    std::vector<int64_t>{outs[oi]->ne[0], outs[oi]->ne[1]},
                                     vc[oi].data());
                 if (cfg_active) {
                     save_raw_tensor_f32(dbg_dir + "/e2e_ss_vu" + std::to_string(step) + "_" +
                                             std::to_string(oi) + ".samt",
-                                        ggml_n_dims(outs[oi]) == 2
-                                            ? std::vector<int64_t>{outs[oi]->ne[0], outs[oi]->ne[1]}
-                                            : std::vector<int64_t>{outs[oi]->ne[0]},
+                                        std::vector<int64_t>{outs[oi]->ne[0], outs[oi]->ne[1]},
                                         vu[oi].data());
                 }
             }
@@ -1183,7 +1207,9 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
             const char* x_names[] = {"6drotation_normalized", "scale", "shape",
                                      "translation", "translation_scale"};
             const std::vector<float>* states[] = {&x_6d, &x_sc, &x_shape, &x_tr, &x_ts};
-            const std::vector<int64_t> x_ne[] = {{6}, {3}, {8, n_shape}, {3}, {1}};
+            // 2-D records match the reference SAMT files (the pose states are
+            // single-column tensors, and a 1-D record broke shape equality).
+            const std::vector<int64_t> x_ne[] = {{6, 1}, {3, 1}, {8, n_shape}, {3, 1}, {1, 1}};
             for (size_t i = 0; i < 5; i++) {
                 save_raw_tensor_f32(dbg_dir + "/e2e_ss_state" + std::to_string(step + 1) + "_" +
                                         x_names[i] + ".samt", x_ne[i], states[i]->data());
@@ -1191,10 +1217,11 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
         }
         LOGI("e2e: ss step %d/%d done", step + 1, ss_steps);
     }
+    LOGI("e2e: ss flow done in %.1fs", elapsed_seconds());
     ssf.close();
     if (!dbg_dir.empty())
         save_raw_tensor_f32(dbg_dir + "/e2e_ss_shape_latent.samt", {8, n_shape}, x_shape.data());
-    if (ss_stage && getenv("SAM3D_E2E_SS_FLOW_ONLY")) {
+    if (ss_stage && opt.ss_flow_only) {
         LOGI("e2e: SS flow-only diagnostic done in %.1fs",
              elapsed_seconds());
         return 0;
@@ -1205,7 +1232,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
         // the SS decoder lives in its own GGUF (ss_decoder-*.gguf)
         Stage dec;
         if (!dec.open(models_dir + "/ss_decoder-" + ss_decoder_dt + ".gguf", be_name, nthreads,
-                      "ss_decoder")) {
+                      "ss_decoder", static_cast<Backend*>(opt.shared_backend))) {
             LOGE("e2e: failed to load ss_decoder"); return 1;
         }
         GraphContext gctx;
@@ -1228,12 +1255,28 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
         std::vector<float> occ_f;
         dec.backend->get_tensor_f32(occ, occ_f);
         dec.close();
+        LOGI("e2e: ss decoder done in %.1fs", elapsed_seconds());
         // torch (1,1,64,64,64) C-order: flat = (x*64 + y)*64 + z
         for (int x = 0; x < 64; x++)
             for (int y = 0; y < 64; y++)
                 for (int z = 0; z < 64; z++)
                     if (occ_f[((x * 64) + y) * 64 + z] > 0.0f)
                         coords.insert(coords.end(), {0, x, y, z});
+    }
+    // Pre-compute the effective downsample factor before the pose decode: the
+    // official pipeline rescales the decoded instance scale by
+    // downsample_factor whenever the pruned sparse support exceeds max_coords
+    // (inference_pipeline.py "Rescaling scale by <factor> after downsampling").
+    // prune_surface_coords is deterministic, so re-running it here on the same
+    // pre-prune coords yields the same decision the SLat-stage branch below
+    // will make; the factor must be known here because the pose decode runs
+    // before that branch in this function.
+    int effective_pose_downsample_factor = 1;
+    if (!(slat_stage && !strict_reference_coords)) {
+        const std::vector<int32_t> pruned = prune_surface_coords(coords);
+        if (static_cast<int64_t>(pruned.size() / 4) > 42000) {
+            effective_pose_downsample_factor = 2;
+        }
     }
     if (!out_pose.empty()) {
         std::array<float, 3> pointmap_scale{};
@@ -1246,7 +1289,8 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
         std::string pose_error;
         if (!decode_scale_shift_invariant_pose(x_6d.data(), x_sc.data(), x_tr.data(), x_ts[0],
                                                pointmap_scale.data(), pointmap_shift.data(), pose,
-                                               pose_error) ||
+                                               pose_error,
+                                               effective_pose_downsample_factor) ||
             !write_native_pose_json(out_pose, pose, pose_error)) {
             LOGE("e2e: native pose decode/export failed: %s", pose_error.c_str());
             return 1;
@@ -1259,7 +1303,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
 
     int64_t n_coord = 0;
     if (slat_stage && !strict_reference_coords) {
-        const char* coords_path_env = getenv("SAM3D_E2E_COORDS_PATH");
+        const char* coords_path_env = opt.coords_path.c_str();
         if (!coords_path_env) {
             LOGE("e2e: SAM3D_E2E_COORDS_PATH is required for the slat stage");
             return 1;
@@ -1333,7 +1377,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     if (!skip_cond) {
     Stage slat_emb;
     if (!slat_emb.open(models_dir + "/slat_generator-" + slat_dt + ".gguf", be_name, nthreads,
-                       "slat_condition_generator")) {
+                       "slat_condition_generator", static_cast<Backend*>(opt.shared_backend))) {
         LOGE("e2e: failed to load slat_generator"); return 1;
     }
     LOGI("e2e: slat_generator loaded (%s)", slat_dt.c_str());
@@ -1343,7 +1387,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     int64_t n_sdino = 0;
     auto sd = run_dino_batch(slat_emb, {{"cemb.emb0", &ci.image}, {"cemb.emb0", &ci.rgb_image},
                                     {"cemb.emb1", &ci.mask3}, {"cemb.emb1", &ci.rgb_image_mask3}},
-                             true, n_sdino);
+                             true, n_sdino, nullptr, opt.cond_manual_attention);
     if (sd.empty() || sd[0].empty()) { LOGE("e2e: slat dino failed"); return 1; }
     std::vector<float> s_dimg = std::move(sd[0]), s_drgb = std::move(sd[1]);
     std::vector<float> s_dmask = std::move(sd[2]), s_drgbm = std::move(sd[3]);
@@ -1375,11 +1419,12 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     // fresh stage for the slat flow loop (CLI-verified single-graph gallocr)
     Stage slat;
     if (!slat.open(models_dir + "/slat_generator-" + slat_dt + ".gguf", be_name, nthreads,
-                   "slat_flow")) {
+                   "slat_flow", static_cast<Backend*>(opt.shared_backend))) {
         LOGE("e2e: failed to reload slat_generator"); return 1;
     }
     const int64_t n_slat_cond = (int64_t)slat_cond.size() / 1024;
-    LOGI("e2e: slat condition tokens %lld", (long long)n_slat_cond);
+    LOGI("e2e: slat condition tokens %lld (%.1fs)", (long long)n_slat_cond,
+         elapsed_seconds());
     if (!dbg_dir.empty())
         save_raw_tensor_f32(dbg_dir + "/e2e_slat_cond_tokens.samt", {1024, n_slat_cond},
                             slat_cond.data());
@@ -1389,10 +1434,17 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     if (!tb.build(coords.data(), n_coord)) { LOGE("e2e: slat tables failed"); return 1; }
     LOGI("e2e: sparse tables nf=%lld nc=%lld", (long long)tb.nf, (long long)tb.nc);
 
-    // ---- SLat sampling: 25 Euler steps with the pipeline CFG schedule ----
+    // ---- SLat sampling: Euler steps with the pipeline CFG schedule ----
     // pipeline.yaml overrides the SLat configuration to strength=1 and
     // rescale_t=1; override_slat_generator_cfg_config supplies [0, 500].
-    constexpr int kSlatSteps = 25;
+    // The deployment pipeline distills the trajectory to 12 steps while the
+    // repository trajectory gate fixes 25; the count is opt-driven.
+    constexpr int kSlatGateSteps = 25;
+    if (opt.slat_steps < 1 || opt.slat_steps > kSlatGateSteps) {
+        LOGE("e2e: slat steps must be in [1, %d], got %d", kSlatGateSteps, opt.slat_steps);
+        return 1;
+    }
+    const int kSlatSteps = opt.slat_steps;
     constexpr float kSlatRescaleT = 1.0f;
     constexpr float kSlatCfgStrength = 1.0f;
     constexpr float kSlatCfgStart = 0.0f;
@@ -1411,9 +1463,10 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     SlatFlowGraph slg;
     slg.g = &sg; slg.m = slat.model.get(); slg.tb = &tb;
     slg.n_cond_tokens = n_slat_cond;
+    slg.use_cuda_spconv = std::strcmp(be_name, "cuda") == 0;
     const bool split_slat_final = ggml_is_quantized(slat.model->get("dit.out_layer.weight")->type) &&
         slat.backend->has_gpu() &&
-        getenv("SAM3D_DEBUG_STAGE") == nullptr;
+        opt.debug_stage.empty();
     // Quantized final projections need a split graph to avoid changing the
     // trunk's allocation layout.  Keep an independent allocator for that
     // small final graph so both graphs stay allocated across all Euler/CFG
@@ -1429,7 +1482,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     }
     if (split_slat_final) {
         slg.debug_stage = "pre_final";
-    } else if (const char* debug_stage = getenv("SAM3D_DEBUG_STAGE")) {
+    } else if (const char* debug_stage = opt.debug_stage.c_str()) {
         slg.debug_stage = debug_stage;
     }
     auto s_outs = slg.build();
@@ -1473,14 +1526,14 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     {
         const auto slat_schedule = make_euler_schedule(kSlatSteps, kSlatRescaleT);
         const std::vector<float> zeros_slat_cond(slat_cond.size(), 0.0f);
-        const bool dump_slat_steps = getenv("SAM3D_E2E_DUMP_SLAT_STEPS") != nullptr;
+        const bool dump_slat_steps = opt.dump_slat_steps;
         // Reusing these input buffers across SLat graphs is not yet safe on
         // Vulkan: the cached path changes the final rendered entity. Keep the
         // verified per-forward upload as the default until ownership across
         // graph submissions is made explicit and regression-tested.
         const bool cache_vulkan_tables =
             strstr(slat.backend->backend_name(), "Vulkan") != nullptr &&
-            getenv("SAM3D_E2E_ENABLE_VULKAN_TABLE_CACHE") != nullptr;
+            opt.vulkan_table_cache;
         auto upload_slat_tables = [&]() {
             for (size_t ti = 0; ti < slg.inputs.size(); ti++) {
                 ggml_tensor* input = slg.inputs[ti];
@@ -1502,22 +1555,28 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
             save_raw_tensor_f32(dbg_dir + "/slat_ggml_x000.samt", {8, tb.nf}, x_slat.data());
         }
         size_t debug_slat_forwards = 0;
-        if (const char* debug_forwards_env = getenv("SAM3D_E2E_DEBUG_SLAT_FORWARDS")) {
-            char* end = nullptr;
-            const unsigned long parsed = strtoul(debug_forwards_env, &end, 10);
-            if (end == debug_forwards_env || *end != '\0' || parsed == 0) {
-                LOGE("e2e: SAM3D_E2E_DEBUG_SLAT_FORWARDS must be a positive integer");
-                return 1;
-            }
-            debug_slat_forwards = static_cast<size_t>(parsed);
-        } else if (getenv("SAM3D_E2E_DEBUG_ONCE")) {
+        if (opt.debug_slat_forwards < 0) {
+            LOGE("e2e: --debug-slat-forwards must be a positive integer");
+            return 1;
+        }
+        if (opt.debug_slat_forwards > 0) {
+            debug_slat_forwards = static_cast<size_t>(opt.debug_slat_forwards);
+        } else if (opt.debug_once) {
             debug_slat_forwards = 1;
         }
-        const char* debug_slat_output = getenv("SAM3D_E2E_DEBUG_SLAT_OUTPUT");
+        const char* debug_slat_output = opt.debug_slat_output.c_str();
         size_t completed_debug_slat_forwards = 0;
 
+        // Loop-timing diagnostic (SAM3D_SLAT_LOOP_TIMING=1): per-run split of
+        // input upload / GPU graph / output readback, to attribute the
+        // Vulkan-vs-CUDA per-run gap precisely.
+        const bool loop_timing = getenv("SAM3D_SLAT_LOOP_TIMING") != nullptr;
+        double t_upload = 0, t_run = 0, t_read = 0;
+        auto now_ms = [] { return std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now().time_since_epoch()).count(); };
         for (size_t s = 0; s < slat_schedule.size(); ++s) {
             const float t_v = slat_schedule[s].t * 1000.0f;
+            const double tu0 = loop_timing ? now_ms() : 0;
             if (slg.x->buffer &&
                 !slat.backend->set_input_f32(slg.x, x_slat.data(), x_slat.size())) return 1;
             if (slg.cond->buffer &&
@@ -1526,7 +1585,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
             if (slg.t->buffer && !slat.backend->set_input_f32(slg.t, &t_v, 1)) return 1;
             if (!cache_vulkan_tables) {
                 if (!upload_slat_tables()) return 1;
-                if (getenv("SAM3D_E2E_VERIFY")) {
+                if (opt.verify) {
                     for (ggml_tensor* t : slg.inputs) {
                         if (!t->buffer || t->type != GGML_TYPE_I32) continue;
                         std::vector<int32_t> device;
@@ -1537,9 +1596,13 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
                     }
                 }
             }
+            const double tu1 = loop_timing ? now_ms() : 0;
             if (!slat.backend->run(s_graph)) { LOGE("e2e: slat step %zu failed", s); return 1; }
+            const double tr0 = loop_timing ? now_ms() : 0;
             std::vector<float> vc;
             slat.backend->get_tensor_f32(s_outs[0], vc);
+            const double tr1 = loop_timing ? now_ms() : 0;
+            if (loop_timing) { t_upload += tu1 - tu0; t_run += tr0 - tu1; t_read += tr1 - tr0; }
             if (split_slat_final) {
                 if (!slat_final_backend->set_input_f32(final_in, vc.data(), vc.size()) ||
                     !slat_final_backend->run(final_graph) ||
@@ -1591,14 +1654,19 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
             }
             if (s % 5 == 4) LOGI("e2e: slat step %zu/%zu", s + 1, slat_schedule.size());
         }
+        if (loop_timing) {
+            LOGI("e2e: slat loop timing: upload=%.2fs graph=%.2fs readback=%.2fs over %zu runs",
+                 t_upload / 1000.0, t_run / 1000.0, t_read / 1000.0, slat_schedule.size());
+        }
     }
     // The deployment trajectory gate consumes the normalized latent written
     // above.  Stop before decoder work so a SLat numerical diagnosis neither
     // changes the observed tensor nor spends time producing a throwaway PLY.
-    if (getenv("SAM3D_E2E_SLAT_FLOW_ONLY")) {
+    if (opt.slat_flow_only) {
         LOGI("e2e: SLat flow-only replay complete");
         return 0;
     }
+    LOGI("e2e: slat flow done in %.1fs", elapsed_seconds());
     // denormalize: feats * STD + MEAN (per channel)
     for (int64_t n = 0; n < tb.nf; n++)
         for (int c = 0; c < 8; c++)
@@ -1610,7 +1678,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     // ---------------- stage C: Gaussian decode + PLY ---------------------
     Stage gs;
     if (!gs.open(models_dir + "/slat_decoder_gs-" + gs_dt + ".gguf", be_name, nthreads,
-                 "gaussian_decoder")) {
+                 "gaussian_decoder", static_cast<Backend*>(opt.shared_backend))) {
         LOGE("e2e: failed to load slat_decoder_gs-%s", gs_dt.c_str()); return 1;
     }
     GsTables gtb;
@@ -1629,7 +1697,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     gdg.g = &gg; gdg.m = gs.model.get(); gdg.tb = &gtb;
 #ifdef SAM3D_USE_CUDA
     gdg.use_pytorch_cuda_attention = std::strstr(gs.backend->backend_name(), "CUDA") != nullptr &&
-                                        getenv("SAM3D_GS_PORTABLE_ATTN") == nullptr;
+                                        !opt.gs_portable_attention;
 #endif
     ggml_tensor* g_x = gg.input_f32("x", {8, tb.nf});
     gdg.x = g_x;
@@ -1655,6 +1723,7 @@ int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
     std::vector<float> raw;
     gs.backend->get_tensor_f32(g_outs[0], raw);
     gs.close();
+    LOGI("e2e: gaussian decode done in %.1fs", elapsed_seconds());
 
     // host to_representation (decoder_gs.py) + PLY
     const int64_t n_tok = (int64_t)raw.size() / 448;
@@ -1813,19 +1882,18 @@ RunResult run_pipeline(const CliOptions& opts) {
         return r;
     }
     // Keep the C API and CLI on one implementation so parity fixes cannot
-    // drift between entry points. Environment variables select backend and
-    // dtype for the graph session, matching the `e2e` command.
-    const char* previous_backend = getenv("SAM3D_BACKEND");
-    const std::string previous_backend_value = previous_backend ? previous_backend : "";
-    if (!opts.backend.empty() && opts.backend != "auto")
-        setenv("SAM3D_BACKEND", opts.backend.c_str(), 1);
-    const int rc = cmd_e2e(opts.models_dir, opts.condition_dir, "",
-                           opts.out_ply, opts.dump_dir, "", "", "",
-                           "", "", static_cast<unsigned>(opts.seed), opts.n_threads);
-    if (previous_backend)
-        setenv("SAM3D_BACKEND", previous_backend_value.c_str(), 1);
-    else
-        unsetenv("SAM3D_BACKEND");
+    // drift between entry points. All knobs travel through E2eOptions.
+    E2eOptions e2e;
+    e2e.models_dir = opts.models_dir;
+    e2e.cond_dir = opts.condition_dir;
+    // image-to-3d generates noise internally (empty noise_dir = fresh noise)
+    e2e.out_ply = opts.out_ply;
+    e2e.dbg_dir = opts.dump_dir;
+    e2e.backend = opts.backend.empty() ? "auto" : opts.backend;
+    e2e.threads = opts.n_threads;
+    e2e.seed = static_cast<unsigned>(opts.seed);
+    e2e.dtype = "f32";  // historical image-to-3d default (SAM3D_E2E_DTYPE unset)
+    const int rc = cmd_e2e(e2e);
     r.ok = rc == 0;
     if (!r.ok) r.error = "end-to-end graph session failed; see log output";
     return r;
@@ -1912,139 +1980,243 @@ bool merge_binary_mask_into_alpha(RgbaImage& image, const std::string& mask_path
 
 }  // namespace
 
-RunResult run_image_to_3d(const ImageTo3DOptions& opts) {
-    RunResult result;
-    if (opts.image_path.empty() || opts.out_ply.empty()) {
-        result.error = "image_path and out_ply are required";
-        return result;
-    }
+// Shared validation used by both the session init and the one-shot wrapper.
+namespace {
+
+bool validate_session_config(const ImageTo3DOptions& opts, std::string& error) {
     if (opts.models_dir.empty() || opts.moge_model.empty()) {
-        result.error = "models_dir and moge_model are required";
-        return result;
+        error = "models_dir and moge_model are required";
+        return false;
     }
     if (opts.dtype.empty()) {
-        result.error = "dtype is required";
-        return result;
-    }
-    if (opts.out_mesh_vertices.empty() != opts.out_mesh_faces.empty()) {
-        result.error = "out_mesh_vertices and out_mesh_faces must be provided together";
-        return result;
+        error = "dtype is required";
+        return false;
     }
     const auto valid_dtype = [](const std::string& dtype) {
         return dtype == "f32" || dtype == "f16" || dtype == "q4_0" ||
                dtype == "q4_1" || dtype == "q4_k" || dtype == "q8_0";
     };
     if (!valid_dtype(opts.dtype)) {
-        result.error = "unsupported dtype '" + opts.dtype + "'";
-        return result;
+        error = "unsupported dtype '" + opts.dtype + "'";
+        return false;
     }
     if (opts.n_threads <= 0) {
-        result.error = "n_threads must be positive";
-        return result;
+        error = "n_threads must be positive";
+        return false;
     }
-    if (!opts.noise_dir.empty()) {
-        std::error_code filesystem_error;
-        if (!std::filesystem::is_directory(opts.noise_dir, filesystem_error) || filesystem_error) {
-            result.error = "noise_dir must be a readable official stage directory";
-            return result;
-        }
-    }
+    return true;
+}
 
-    RgbaImage image;
-    std::string error;
-    if (!load_rgba_image(opts.image_path, image, error) ||
-        !merge_binary_mask_into_alpha(image, opts.mask_path, error)) {
-        result.error = error;
-        return result;
-    }
+}  // namespace
 
-    MogeInferenceResult moge_result;
-    {
-        auto backend = Backend::create(opts.backend.c_str(), opts.n_threads);
+struct ImageTo3DSession::Impl {
+    ImageTo3DOptions config;
+    std::unique_ptr<Backend> backend;
+    // The MoGe weights are loaded lazily per request and released right after
+    // the forward: keeping 600 MB resident next to the generative stages
+    // overflows a 12 GiB card, and mmap makes the reload nearly free while a
+    // cache hit skips it entirely.
+    std::unique_ptr<GGUFModel> moge_model;
+
+    // RGB-only MoGe reuse: the point map depends on the RGB channels and the
+    // inference options only, never on the mask alpha, so a request whose RGB
+    // bytes match the previous request skips the MoGe forward entirely. The
+    // mask merge and condition preprocessing still run every request.
+    std::vector<uint8_t> cached_rgb;
+    int cached_width = 0;
+    int cached_height = 0;
+    bool cached_valid = false;
+    MogeInferenceResult cached_moge;
+
+    bool init(const ImageTo3DOptions& config_in, std::string& error) {
+        if (!validate_session_config(config_in, error)) return false;
+        config = config_in;
+        backend = Backend::create(config.backend.c_str(), config.n_threads);
         if (!backend) {
-            result.error = "failed to create the requested MoGe backend";
-            return result;
+            error = "failed to create the requested MoGe backend";
+            return false;
         }
-        GGUFModel model;
-        if (!model.load(opts.moge_model, backend->weights_buffer_type())) {
-            result.error = "failed to load MoGe GGUF: " + opts.moge_model;
-            return result;
-        }
-        MogeInferenceOptions moge_options;
-        if (!run_moge_inference(image, model, *backend, moge_options, moge_result, error)) {
-            result.error = "native MoGe inference failed: " + error;
-            return result;
-        }
-    }  // Release the MoGe model and its backend before the generative stages.
+        return true;
+    }
 
-    ScopedConditionDirectory conditions;
-    if (!conditions.create(opts.conditions_out, error)) {
+    RunResult run(const ImageTo3DOptions& opts) {
+        RunResult result;
+        if (opts.image_path.empty() || opts.out_ply.empty()) {
+            result.error = "image_path and out_ply are required";
+            return result;
+        }
+        if (!validate_session_config(opts, result.error)) return result;
+        // The session fixes models/backend/dtype/threads; a mismatching
+        // request would silently change numerics or reuse foreign weights.
+        if (opts.models_dir != config.models_dir || opts.moge_model != config.moge_model ||
+            opts.backend != config.backend || opts.dtype != config.dtype ||
+            opts.n_threads != config.n_threads) {
+            result.error =
+                "request settings must match the session configuration "
+                "(models_dir, moge_model, backend, dtype, n_threads)";
+            return result;
+        }
+        if (opts.out_mesh_vertices.empty() != opts.out_mesh_faces.empty()) {
+            result.error = "out_mesh_vertices and out_mesh_faces must be provided together";
+            return result;
+        }
+        if (!opts.noise_dir.empty()) {
+            std::error_code filesystem_error;
+            if (!std::filesystem::is_directory(opts.noise_dir, filesystem_error) || filesystem_error) {
+                result.error = "noise_dir must be a readable official stage directory";
+                return result;
+            }
+        }
+
+        RgbaImage image;
+        std::string error;
+        if (!load_rgba_image(opts.image_path, image, error) ||
+            !merge_binary_mask_into_alpha(image, opts.mask_path, error)) {
+            result.error = error;
+            return result;
+        }
+
+        // RGB fingerprint of the mask-merged image; only the first three
+        // channels participate because MoGe never sees alpha.
+        const size_t pixels = static_cast<size_t>(image.width) * image.height;
+        std::vector<uint8_t> rgb(pixels * 3);
+        for (size_t p = 0; p < pixels; ++p) {
+            rgb[p * 3 + 0] = image.rgba[p * 4 + 0];
+            rgb[p * 3 + 1] = image.rgba[p * 4 + 1];
+            rgb[p * 3 + 2] = image.rgba[p * 4 + 2];
+        }
+        const bool cache_hit = !opts.disable_moge_pointmap_cache && cached_valid &&
+                               cached_width == image.width && cached_height == image.height &&
+                               cached_rgb == rgb;
+
+        MogeInferenceResult moge_result;
+        if (cache_hit) {
+            // The cached result is immutable and the condition preprocessing
+            // below only reads it, so sharing across requests is safe.
+            moge_result = cached_moge;
+            result.output.stats.moge_pointmap_reused = true;
+            LOGI("image-to-3d: reusing the cached MoGe point map for identical RGB");
+        } else {
+            const auto moge_started = std::chrono::steady_clock::now();
+            // A request-scoped MoGe backend keeps the CUDA pool from
+            // accumulating cross-request fragmentation: per-object token
+            // counts vary, the pool never returns chunks, and late objects in
+            // a batch would OOM on the pointpatch reserve. The mmap-backed
+            // weight reload is cheap and the pool dies with the backend.
+            auto moge_backend = Backend::create(config.backend.c_str(), config.n_threads);
+            if (!moge_backend) {
+                result.error = "failed to create the MoGe backend";
+                return result;
+            }
+            moge_model = std::make_unique<GGUFModel>();
+            if (!moge_model->load(config.moge_model, moge_backend->weights_buffer_type())) {
+                result.error = "failed to load MoGe GGUF: " + config.moge_model;
+                return result;
+            }
+            MogeInferenceOptions moge_options;
+            // The official pipeline feeds the condition chain the FULL finite
+            // point map (its raw receipt has zero NaN/Inf; the predicted-mask
+            // inf fill is never seen downstream). Keeping apply_mask on would
+            // inject Inf that the bilinear upsample turns into NaN and that
+            // resize_pointmap_to_image then re-spreads, which is what diverged
+            // the seven small-object SS trajectories.
+            moge_options.apply_mask = false;
+            if (!run_moge_inference(image, *moge_model, *moge_backend, moge_options,
+                                    moge_result, error)) {
+                result.error = "native MoGe inference failed: " + error;
+                return result;
+            }
+            // Release the MoGe weights AND its backend before the generative
+            // stages allocate; the mmap-backed reload on the next cache miss
+            // is cheap and the freed pool removes the fragmentation source.
+            moge_model.reset();
+            moge_backend.reset();
+            LOGI("image-to-3d: moge done in %.1fs",
+                 std::chrono::duration<double>(std::chrono::steady_clock::now() - moge_started).count());
+            cached_rgb = std::move(rgb);
+            cached_width = image.width;
+            cached_height = image.height;
+            cached_moge = moge_result;
+            cached_valid = true;
+        }
+
+        ScopedConditionDirectory conditions;
+        if (!conditions.create(opts.conditions_out, error)) {
+            result.error = error;
+            return result;
+        }
+        NativeConditionInputs condition_inputs;
+        if (!preprocess_ss_conditions(image, moge_result.pointmap_pytorch3d,
+                                      moge_result.width, moge_result.height, {},
+                                      condition_inputs, error) ||
+            !write_ss_conditions(conditions.path(), condition_inputs, error)) {
+            result.error = "native condition preprocessing failed: " + error;
+            return result;
+        }
+
+        E2eOptions e2e;
+        e2e.models_dir = opts.models_dir;
+        e2e.cond_dir = conditions.path();
+        // image-to-3d generates noise internally (empty noise_dir = fresh noise)
+        e2e.out_ply = opts.out_ply;
+        e2e.out_pbr = opts.out_pbr;
+        e2e.out_mesh_vertices = opts.out_mesh_vertices;
+        e2e.out_mesh_faces = opts.out_mesh_faces;
+        e2e.out_pose = opts.out_pose;
+        e2e.out_dtype_contract = opts.out_dtype_contract;
+        e2e.backend = opts.backend.empty() ? "auto" : opts.backend;
+        e2e.threads = opts.n_threads;
+        e2e.seed = static_cast<unsigned>(opts.seed);
+        e2e.dtype = opts.dtype;
+        // The image-to-3D production path uses strict F32 condition attention
+        // (the flash K/V path measurably perturbs the DINO outlier channels) and
+        // the official F32 SS attention contract.
+        e2e.cond_manual_attention = true;
+        e2e.ss_strict_attention = opts.strict_ss_attention;
+        e2e.gs_portable_attention = opts.gs_portable_attention;
+        e2e.philox_blocks = opts.philox_blocks;
+        e2e.ss_steps = opts.ss_steps;
+        e2e.slat_steps = opts.slat_steps;
+        // Share the backend across stages only where its allocator survives a
+        // stream of differently-shaped graphs. Vulkan's sub-allocator reuses
+        // freed ranges; CUDA's pool never returns chunks to the driver, so a
+        // batch whose per-object token counts vary fragments the pool and the
+        // late objects OOM. On CUDA each stage keeps its own backend (the
+        // per-object layout already verified 27/27) while the session still
+        // removes the process launch and the repeated MoGe load.
+        e2e.shared_backend = (opts.backend != "cuda") ? backend.get() : nullptr;
+        const int rc = cmd_e2e(e2e);
+
+        result.ok = rc == 0;
+        if (!result.ok) {
+            result.error = "native image-to-3D session failed; see log output";
+        }
+        return result;
+    }
+};
+
+ImageTo3DSession::ImageTo3DSession() : impl_(std::make_unique<Impl>()) {}
+ImageTo3DSession::~ImageTo3DSession() = default;
+
+bool ImageTo3DSession::init(const ImageTo3DOptions& config, std::string& error) {
+    return impl_->init(config, error);
+}
+
+RunResult ImageTo3DSession::run(const ImageTo3DOptions& opts) {
+    return impl_->run(opts);
+}
+
+RunResult run_image_to_3d(const ImageTo3DOptions& opts) {
+    // One-shot wrapper: identical numerics to the session path because it is
+    // the session path with a throwaway session object.
+    ImageTo3DSession session;
+    std::string error;
+    if (!session.init(opts, error)) {
+        RunResult result;
         result.error = error;
         return result;
     }
-    NativeConditionInputs condition_inputs;
-    if (!preprocess_ss_conditions(image, moge_result.pointmap_pytorch3d,
-                                  moge_result.width, moge_result.height, {},
-                                  condition_inputs, error) ||
-        !write_ss_conditions(conditions.path(), condition_inputs, error)) {
-        result.error = "native condition preprocessing failed: " + error;
-        return result;
-    }
-    moge_result = {};
-
-    const char* previous_backend = getenv("SAM3D_BACKEND");
-    const std::string previous_backend_value = previous_backend ? previous_backend : "";
-    const char* previous_dtype = getenv("SAM3D_E2E_DTYPE");
-    const std::string previous_dtype_value = previous_dtype ? previous_dtype : "";
-    const char* previous_cond_attention = getenv("SAM3D_COND_STRICT_ATTN");
-    const std::string previous_cond_attention_value =
-        previous_cond_attention ? previous_cond_attention : "";
-    const char* previous_ss_attention = getenv("SAM3D_SS_STRICT_ATTN");
-    const std::string previous_ss_attention_value =
-        previous_ss_attention ? previous_ss_attention : "";
-    if (!opts.backend.empty() && opts.backend != "auto") {
-        setenv("SAM3D_BACKEND", opts.backend.c_str(), 1);
-    }
-    setenv("SAM3D_E2E_DTYPE", opts.dtype.c_str(), 1);
-    // The image-to-3D production path uses strict F32 condition attention.
-    // SS uses flash attention by default; callers may request its scoped
-    // explicit-F32 parity mode without changing DINO, MoGe or SLat graphs.
-    setenv("SAM3D_COND_STRICT_ATTN", "1", 1);
-    if (opts.strict_ss_attention) {
-        setenv("SAM3D_SS_STRICT_ATTN", "1", 1);
-    } else {
-        unsetenv("SAM3D_SS_STRICT_ATTN");
-    }
-    const int rc = cmd_e2e(opts.models_dir, conditions.path(), opts.noise_dir, opts.out_ply, "",
-                           opts.out_pbr, opts.out_mesh_vertices, opts.out_mesh_faces,
-                           opts.out_pose, opts.out_dtype_contract,
-                           static_cast<unsigned>(opts.seed),
-                           opts.n_threads);
-    if (previous_backend) {
-        setenv("SAM3D_BACKEND", previous_backend_value.c_str(), 1);
-    } else {
-        unsetenv("SAM3D_BACKEND");
-    }
-    if (previous_dtype) {
-        setenv("SAM3D_E2E_DTYPE", previous_dtype_value.c_str(), 1);
-    } else {
-        unsetenv("SAM3D_E2E_DTYPE");
-    }
-    if (previous_cond_attention) {
-        setenv("SAM3D_COND_STRICT_ATTN", previous_cond_attention_value.c_str(), 1);
-    } else {
-        unsetenv("SAM3D_COND_STRICT_ATTN");
-    }
-    if (previous_ss_attention) {
-        setenv("SAM3D_SS_STRICT_ATTN", previous_ss_attention_value.c_str(), 1);
-    } else {
-        unsetenv("SAM3D_SS_STRICT_ATTN");
-    }
-    result.ok = rc == 0;
-    if (!result.ok) {
-        result.error = "native image-to-3D session failed; see log output";
-    }
-    return result;
+    return session.run(opts);
 }
 
 }  // namespace sam3d

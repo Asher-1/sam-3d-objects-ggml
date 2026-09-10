@@ -10,23 +10,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+from samt_io import read_samt_bytes as read_samt
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], bytes]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        dimensions = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (ggml_type,) = struct.unpack("<i", stream.read(4))
-        if ggml_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT")
-        values = stream.read()
-    expected_bytes = 4
-    for dimension in dimensions:
-        expected_bytes *= dimension
-    if len(values) != expected_bytes:
-        raise ValueError(f"{path}: expected {expected_bytes} bytes, found {len(values)}")
-    return dimensions, values
+
 
 
 def reference_draws(reference_dir: Path) -> tuple[list[int], list[bytes]]:

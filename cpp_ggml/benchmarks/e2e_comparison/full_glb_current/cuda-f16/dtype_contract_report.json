@@ -1,6 +1,6 @@
 {
   "schema": "sam3d.e2e.dtype-contract-validation.v1",
-  "contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/dtype_contract.json",
+  "contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract.json",
   "backend": "cuda",
   "model_dtypes": {
     "base": "f16",
@@ -23,8 +23,8 @@
     "ss_decoder",
     "ss_flow"
   ],
-  "entry_count": 145,
-  "aggregated_graph_nodes": 29233,
+  "entry_count": 154,
+  "aggregated_graph_nodes": 30012,
   "mul_mat_source_types": [
     "f16",
     "f32"

@@ -208,10 +208,31 @@ endif()
 add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 
 if(SAM3D_GGML_CUDA)
+    # spconv 2.3.8's selected Ampere sparse F16 kernel is vendored as
+    # generated Cumm source.  It is independent of cuDNN and is linked only
+    # into CUDA builds; Vulkan/CPU graphs keep their existing portable path.
+    file(GLOB_RECURSE SAM3D_SPCONV_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sam3d-spconv/src/*.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sam3d-spconv/src/*.cc")
+    add_library(sam3d_spconv STATIC ${SAM3D_SPCONV_SOURCES})
+    target_include_directories(sam3d_spconv SYSTEM PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sam3d-spconv/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sam3d-spconv/cumm-include")
+    target_link_libraries(sam3d_spconv PUBLIC CUDA::cudart)
+    set_target_properties(sam3d_spconv PROPERTIES
+        CXX_STANDARD 14 CUDA_STANDARD 14 CUDA_EXTENSIONS OFF
+        POSITION_INDEPENDENT_CODE ON)
+    target_compile_definitions(sam3d_spconv PRIVATE TV_ENABLE_HARDWARE_ACC)
+    target_compile_options(sam3d_spconv PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr
+            -Xcudafe=--diag_suppress=implicit_return_from_non_void_function>)
+
     target_include_directories(ggml-cuda PRIVATE
         "${SAM3D_PYTORCH_MEM_EFF_SOURCE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pytorch-mem-eff-attention-compat"
-        "${sam3d_cutlass_SOURCE_DIR}/include")
+        "${sam3d_cutlass_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sam3d-spconv/include")
+    target_link_libraries(ggml-cuda PRIVATE sam3d_spconv)
     target_compile_options(ggml-cuda PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 endif()
@@ -246,8 +267,9 @@ if(SAM3D_GGML_NATIVE_PBR)
             "Missing native Gaussian rasterizer. Restore "
             "third_party/mip-splatting-diff-gaussian-rasterization from this checkout.")
     endif()
-    # These upstream CUDA files are intentionally compiled verbatim. The
-    # wrapper in src/gaussian_renderer.cu owns SAM3D-specific file I/O and
+    # These upstream CUDA files are compiled as-is except for the single
+    # gsplat-parity delta recorded in the fork's UPSTREAM.md ("Local deltas").
+    # The wrapper in src/gaussian_renderer.cu owns SAM3D-specific file I/O and
     # camera construction; it never changes renderer math.
     add_library(sam3d_mip_gaussian_rasterizer STATIC
         ${SAM3D_MIP_GAUSSIAN_DIR}/cuda_rasterizer/backward.cu
@@ -372,6 +394,7 @@ set(SAM3DGGML_SOURCES
     src/pytorch_philox_rng.cpp
     src/pose_decoder.cpp
     src/dtype_contract.cpp
+    src/scene_assemble.cpp
     src/session.cpp
 )
 
@@ -468,6 +491,24 @@ if(SAM3D_GGML_BUILD_TESTS)
             add_test(NAME sam3d_ggml_cli_help
                      COMMAND $<TARGET_FILE:sam3d-cli> --help)
         endif()
+        add_executable(sam3d-matmul-backend-test src/matmul_backend_test.cpp)
+        target_link_libraries(sam3d-matmul-backend-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_matmul_cpu COMMAND sam3d-matmul-backend-test cpu)
+        if(SAM3D_GGML_VULKAN)
+            add_test(NAME sam3d_ggml_matmul_vulkan COMMAND sam3d-matmul-backend-test vulkan --large)
+            set_tests_properties(sam3d_ggml_matmul_vulkan PROPERTIES RESOURCE_LOCK sam3d_gpu)
+        endif()
+        add_executable(sam3d-scatter-mean-backend-test src/scatter_mean_backend_test.cpp)
+        target_link_libraries(sam3d-scatter-mean-backend-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_scatter_mean_cpu COMMAND sam3d-scatter-mean-backend-test cpu)
+        if(SAM3D_GGML_VULKAN)
+            add_test(NAME sam3d_ggml_scatter_mean_vulkan COMMAND sam3d-scatter-mean-backend-test vulkan)
+            set_tests_properties(sam3d_ggml_scatter_mean_vulkan PROPERTIES RESOURCE_LOCK sam3d_gpu)
+        endif()
+        if(SAM3D_GGML_CUDA)
+            add_test(NAME sam3d_ggml_matmul_cuda COMMAND sam3d-matmul-backend-test cuda --large)
+            set_tests_properties(sam3d_ggml_matmul_cuda PROPERTIES RESOURCE_LOCK sam3d_gpu)
+        endif()
         add_executable(sam3d-asset-io-test src/asset_io_test.cpp)
         target_link_libraries(sam3d-asset-io-test PRIVATE sam3dggml)
         add_test(NAME sam3d_ggml_native_glb_asset
@@ -484,6 +525,10 @@ if(SAM3D_GGML_BUILD_TESTS)
         target_link_libraries(sam3d-mesh-tables-test PRIVATE sam3dggml)
         add_test(NAME sam3d_ggml_mesh_subdivide_tables
                  COMMAND $<TARGET_FILE:sam3d-mesh-tables-test>)
+        add_executable(sam3d-sparse-tables-test src/sparse_tables_test.cpp)
+        target_link_libraries(sam3d-sparse-tables-test PRIVATE sam3dggml)
+        add_test(NAME sam3d_ggml_spconv_implicit_gemm_tables
+                 COMMAND $<TARGET_FILE:sam3d-sparse-tables-test>)
         add_executable(sam3d-flexicubes-test src/flexicubes_test.cpp)
         target_link_libraries(sam3d-flexicubes-test PRIVATE sam3dggml)
         add_test(NAME sam3d_ggml_flexicubes_synthetic_mesh
@@ -539,9 +584,13 @@ if(SAM3D_GGML_BUILD_TESTS)
                      COMMAND ${Python3_EXECUTABLE} -m py_compile
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_regression.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gguf_schema.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/samt_io.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/convert_sam3d_to_gguf.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/plot_benchmarks.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_image_to_3d.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_scene_pipeline.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_scene_benchmark.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/publish_scene_benchmark.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_full_e2e_parity.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_vulkan_cuda_pbr.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/render_glb_compare.py
@@ -550,6 +599,7 @@ if(SAM3D_GGML_BUILD_TESTS)
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bench_full_e2e_pipeline.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/render_compare.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/slat_trajectory_ref.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/slat_step_ref.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/plot_e2e_latency.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/validate_e2e_benchmark.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/publish_full_e2e.py
@@ -559,6 +609,7 @@ if(SAM3D_GGML_BUILD_TESTS)
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/materialize_e2e_snapshot.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/profile_e2e.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/ss_trajectory_ref.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/ss_step_ref.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_ss_block_debug.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_slat_block_debug.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gguf_torch_loader.py
@@ -569,6 +620,10 @@ if(SAM3D_GGML_BUILD_TESTS)
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_trajectory_validation.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/validate_gaussian_decoder.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_gaussian_decoder_debug.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gs_decode_ref.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_ss_latent.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/official_reference_policy.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_moge_gguf.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/moge_parity_ref.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/moge_infer_parity.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/moge_block_parity.py

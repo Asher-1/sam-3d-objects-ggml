@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from samt_io import read_samt
 
 
 # (native stage, output indices, official reference basename).  The native
@@ -42,19 +43,6 @@ STAGES: tuple[tuple[str, tuple[int, ...], str], ...] = (
 )
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (value_type,) = struct.unpack("<i", stream.read(4))
-        if value_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {value_type}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    if values.size != int(np.prod(shape)):
-        raise ValueError(f"{path}: payload does not match shape {shape}")
-    return shape, values
 
 
 def metrics(reference: np.ndarray, actual: np.ndarray) -> dict[str, float | int]:

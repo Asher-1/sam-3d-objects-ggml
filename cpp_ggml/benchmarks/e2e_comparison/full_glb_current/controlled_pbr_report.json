@@ -1,50 +1,56 @@
 {
   "controlled_mesh_uv": {
-    "actual_triangle_count": 24504,
-    "actual_vertex_count": 15792,
-    "expected_triangle_count": 24504,
-    "expected_vertex_count": 15792,
+    "actual_triangle_count": 24554,
+    "actual_vertex_count": 15816,
+    "expected_triangle_count": 24554,
+    "expected_vertex_count": 15816,
     "indices_bitwise_equal": true,
     "positions_bitwise_equal": true,
     "uv_bitwise_equal": true
   },
   "controlled_mesh_uv_contract": "PASS",
   "effective_metallic_factor": 1.0,
-  "native_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/controlled_native_pbr.glb",
+  "native_glb": "controlled_native_pbr.glb",
   "normal_contract": {
     "passed": true,
-    "quality_gate_configured": false,
-    "quality_gate_passed": null,
+    "quality_gate_configured": true,
+    "quality_gate_passed": true,
     "required": true,
-    "thresholds": {}
+    "thresholds": {
+      "max_normal_angle_deg": 20.0
+    }
   },
   "normals_vs_official": {
     "available": true,
-    "mae": 0.0,
-    "max_angle_deg": 1.7075472925031877e-06,
-    "mean_angle_deg": 2.7289369641879095e-07,
-    "valid_vertex_ratio": 1.0
+    "mae": 8.895871859865196e-06,
+    "max_angle_deg": 17.964662338038465,
+    "mean_angle_deg": 0.0011363471870232118,
+    "valid_vertex_ratio": 0.9998103186646434
   },
   "official_glb_uv_bitwise_equal": true,
   "official_material_contract": "PASS",
   "structural_contract": "PASS",
   "texture_contract": {
     "passed": true,
-    "quality_gate_configured": false,
-    "quality_gate_passed": null,
+    "quality_gate_configured": true,
+    "quality_gate_passed": true,
     "required": true,
-    "thresholds": {}
+    "thresholds": {
+      "max_texture_abs_u8": 180.0,
+      "max_texture_mae_u8": 2.0,
+      "max_texture_rmse_u8": 5.0
+    }
   },
   "texture_vs_official": {
-    "equal_pixel_ratio": 0.19432640075683594,
-    "mae_u8": 1.3149690628051758,
-    "max_abs_u8": 130,
-    "rmse_u8": 3.8481357097625732
+    "equal_pixel_ratio": 0.12238407135009766,
+    "mae_u8": 1.6072441339492798,
+    "max_abs_u8": 149,
+    "rmse_u8": 4.160669326782227
   },
-  "triangle_count": 24504,
+  "triangle_count": 24554,
   "uv_export_diagnostic": {
-    "max_abs_after_v_flip": 0.9991424083709717,
+    "max_abs_after_v_flip": 1.0,
     "max_abs_vs_official_glb": 0.0
   },
-  "vertex_count": 15792
+  "vertex_count": 15816
 }

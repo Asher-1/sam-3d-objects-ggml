@@ -343,29 +343,28 @@ bool normalize_object_centric(const ImageTensor& raw_pointmap, const ImageTensor
 }
 
 ImageTensor resize_pointmap_to_image(const ImageTensor& pointmap, int width, int height) {
-    if (pointmap.width == width && pointmap.height == height) return pointmap;
+    if (pointmap.width == width && pointmap.height == height) {
+        // The official chain feeds the preprocessor a fully finite point map
+        // (its raw receipt has zero NaN/Inf), so a same-size pass-through is
+        // also the official behavior - no mask-out, no re-fill.
+        return pointmap;
+    }
     ImageTensor clean = pointmap;
-    ImageTensor invalid = make_image(1, pointmap.width, pointmap.height, 0.0f);
     for (int y = 0; y < pointmap.height; ++y) {
         for (int x = 0; x < pointmap.width; ++x) {
-            bool has_nan = false;
             for (int channel = 0; channel < 3; ++channel) {
-                has_nan = has_nan || std::isnan(pointmap.at(channel, x, y));
-                if (std::isnan(clean.at(channel, x, y))) clean.at(channel, x, y) = 0.0f;
+                const float value = clean.at(channel, x, y);
+                // Inf participates in the bilinear weights as Inf*0 = NaN, so
+                // both non-finite kinds must be neutralized before the resize.
+                if (!std::isfinite(value)) clean.at(channel, x, y) = 0.0f;
             }
-            invalid.at(0, x, y) = has_nan ? 1.0f : 0.0f;
         }
     }
     ImageTensor output = resize_bilinear_antialias(clean, width, height);
-    invalid = resize_nearest(invalid, width, height);
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            if (invalid.at(0, x, y) <= 0.5f) continue;
-            for (int channel = 0; channel < 3; ++channel) {
-                output.at(channel, x, y) = std::numeric_limits<float>::quiet_NaN();
-            }
-        }
-    }
+    // No NaN re-fill: the official semantics keep every pixel finite (the
+    // raw predicted values outside the predicted mask), and re-spreading a
+    // NaN invalid mask here is exactly what poisoned the PointPatch tokens
+    // of the diverged scene objects.
     return output;
 }
 
@@ -421,15 +420,20 @@ bool preprocess_ss_conditions(const RgbaImage& rgba, const std::vector<float>& p
 
     ImageTensor cropped_image = crop_with_padding(raw_image, x1, y1, x2, y2, 0.0f);
     ImageTensor cropped_mask = crop_with_padding(raw_mask, x1, y1, x2, y2, 0.0f);
+    // The official receipt keeps the cropped point map FULLY FINITE: its
+    // joint crop runs with padding_factor 0 and the downstream square pad
+    // fills zeros (the dumped official ss_input_pointmap has zero NaN).
+    // The former NaN pad here poisoned the PointPatch token segment and
+    // diverged the seven small-object trajectories.
     ImageTensor cropped_pointmap = crop_with_padding(
-        normalized_pointmap, x1, y1, x2, y2, std::numeric_limits<float>::quiet_NaN());
+        normalized_pointmap, x1, y1, x2, y2, 0.0f);
 
     cropped_image = resize_bilinear_antialias(pad_to_square_centered(cropped_image, 0.0f),
                                                config.target_size, config.target_size);
     cropped_mask = resize_nearest(pad_to_square_centered(cropped_mask, 0.0f),
                                   config.target_size, config.target_size);
     cropped_pointmap = resize_nearest(pad_to_square_centered(
-        cropped_pointmap, std::numeric_limits<float>::quiet_NaN()),
+        cropped_pointmap, 0.0f),
         config.target_size, config.target_size);
 
     ImageTensor full_image = resize_bilinear_antialias(pad_to_square_centered(raw_image, 0.0f),

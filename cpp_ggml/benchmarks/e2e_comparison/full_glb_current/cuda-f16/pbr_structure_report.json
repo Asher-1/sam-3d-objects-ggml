@@ -1,8 +1,8 @@
 {
   "effective_metallic_factor": 1.0,
-  "native_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.glb",
+  "native_glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.glb",
   "official_material_contract": "PASS",
   "structural_contract": "PASS",
-  "triangle_count": 26066,
-  "vertex_count": 17148
+  "triangle_count": 25837,
+  "vertex_count": 16813
 }

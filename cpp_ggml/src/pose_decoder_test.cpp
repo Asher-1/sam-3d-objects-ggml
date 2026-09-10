@@ -54,5 +54,28 @@ int main() {
         std::fprintf(stderr, "translation scale was not decoded with exp\n");
         return 1;
     }
+    // Downsample-factor rescale (official scale *= downsample_factor after
+    // decode): the scale doubles while the rotation stays untouched.
+    sam3d::NativeInstancePose rescaled;
+    if (!sam3d::decode_scale_shift_invariant_pose(normalized_rotation, log_scale, translation,
+                                                  std::log(5.0f), scene_scale, scene_shift,
+                                                  rescaled, error, 2)) {
+        std::fprintf(stderr, "pose decode with downsample factor failed: %s\n", error.c_str());
+        return 1;
+    }
+    for (size_t index = 0; index < 4; ++index) {
+        if (std::fabs(rescaled.rotation_wxyz[index] - pose.rotation_wxyz[index]) > tolerance) {
+            std::fprintf(stderr, "downsample factor changed the rotation component %zu\n", index);
+            return 1;
+        }
+    }
+    for (size_t index = 0; index < 3; ++index) {
+        if (std::fabs(rescaled.scale[index] - 2.0f * pose.scale[index]) > tolerance ||
+            std::fabs(rescaled.translation[index] - pose.translation[index]) > tolerance) {
+            std::fprintf(stderr, "downsample factor did not only rescale the scale component %zu\n",
+                         index);
+            return 1;
+        }
+    }
     return 0;
 }

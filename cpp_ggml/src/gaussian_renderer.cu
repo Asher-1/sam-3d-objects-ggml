@@ -164,7 +164,7 @@ bool render_gaussian_views_cuda(const GaussianSplatSet& splats,
         DeviceArray<float> viewmatrix(16);
         DeviceArray<float> projmatrix(16);
         DeviceArray<float> campos(3);
-        DeviceArray<int> radii(count);
+        DeviceArray<int> radii(2 * count);  // gsplat parity: per-axis radii
         positions.upload(splats.positions.data(), splats.positions.size());
         sh0.upload(splats.sh0.data(), splats.sh0.size());
         opacities.upload(splats.opacities.data(), splats.opacities.size());

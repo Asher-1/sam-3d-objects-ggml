@@ -1,0 +1,8 @@
+{
+  "effective_metallic_factor": 1.0,
+  "native_glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/cuda_pbr.glb",
+  "official_material_contract": "PASS",
+  "structural_contract": "PASS",
+  "triangle_count": 25708,
+  "vertex_count": 17071
+}

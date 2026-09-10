@@ -1,0 +1,26 @@
+{
+  "schema": "sam3d.scene-benchmark-provenance.v1",
+  "generated_at": "2026-09-17 13:34:12",
+  "reference": "pytorch",
+  "variants": [
+    "cuda-f16",
+    "cuda-q4_k",
+    "cuda-q8_0",
+    "pytorch"
+  ],
+  "frame_count": 300,
+  "render_contract": {
+    "radius": 1.0,
+    "fov_degrees": 60.0,
+    "resolution": 512,
+    "frames": 300,
+    "yaw_start_deg": -90.0,
+    "pitch_deg": 0.0
+  },
+  "seed": 42,
+  "image_sha256": "72785412200dcb9f5c6bc4eaa3018172293f67836627708e6bce78150109af15",
+  "mask_dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567",
+  "metrics_note": "Scene objects are free-running reconstructions; the documented implementation-inherent drift shifts shape and pose within the same object family. Metrics are appearance/layout evidence, not a per-pixel oracle gate.",
+  "driver": "cpp_ggml/scripts/run_scene_benchmark.py",
+  "publisher": "cpp_ggml/scripts/publish_scene_benchmark.py"
+}

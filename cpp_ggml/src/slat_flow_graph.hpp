@@ -27,6 +27,13 @@ struct SlatFlowGraph {
                                       // ob0_conv1 | ob1_conv1 | ob1_conv2
     std::string prefix = "dit";
     int64_t n_cond_tokens = 5496;     // host sets from the condition SAMT
+    // CUDA uses the vendored spconv 2.3.8 Ampere kernel. Keep this opt-in so
+    // Vulkan and CPU retain their portable graph decomposition.
+    bool use_cuda_spconv = false;
+    // A/B bisect opt-in: consume quantized projection weights directly
+    // (the official parity contract dequantizes them first).
+    bool keep_quant_gemm = false;
+    bool dump_block_outputs = false;
 
     ggml_tensor* x = nullptr;         // (8, nf) input latents
     ggml_tensor* cond = nullptr;      // (1024, n_cond) condition tokens

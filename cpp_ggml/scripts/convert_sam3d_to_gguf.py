@@ -589,7 +589,8 @@ def main():
                              "slat_decoder_mesh", "moge_vitl", "all"])
     ap.add_argument("--moge-checkpoint", metavar="PATH",
                     help="official Ruicheng/moge-vitl model.pt; required with --model moge_vitl")
-    ap.add_argument("--dtype", default="f16", choices=["f32", "f16", "q4_0", "q4_1", "q4_k", "q8_0"])
+    ap.add_argument("--dtype", default="f16",
+                    choices=["f32", "f16", "q4_k", "q8_0", "q4_0"])
     ap.add_argument("--keep-f16-regex", action="append", default=[], metavar="REGEX",
                     help="store matching generator tensors as F16; repeatable and recorded in GGUF metadata")
     ap.add_argument("--quantize-matrix-only", action="store_true",

@@ -41,12 +41,18 @@ ggml_tensor* GraphContext::input_f16(const std::string& name, std::vector<int64_
     return t;
 }
 
-ggml_tensor* gb_linear(ggml_context* ctx, ggml_tensor* w, ggml_tensor* b, ggml_tensor* x) {
+ggml_tensor* gb_linear(ggml_context* ctx, ggml_tensor* w, ggml_tensor* b, ggml_tensor* x,
+                       bool strict_f32) {
     ggml_tensor* out = ggml_mul_mat(ctx, w, x);
-    // Keep the default backend-selected accumulation path. The opt-in F32
-    // setting is a graph-local parity diagnostic for quantized SLat models;
-    // unlike disabling FP16 on the device, it does not perturb unrelated ops.
-    if (getenv("SAM3D_E2E_F32_MATMUL") != nullptr) {
+    // Tensor type, rather than an explicit matmul precision override, defines
+    // the F32 input-layer contract. The default dispatch matches PyTorch's
+    // observed F.linear result; GGML_PREC_F32 selects a different backend
+    // implementation and is reserved for isolated diagnostics.
+    // strict_f32 is for F32-model graphs (SS): the official backbone is an
+    // F32 module and PyTorch runs F.linear in true F32, while the default
+    // CUDA F32x32 path lowers to TF32 tensor-core math and measurably
+    // diverges from it.
+    if (strict_f32) {
         ggml_mul_mat_set_prec(out, GGML_PREC_F32);
     }
     if (b) out = ggml_add(ctx, out, b);
@@ -90,6 +96,9 @@ void gb_split_qkv(ggml_context* ctx, ggml_tensor* qkv, int n_heads, ggml_tensor*
     // The views preserve a final batch dimension when present. The row slice
     // remains strided because a QKV row is 3C-wide, so each slice is made
     // contiguous before the head reshape.
+    // Q/K feed rms_norm, which wants a contiguous row slice; V goes straight
+    // to flash attention, so its slice is expressed as a strided head-layout
+    // view and the flash cast fuses slice + layout + dtype into one copy.
     auto view = [&](int idx) {
         // row-slice of the (3C, N) fused qkv: token stride is the FULL row
         // (qkv->nb[1] = 3C*4 bytes), not C*4. The slice is strided, so
@@ -97,9 +106,15 @@ void gb_split_qkv(ggml_context* ctx, ggml_tensor* qkv, int n_heads, ggml_tensor*
         return ggml_cont(ctx, ggml_view_3d(ctx, qkv, C, N, B, qkv->nb[1],
                                            qkv->nb[2], (size_t)idx * C * cs));
     };
+    auto strided_heads = [&](int idx) {
+        ggml_tensor* v = ggml_view_4d(ctx, qkv, D, n_heads, N, B,
+                                      D * cs, qkv->nb[1], qkv->nb[2],
+                                      (size_t)idx * C * cs);
+        return ggml_permute(ctx, v, 0, 2, 1, 3);  // (D, N, H, B)
+    };
     ggml_tensor* qv = view(0);
     ggml_tensor* kv = view(1);
-    ggml_tensor* vv = view(2);
+    ggml_tensor* vv = strided_heads(2);
     // (C, N, B) -> (D, H, N, B) -> (D, N, H, B)
     auto to_heads = [&](ggml_tensor* t) {
         ggml_tensor* r = ggml_reshape_4d(ctx, t, D, n_heads, N, B);
@@ -107,7 +122,7 @@ void gb_split_qkv(ggml_context* ctx, ggml_tensor* qkv, int n_heads, ggml_tensor*
     };
     *q = to_heads(qv);
     *k = to_heads(kv);
-    *v = to_heads(vv);
+    *v = vv;
 }
 
 void gb_split_kv(ggml_context* ctx, ggml_tensor* kv,
@@ -122,13 +137,13 @@ void gb_split_kv(ggml_context* ctx, ggml_tensor* kv,
 }
 
 ggml_tensor* gb_attention(ggml_context* ctx, ggml_tensor* q, ggml_tensor* k, ggml_tensor* v,
-                          float scale, bool use_flash, bool force_manual) {
+                          float scale, bool use_flash, const AttentionOptions& opts) {
     // The optimized path stores K/V in F16 for flash attention.  Keep a
     // graph-level, all-F32 formulation for numerical diagnosis: it is the
     // direct QK^T -> softmax -> V expression used by the official model and
     // requires no backend-specific ggml source change.  It intentionally is
     // opt-in because materializing N x N scores is not the production path.
-    if (force_manual || getenv("SAM3D_MANUAL_ATTN") != nullptr) {
+    if (opts.force_manual) {
         ggml_tensor* scores = ggml_mul_mat(ctx, k, q);       // [K, Q, heads, batch]
         ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
         scores = ggml_scale(ctx, scores, scale);
@@ -140,13 +155,17 @@ ggml_tensor* gb_attention(ggml_context* ctx, ggml_tensor* q, ggml_tensor* k, ggm
         return ggml_cont(ctx, ggml_permute(ctx, output, 0, 2, 1, 3));
     }
     GGML_ASSERT(use_flash);
-    const bool strict = getenv("SAM3D_STRICT_ATTN") != nullptr;
+    const bool strict = opts.strict_kv;
     // Both supported GPU flash-attention backends accept F32 K/V. Preserve
     // them for the numeric gate; the normal throughput path keeps the F16
     // cache representation used by the existing implementation.
+    // The replayed ggml CUDA flash kernel accepts F32 Q only. Preserve the
+    // SLat F16 boundary by promoting the already-rounded values at this
+    // backend interface; K/V remain in their normal compact representation.
+    ggml_tensor* qq = q->type == GGML_TYPE_F32 ? q : ggml_cast(ctx, q, GGML_TYPE_F32);
     ggml_tensor* kk = strict ? k : ggml_cast(ctx, k, GGML_TYPE_F16);
     ggml_tensor* vv = strict ? v : ggml_cast(ctx, v, GGML_TYPE_F16);
-    ggml_tensor* out = ggml_flash_attn_ext(ctx, q, kk, vv, nullptr, scale, 0.0f, 0.0f);
+    ggml_tensor* out = ggml_flash_attn_ext(ctx, qq, kk, vv, nullptr, scale, 0.0f, 0.0f);
     // This changes only the precision contract of the established flash
     // graph. It is an opt-in parity diagnostic, not the default speed path.
     if (strict) {

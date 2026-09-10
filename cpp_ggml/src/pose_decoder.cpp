@@ -122,7 +122,8 @@ bool decode_scale_shift_invariant_pose(const float normalized_rotation_6d[6],
                                        const float scene_scale[3],
                                        const float scene_shift[3],
                                        NativeInstancePose& output,
-                                       std::string& error) {
+                                       std::string& error,
+                                       int downsample_factor) {
     if (!normalized_rotation_6d || !log_scale || !translation || !scene_scale || !scene_shift ||
         !all_finite(normalized_rotation_6d, 6) || !all_finite(log_scale, 3) ||
         !all_finite(translation, 3) || !std::isfinite(log_translation_scale) ||
@@ -184,6 +185,12 @@ bool decode_scale_shift_invariant_pose(const float normalized_rotation_6d[6],
         }
     }
     output.rotation_wxyz = matrix_to_quaternion_like_pytorch3d(decomposed_rotation_matrix);
+    // Official post-decode rescale (inference_pipeline.py scale *=
+    // downsample_factor): applied after the rotation decomposition so the
+    // decomposed rotation stays untouched, exactly like the official order.
+    if (downsample_factor > 1) {
+        for (float& value : output.scale) value *= static_cast<float>(downsample_factor);
+    }
     if (!all_finite(output.rotation_wxyz.data(), output.rotation_wxyz.size()) ||
         !all_finite(output.scale.data(), output.scale.size()) ||
         !all_finite(output.translation.data(), output.translation.size()) ||
@@ -211,19 +218,35 @@ bool write_native_pose_json(const std::string& path, const NativeInstancePose& p
         return false;
     }
     stream << std::setprecision(std::numeric_limits<float>::max_digits10);
-    stream << "{\n  \"schema\": \"sam3d.native-pose.v1\",\n"
-           << "  \"convention\": \"ScaleShiftInvariant\",\n  \"rotation_wxyz\": ";
+    // Top level follows the official pipeline pose receipt (batch-nested
+    // rotation/translation/scale with the per-axis scale collapsed to its
+    // mean, exactly like the pose_decoder wrapper in inference_utils.py) so
+    // run_ggml.sh and run_python.sh pose receipts are interchangeable. The
+    // raw native decoder fields, including the per-axis scale, remain under
+    // "native" for the parity verifiers.
+    const float uniform_scale =
+        (pose.scale[0] + pose.scale[1] + pose.scale[2]) / 3.0f;
+    stream << "{\n  \"schema\": \"sam3d.native-pose.v2\",\n"
+           << "  \"rotation\": [";
     write_array(stream, pose.rotation_wxyz);
-    stream << ",\n  \"translation\": ";
+    stream << "],\n  \"translation\": [";
     write_array(stream, pose.translation);
-    stream << ",\n  \"scale\": ";
+    stream << "],\n  \"scale\": [[" << uniform_scale << ',' << uniform_scale
+           << ',' << uniform_scale << "]],\n"
+           << "  \"native\": {\n"
+           << "    \"convention\": \"ScaleShiftInvariant\",\n"
+           << "    \"rotation_wxyz\": ";
+    write_array(stream, pose.rotation_wxyz);
+    stream << ",\n    \"translation\": ";
+    write_array(stream, pose.translation);
+    stream << ",\n    \"scale\": ";
     write_array(stream, pose.scale);
-    stream << ",\n  \"translation_scale\": " << pose.translation_scale
-           << ",\n  \"scene_scale\": ";
+    stream << ",\n    \"translation_scale\": " << pose.translation_scale
+           << ",\n    \"scene_scale\": ";
     write_array(stream, pose.scene_scale);
-    stream << ",\n  \"scene_shift\": ";
+    stream << ",\n    \"scene_shift\": ";
     write_array(stream, pose.scene_shift);
-    stream << "\n}\n";
+    stream << "\n  }\n}\n";
     if (!stream) {
         error = "failed while writing pose output: " + path;
         return false;

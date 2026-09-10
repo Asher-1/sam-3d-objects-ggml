@@ -1,0 +1,35 @@
+{
+  "schema": "sam3d.e2e.dtype-contract-validation.v1",
+  "contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/vulkan_dtype_contract.json",
+  "backend": "vulkan",
+  "model_dtypes": {
+    "base": "q4_k",
+    "ss": "q4_k",
+    "ss_decoder": "q4_k",
+    "slat": "q4_k",
+    "gs": "q4_k",
+    "mesh": "q4_k"
+  },
+  "stage_count": 10,
+  "stages": [
+    "gaussian_decoder",
+    "mesh_decoder",
+    "slat_condition_dino",
+    "slat_condition_fuser",
+    "slat_flow",
+    "ss_condition_dino",
+    "ss_condition_fuser",
+    "ss_condition_pointpatch",
+    "ss_decoder",
+    "ss_flow"
+  ],
+  "entry_count": 164,
+  "aggregated_graph_nodes": 94566,
+  "mul_mat_source_types": [
+    "f16",
+    "f32",
+    "q4_k"
+  ],
+  "expected_weight_type": "q4_k",
+  "passed": true
+}

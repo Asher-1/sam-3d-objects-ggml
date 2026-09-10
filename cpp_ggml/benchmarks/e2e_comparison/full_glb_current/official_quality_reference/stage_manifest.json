@@ -1,11 +1,11 @@
 {
   "reference_provenance": {
     "schema": "sam3d.official-e2e-reference.v2",
-    "generated_at_utc": "2026-09-10T06:25:59Z",
+    "generated_at_utc": "2026-09-17T10:27:56Z",
     "sampling_seed_mode": "pipeline",
     "ss_dtype": "bf16",
     "seed": 42,
-    "repository_git_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+    "repository_git_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
     "python_executable": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11",
     "python_version": "3.11.16 | packaged by conda-forge | (main, Aug 21 2026, 22:44:51) [GCC 14.4.0]",
     "torch_version": "2.5.1+cu121",
@@ -36,7 +36,7 @@
     "sources": {
       "dump_script": {
         "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/dump_e2e_stages.py",
-        "sha256": "682d5064e5fc7058c32919750c71f4333fbfb1eaa3e08f09a35a2b371733ee31"
+        "sha256": "398f8c245d0f5acc3e2d16acfac682d29b3cc7ca83bb901533a0751010ec88ed"
       },
       "inference_pipeline": {
         "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/pipeline/inference_pipeline.py",
@@ -434,8 +434,8 @@
       26281,
       8
     ],
-    "min": -9.557464599609375,
-    "max": 6.3715972900390625
+    "min": -9.556306838989258,
+    "max": 6.379013538360596
   },
   "slat_coords": {
     "file": "slat_coords.samt",
@@ -448,21 +448,21 @@
   "decode_mesh_face_normal": {
     "file": "decode_mesh_face_normal.samt",
     "shape": [
-      970176,
+      969940,
       3,
       3
     ],
-    "min": -0.9999999403953552,
-    "max": 1.0
+    "min": -1.0,
+    "max": 0.9999999403953552
   },
   "decode_mesh_faces": {
     "file": "decode_mesh_faces.samt",
     "shape": [
-      970176,
+      969940,
       3
     ],
     "min": 0.0,
-    "max": 485075.0
+    "max": 484951.0
   },
   "decode_mesh_reg_loss": "None",
   "decode_mesh_res": "256",
@@ -472,20 +472,20 @@
   "decode_mesh_vertex_attrs": {
     "file": "decode_mesh_vertex_attrs.samt",
     "shape": [
-      485076,
+      484952,
       6
     ],
-    "min": 0.006243931595236063,
-    "max": 0.8823276162147522
+    "min": 0.006353790406137705,
+    "max": 0.8826057314872742
   },
   "decode_mesh_vertices": {
     "file": "decode_mesh_vertices.samt",
     "shape": [
-      485076,
+      484952,
       3
     ],
-    "min": -0.49948105216026306,
-    "max": 0.4997897744178772
+    "min": -0.4994794428348541,
+    "max": 0.4997979402542114
   },
   "decode_mesh_keys": [
     "face_normal",
@@ -505,8 +505,8 @@
       1,
       3
     ],
-    "min": -2.234722137451172,
-    "max": 4.700082302093506
+    "min": -2.122434616088867,
+    "max": 4.715147018432617
   },
   "decode_gaussian__features_rest": "None",
   "decode_gaussian__opacity": {
@@ -515,8 +515,8 @@
       840992,
       1
     ],
-    "min": -7.747718334197998,
-    "max": 20.490249633789062
+    "min": -7.592810153961182,
+    "max": 20.412742614746094
   },
   "decode_gaussian__rotation": {
     "file": "decode_gaussian__rotation.samt",
@@ -524,8 +524,8 @@
       840992,
       4
     ],
-    "min": -1.223921298980713,
-    "max": 0.687838077545166
+    "min": -1.2404578924179077,
+    "max": 0.6882789134979248
   },
   "decode_gaussian__scaling": {
     "file": "decode_gaussian__scaling.samt",
@@ -533,8 +533,8 @@
       840992,
       3
     ],
-    "min": -20.38768196105957,
-    "max": 1.7758804559707642
+    "min": -20.58860969543457,
+    "max": 1.7752891778945923
   },
   "decode_gaussian__xyz": {
     "file": "decode_gaussian__xyz.samt",
@@ -542,8 +542,8 @@
       840992,
       3
     ],
-    "min": 0.0023460080847144127,
-    "max": 0.9967373013496399
+    "min": 0.0023260749876499176,
+    "max": 0.9967372417449951
   },
   "decode_gaussian_aabb": {
     "file": "decode_gaussian_aabb.samt",
@@ -554,20 +554,20 @@
     "max": 1.0
   },
   "decode_gaussian_active_sh_degree": "0",
-  "decode_gaussian_covariance_activation": "<function Gaussian.build_covariance_from_scaling_rotation at 0x7f55141549a0>",
+  "decode_gaussian_covariance_activation": "<function Gaussian.build_covariance_from_scaling_rotation at 0x7f20d39b5260>",
   "decode_gaussian_device": "cuda",
   "decode_gaussian_init_params": "{'aabb': [-0.5, -0.5, -0.5, 1.0, 1.0, 1.0], 'sh_degree': 0, 'mininum_kernel_size': 0.0009, 'scaling_bias': 0.004, 'opacity_bias': 0.1, 'scaling_activation': 'softplus'}",
-  "decode_gaussian_inverse_opacity_activation": "<function inverse_sigmoid at 0x7f5514154400>",
-  "decode_gaussian_inverse_scaling_activation": "<function softplus_inverse_scaling_activation at 0x7f5628d07f60>",
+  "decode_gaussian_inverse_opacity_activation": "<function inverse_sigmoid at 0x7f20d39b4cc0>",
+  "decode_gaussian_inverse_scaling_activation": "<function softplus_inverse_scaling_activation at 0x7f20d3994860>",
   "decode_gaussian_mininum_kernel_size": "0.0009",
-  "decode_gaussian_opacity_activation": "<built-in method sigmoid of type object at 0x7f57e80b4240>",
+  "decode_gaussian_opacity_activation": "<built-in method sigmoid of type object at 0x7f23a7972240>",
   "decode_gaussian_opacity_bias": {
     "file": "decode_gaussian_opacity_bias.samt",
     "shape": [],
     "min": -2.1972246170043945,
     "max": -2.1972246170043945
   },
-  "decode_gaussian_rotation_activation": "<function normalize at 0x7f5737f4ad40>",
+  "decode_gaussian_rotation_activation": "<function normalize at 0x7f22f781f880>",
   "decode_gaussian_rots_bias": {
     "file": "decode_gaussian_rots_bias.samt",
     "shape": [
@@ -611,27 +611,27 @@
     "scaling_bias",
     "sh_degree"
   ],
-  "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply",
+  "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply",
   "asset_mincut_candidate_faces": {
     "file": "asset_mincut_candidate_faces.samt",
     "shape": [
-      24356
+      24286
     ],
     "dtype": "i32"
   },
   "asset_mincut_vertices_zup": {
     "file": "asset_mincut_vertices_zup.samt",
     "shape": [
-      12168,
+      12192,
       3
     ],
-    "min": -0.4995611011981964,
-    "max": 0.4998987317085266
+    "min": -0.49947747588157654,
+    "max": 0.4999887943267822
   },
   "asset_mincut_faces": {
     "file": "asset_mincut_faces.samt",
     "shape": [
-      24152,
+      24211,
       3
     ],
     "dtype": "i32"
@@ -639,16 +639,16 @@
   "asset_decimated_vertices_zup": {
     "file": "asset_decimated_vertices_zup.samt",
     "shape": [
-      24218,
+      24208,
       3
     ],
-    "min": -0.4995611011981964,
-    "max": 0.4998987317085266
+    "min": -0.49947747588157654,
+    "max": 0.4999887943267822
   },
   "asset_decimated_faces": {
     "file": "asset_decimated_faces.samt",
     "shape": [
-      48508,
+      48497,
       3
     ],
     "dtype": "i32"
@@ -656,24 +656,24 @@
   "asset_decimated_visibility": {
     "file": "asset_decimated_visibility.samt",
     "shape": [
-      48508
+      48497
     ],
     "min": 0.0,
-    "max": 0.45900002121925354
+    "max": 0.4580000340938568
   },
   "asset_postprocess_vertices": {
     "file": "asset_postprocess_vertices.samt",
     "shape": [
-      15792,
+      15816,
       3
     ],
-    "min": -0.4995611011981964,
-    "max": 0.4998987317085266
+    "min": -0.49947747588157654,
+    "max": 0.4999887943267822
   },
   "asset_postprocess_faces": {
     "file": "asset_postprocess_faces.samt",
     "shape": [
-      24504,
+      24554,
       3
     ],
     "dtype": "i32"
@@ -681,11 +681,11 @@
   "asset_uv": {
     "file": "asset_uv.samt",
     "shape": [
-      15792,
+      15816,
       2
     ],
-    "min": 0.00042158516589552164,
-    "max": 0.9995784163475037
+    "min": 0.0,
+    "max": 0.9995610117912292
   },
   "bake_extrinsics": {
     "file": "bake_extrinsics.samt",

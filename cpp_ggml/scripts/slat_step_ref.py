@@ -17,31 +17,17 @@ import os
 import struct
 
 import numpy as np
+from samt_io import read_samt as load_samt
+from samt_io import write_samt_f32
 import torch
 
 from gguf_torch_loader import replace_backbone_from_gguf
 
-SAMT_MAGIC = b"SAMT"
 
 
-def load_samt(path):
-    with open(path, "rb") as f:
-        f.read(4)
-        nd = struct.unpack("<i", f.read(4))[0]
-        ne = struct.unpack(f"<{nd}q", f.read(8 * nd))
-        dt = struct.unpack("<i", f.read(4))[0]
-        data = np.frombuffer(f.read(), dtype="<f4" if dt == 0 else "<i4")
-    return ne, data
 
 
-def write_samt_f32(path, ne, data):
-    data = np.ascontiguousarray(data, dtype="<f4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))
-        f.write(struct.pack("<i", 0))
-        f.write(data.tobytes())
+
 
 
 def main():
@@ -100,18 +86,47 @@ def main():
     cap = {}
     wbb = gen.reverse_fn.backbone
 
+    def snapshot_f32(tensor):
+        """Freeze a CUDA tensor before later sparse operators can reuse storage."""
+        return tensor.detach().float().clone().cpu()
+
+    def snapshot(tensor):
+        """Freeze a non-floating diagnostic tensor on its producing device."""
+        return tensor.detach().clone().cpu()
+
     def tok_hook(name):
         def hook(mod, inp, out):
             tt = out[0] if isinstance(out, tuple) else out
             if isinstance(tt, torch.Tensor):
-                cap[name] = tt.detach().float().cpu()
+                cap[name] = snapshot_f32(tt)
             else:
-                cap[name] = tt.feats.detach().float().cpu()
+                cap[name] = snapshot_f32(tt.feats)
+        return hook
+
+    def sparse_input_hook(name):
+        def hook(_, values):
+            value = values[0]
+            tensor = value.feats if hasattr(value, "feats") else value
+            cap[name] = snapshot_f32(tensor)
+            # Sparse convolution may use an indice set cached by spconv rather
+            # than a freshly materialized neighbourhood. Keep the coordinates
+            # at the exact pre-hook boundary so table validation compares the
+            # tensor the reference operator actually receives.
+            if hasattr(value, "coords"):
+                cap[f"{name}_coords"] = snapshot_f32(value.coords)
         return hook
 
     wbb.input_layer.register_forward_hook(tok_hook("slat_input_layer"))
+    wbb.t_embedder.register_forward_hook(tok_hook("slat_t_emb_f32"))
     for i, blk in enumerate(wbb.input_blocks):
+        blk.register_forward_hook(tok_hook(f"slat_ib{i}_out"))
+        blk.norm1.register_forward_hook(tok_hook(f"slat_ib{i}_norm1"))
+        # Conv1 receives the exact post-SiLU activation. A pre-hook avoids
+        # reimplementing the model's activation in this diagnostic reference.
+        blk.conv1.register_forward_pre_hook(sparse_input_hook(f"slat_ib{i}_silu1"))
         blk.conv1.register_forward_hook(tok_hook(f"slat_ib{i}_conv1"))
+        blk.norm2.register_forward_hook(tok_hook(f"slat_ib{i}_norm2"))
+        blk.conv2.register_forward_pre_hook(sparse_input_hook(f"slat_ib{i}_silu2"))
         blk.conv2.register_forward_hook(tok_hook(f"slat_ib{i}_conv2"))
         if blk.updown is not None:
             blk.updown.register_forward_hook(tok_hook(f"slat_ib{i}_updown"))
@@ -125,7 +140,7 @@ def main():
     orig_pos = type(wbb.pos_embedder).forward
     def pos_fwd(self, xx, _f=orig_pos):
         e = _f(self, xx)
-        cap["slat_ape"] = e.detach().float().cpu()
+        cap["slat_ape"] = snapshot_f32(e)
         return e
     wbb.pos_embedder.forward = pos_fwd.__get__(wbb.pos_embedder)
 
@@ -133,7 +148,7 @@ def main():
     orig_updown = type(wbb.input_blocks[1].updown).forward
     def ud_fwd(self, st, _f=orig_updown):
         out = _f(self, st)
-        cap["slat_down_coords"] = out.coords.detach().cpu()
+        cap["slat_down_coords"] = snapshot(out.coords)
         return out
     wbb.input_blocks[1].updown.forward = ud_fwd.__get__(wbb.input_blocks[1].updown)
 
@@ -144,7 +159,7 @@ def main():
             def hook(m, i, o):
                 tt = o[0] if isinstance(o, tuple) else o
                 tt = tt.feats if hasattr(tt, "feats") else tt
-                cap2[name] = tt.detach().float().cpu()
+                cap2[name] = snapshot_f32(tt)
             return hook
         blk0s = wbb.blocks[0]
         blk0s.adaLN_modulation.register_forward_hook(tk("b0_adaln"))
@@ -155,11 +170,11 @@ def main():
         blk0s.self_attn.q_rms_norm.register_forward_hook(tk("b0_qrms"))
         def qpre(m, args):
             tt = args[0]
-            cap2["b0_qpre"] = (tt.feats if hasattr(tt, "feats") else tt).detach().float().cpu()
+            cap2["b0_qpre"] = snapshot_f32(tt.feats if hasattr(tt, "feats") else tt)
         blk0s.self_attn.q_rms_norm.register_forward_pre_hook(qpre)
         def atn_in(m, i, o):
             tt = i[0]
-            cap2["b0_attn_in"] = (tt.feats if hasattr(tt, "feats") else tt).detach().float().cpu()
+            cap2["b0_attn_in"] = snapshot_f32(tt.feats if hasattr(tt, "feats") else tt)
         blk0s.self_attn.register_forward_hook(tk("b0_attn_inx"))
         # keep the input capture too (pre-modulate from norm1)
         blk0s.norm1.register_forward_hook(atn_in)
@@ -167,7 +182,7 @@ def main():
         b0 = wbb.blocks[0]
         ob = b0._forward
         def b0fwd(xx, mod, ctx2, _f=ob):
-            cap2["in"] = xx.feats.detach().float().cpu()
+            cap2["in"] = snapshot_f32(xx.feats)
             return _f(xx, mod, ctx2)
         b0._forward = b0fwd
         y = wbb(x, t, cond, coords, cfg=False)
@@ -188,7 +203,7 @@ def main():
                        list(v.shape[::-1]), v)
         print(f"[ref] {k}: {tuple(v.shape)}")
     write_samt_f32(os.path.join(args.out_dir, "slat_v.samt"),
-                   list(y.shape[::-1]), y[0].float().cpu())
+                   list(y.shape[::-1]), snapshot_f32(y[0]))
     print(f"[ref] done -> {args.out_dir}")
 
 

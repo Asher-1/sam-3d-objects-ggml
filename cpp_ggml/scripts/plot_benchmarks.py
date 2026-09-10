@@ -31,6 +31,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from samt_io import read_samt_f32
 from matplotlib.colors import LogNorm
 
 BENCH_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
@@ -47,17 +48,6 @@ CONFIG_COLORS = {"CPU 8T": "#4C72B0", "CPU 32T": "#64B5CD",
                  "CUDA": "#DD8452", "Vulkan": "#55A868"}
 
 
-def read_samt_f32(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with open(path, "rb") as f:
-        if f.read(4) != b"SAMT":
-            raise ValueError(f"{path}: bad magic")
-        (ndims,) = struct.unpack("<i", f.read(4))
-        ne = struct.unpack(f"<{ndims}q", f.read(8 * ndims))  # ne is int64 on disk
-        (ttype,) = struct.unpack("<i", f.read(4))
-        if ttype != 0:
-            raise ValueError(f"{path}: expected F32 payload, type={ttype}")
-        data = np.frombuffer(f.read(), dtype="<f4")
-    return ne, data
 
 
 def norm_backend(name: str) -> str:

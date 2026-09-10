@@ -23,6 +23,8 @@ from pathlib import Path
 os.environ.setdefault("LIDRA_SKIP_INIT", "true")
 
 import numpy as np
+from samt_io import load_samt
+from samt_io import save_samt
 import torch
 import trimesh
 import trimesh.visual
@@ -33,49 +35,8 @@ from sam3d_objects.model.backbone.tdfy_dit.utils import postprocessing_utils
 from sam3d_objects.model.backbone.tdfy_dit.utils.render_utils import render_multiview
 
 
-GGML_F32 = 0
-GGML_I32_TYPES = {26, 30}
 
 
-def load_samt(path: Path) -> np.ndarray:
-    """Load the project SAMT interchange tensor using its logical NumPy shape."""
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        if rank <= 0 or rank > 8:
-            raise ValueError(f"{path}: invalid SAMT rank {rank}")
-        ggml_shape = struct.unpack(f"<{rank}q", stream.read(rank * 8))
-        (ggml_type,) = struct.unpack("<i", stream.read(4))
-        if ggml_type == GGML_F32:
-            dtype = np.dtype("<f4")
-        elif ggml_type in GGML_I32_TYPES:
-            dtype = np.dtype("<i4")
-        else:
-            raise ValueError(f"{path}: unsupported SAMT ggml type {ggml_type}")
-        values = np.frombuffer(stream.read(), dtype=dtype)
-    expected = int(np.prod(ggml_shape, dtype=np.int64))
-    if values.size != expected:
-        raise ValueError(f"{path}: expected {expected} values, found {values.size}")
-    return values.reshape(tuple(reversed(ggml_shape))).copy()
-
-
-def save_samt(path: Path, values: np.ndarray) -> None:
-    """Write a NumPy [rows, columns] array in the C++ SAMT memory layout."""
-    values = np.ascontiguousarray(values)
-    if values.dtype == np.float32:
-        ggml_type = GGML_F32
-    elif values.dtype == np.int32:
-        ggml_type = 26
-    else:
-        raise ValueError(f"{path}: SAMT only accepts F32/I32 here, got {values.dtype}")
-    ggml_shape = tuple(reversed(values.shape))
-    with path.open("wb") as stream:
-        stream.write(b"SAMT")
-        stream.write(struct.pack("<i", len(ggml_shape)))
-        stream.write(struct.pack(f"<{len(ggml_shape)}q", *ggml_shape))
-        stream.write(struct.pack("<i", ggml_type))
-        stream.write(values.tobytes())
 
 
 def require_matrix(root: Path, name: str, columns: int, dtype: np.dtype) -> np.ndarray:

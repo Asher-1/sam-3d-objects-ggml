@@ -20,20 +20,31 @@ struct SlatTables {
     // sentinel. Coarse grids are partial (a 2x2x2 block need not be full),
     // so this is NOT a reshape of fine_to_coarse.
     std::vector<int32_t> coarse_children;
-    std::vector<float> coarse_inv_count;   // (nc) 1/|children| for the mean
+    std::vector<float> coarse_count;       // (nc) |children|+1 divisor for the mean
     // SubMConv3d neighbor rows, offset-major flattened (n*27 + o) with
     // o = kd*9 + kh*3 + kw matching the (Cout, 3,3,3, Cin) weight flatten;
     // missing neighbors point at the zero sentinel row (index N in a
     // (N+1)-row feature table).
     std::vector<int32_t> conv_fine;    // (27*nf)
     std::vector<int32_t> conv_coarse;  // (27*nc)
+    // spconv-compatible tables. Indices are offset-major (27*n), missing
+    // neighbours are -1, and masks are a stable ascending ordering of one
+    // valid-neighbour bitset per output token. argsort maps each sorted mask
+    // row back to the corresponding token, matching spconv implicit GEMM.
+    std::vector<int32_t> conv_fine_spconv;
+    std::vector<int32_t> conv_coarse_spconv;
+    std::vector<int32_t> conv_fine_mask;
+    std::vector<int32_t> conv_coarse_mask;
+    std::vector<int32_t> conv_fine_argsort;
+    std::vector<int32_t> conv_coarse_argsort;
     // AbsolutePositionEmbedder output for the coarse grid, (1024, nc) with
     // channel-fastest layout (a plain graph input).
     std::vector<float> ape;
 
     // coords: (nf, 4) [batch, x, y, z]; builds every table. Returns false on
     // out-of-range coordinates.
-    bool build(const int32_t* coords, int64_t n_fine, int channels = 1024);
+    bool build(const int32_t* coords, int64_t n_fine, int channels = 1024,
+               bool dump_tables = false);
 };
 
 // Swin-window attention tables for the GS decoder (slat_decoder_gs). The

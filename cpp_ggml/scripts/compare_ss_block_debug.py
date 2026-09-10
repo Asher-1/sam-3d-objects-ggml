@@ -19,6 +19,7 @@ import struct
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt as load_samt
 
 
 # (native debug stage, output index, official reference basename). ``proj_in``
@@ -27,6 +28,10 @@ STAGES: tuple[tuple[str, int, str], ...] = (
     ("proj_in", 0, "ss_proj_shape"),
     ("proj_in", 1, "ss_proj_pose"),
     ("b0_adaln", 0, "ss_b0_adaln"),
+    ("b0_attn_in_s", 0, "ss_b0_attn_in_shape"),
+    ("b0_attn_in_p", 0, "ss_b0_attn_in_6drotation_normalized"),
+    ("b0_qkv_shape", 0, "ss_b0_qkv_shape"),
+    ("b0_qkv_6drotation_normalized", 0, "ss_b0_qkv_6drotation_normalized"),
     ("b0_qpre_shape", 0, "ss_b0_qpre_shape"),
     ("b0_qpre_6drotation_normalized", 0, "ss_b0_qpre_6drotation_normalized"),
     ("b0_q_shape", 0, "ss_b0_q_shape"),
@@ -52,19 +57,6 @@ STAGES: tuple[tuple[str, int, str], ...] = (
 )
 
 
-def load_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (value_type,) = struct.unpack("<i", stream.read(4))
-        if value_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {value_type}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    if values.size != int(np.prod(shape)):
-        raise ValueError(f"{path}: payload size does not match {shape}")
-    return shape, values
 
 
 def error(reference: np.ndarray, actual: np.ndarray) -> dict[str, float]:
@@ -128,7 +120,7 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema": "sam3d.ss_block0_debug_comparison.v2",
+        "schema": "sam3d.ss_block0_debug_comparison.v3",
         "reference_weight_scope": args.reference_weight_scope,
         "candidate_weight_scope": "gguf",
         "max_stage_mae": args.max_stage_mae,

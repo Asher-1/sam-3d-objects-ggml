@@ -17,23 +17,11 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt
 import torch
 from moge.model.v1 import MoGeModel
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (dtype,) = struct.unpack("<i", stream.read(4))
-        if dtype != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, found ggml type {dtype}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    if values.size != int(np.prod(shape)):
-        raise ValueError(f"{path}: truncated tensor")
-    return shape, values
 
 
 def deterministic_image(width: int, height: int) -> torch.Tensor:
@@ -125,17 +113,15 @@ def main() -> int:
         print("+", " ".join(command), flush=True)
         environment = None
         if args.strict_attention or args.manual_attention:
+            # The former process-wide attention switches (SAM3D_STRICT_ATTN /
+            # SAM3D_MANUAL_ATTN) and the TF32 override (SAM3D_E2E_F32_MATMUL)
+            # became explicit graph options on 2026-09-11; the MoGe smoke
+            # command no longer reads them. Keep the GGML_CUBLAS math-mode
+            # override, which is still honored before handle creation and
+            # prevents forced TF32 from obscuring a strict-F32 diagnosis.
             environment = dict(__import__("os").environ)
-            environment["SAM3D_E2E_F32_MATMUL"] = "1"
-            # The combined ggml patch maps this to CUBLAS_DEFAULT_MATH before
-            # creating its CUDA handle, preventing forced TF32 tensor-op math
-            # from obscuring a strict F32 parity diagnosis.
             if args.backend == "cuda":
                 environment["GGML_CUDA_STRICT_F32"] = "1"
-        if args.strict_attention:
-            environment["SAM3D_STRICT_ATTN"] = "1"
-        if args.manual_attention:
-            environment["SAM3D_MANUAL_ATTN"] = "1"
         subprocess.run(command, check=True, env=environment)
         points_shape, points = read_samt(prefix.with_suffix(".points.samt"))
         mask_shape, mask = read_samt(prefix.with_suffix(".mask_logits.samt"))

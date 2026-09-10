@@ -1,6 +1,6 @@
 {
   "schema": "sam3d.e2e.dtype-contract-validation.v1",
-  "contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract.json",
+  "contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract.json",
   "backend": "cuda",
   "model_dtypes": {
     "base": "q8_0",
@@ -25,7 +25,7 @@
     "ss_flow"
   ],
   "entry_count": 159,
-  "aggregated_graph_nodes": 58341,
+  "aggregated_graph_nodes": 59120,
   "mul_mat_source_types": [
     "f16",
     "f32",

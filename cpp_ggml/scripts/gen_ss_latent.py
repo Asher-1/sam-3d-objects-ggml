@@ -26,19 +26,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from samt_io import write_samt_f32
 
-SAMT_MAGIC = b"SAMT"
+
 GGML_TYPE_F32 = 0
 
 
-def write_samt_f32(path: Path, ne: list[int], data: np.ndarray) -> None:
-    data = np.ascontiguousarray(data, dtype="<f4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))  # ne is int64 on disk
-        f.write(struct.pack("<i", GGML_TYPE_F32))
-        f.write(data.tobytes())
 
 
 def main() -> int:

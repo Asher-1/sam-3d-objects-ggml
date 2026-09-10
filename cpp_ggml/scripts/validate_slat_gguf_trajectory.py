@@ -19,22 +19,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from samt_io import read_samt
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (value_type,) = struct.unpack("<i", stream.read(4))
-        if value_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {value_type}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    expected = int(np.prod(shape))
-    if values.size != expected:
-        raise ValueError(f"{path}: expected {expected} values, got {values.size}")
-    return tuple(int(dimension) for dimension in shape), values
 
 
 def error(reference: tuple[tuple[int, ...], np.ndarray],
@@ -149,25 +136,6 @@ def main() -> int:
         debug_dir = temporary_dir / "debug"
         debug_dir.mkdir()
         env = os.environ.copy()
-        # A trajectory gate owns every model-selection and stage control.
-        # Inherited diagnostic flags would turn this into a different graph.
-        for name in (
-            "SAM3D_E2E_SS_DTYPE", "SAM3D_E2E_SS_DECODER_DTYPE",
-            "SAM3D_E2E_SLAT_DTYPE", "SAM3D_E2E_GS_DTYPE", "SAM3D_E2E_MESH_DTYPE",
-            "SAM3D_E2E_SKIP_COND", "SAM3D_E2E_COORDS_PATH",
-            "SAM3D_E2E_DEBUG_SLAT_FORWARDS", "SAM3D_E2E_DEBUG_SLAT_OUTPUT",
-            "SAM3D_E2E_DEBUG_ONCE", "SAM3D_E2E_PROFILE_JSONL",
-        ):
-            env.pop(name, None)
-        env.update({
-            "SAM3D_BACKEND": args.backend,
-            "SAM3D_E2E_DTYPE": args.dtype,
-            "SAM3D_E2E_STAGE": "slat",
-            "SAM3D_E2E_REFERENCE_COORDS": "1",
-            "SAM3D_E2E_SLAT_COND_PATH": str((args.e2e_dir / "slat_cond_tokens.samt").resolve()),
-            "SAM3D_E2E_DUMP_SLAT_STEPS": "1",
-            "SAM3D_E2E_SLAT_FLOW_ONLY": "1",
-        })
         lib_dir = executable.parents[1] / "lib"
         if lib_dir.is_dir():
             env["LD_LIBRARY_PATH"] = str(lib_dir) + os.pathsep + env.get("LD_LIBRARY_PATH", "")
@@ -176,6 +144,12 @@ def main() -> int:
             str(args.e2e_dir.resolve()), "--out", str(temporary_dir / "unused.ply"),
             "--noise-dir", str(args.e2e_dir.resolve()), "--dbg-dir", str(debug_dir),
             "--seed", str(args.seed), "--threads", str(args.threads),
+            "--backend", args.backend,
+            "--dtype", args.dtype,
+            "--stage", "slat",
+            "--reference-coords",
+            "--slat-cond-path", str((args.e2e_dir / "slat_cond_tokens.samt").resolve()),
+            "--dump-slat-steps", "--slat-flow-only",
         ]
         print("+", " ".join(command), flush=True)
         subprocess.run(command, env=env, check=True)

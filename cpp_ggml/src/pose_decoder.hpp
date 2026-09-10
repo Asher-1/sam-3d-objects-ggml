@@ -27,6 +27,15 @@ struct NativeInstancePose {
 // Match sam3d_objects.pipeline.inference_utils.pose_decoder("ScaleShiftInvariant")
 // for one batch element.  All arguments contain F32 values in the same order
 // as their exported SAMT tensors.
+//
+// downsample_factor reproduces the official post-decode rescale
+// (inference_pipeline.py: "Rescaling scale by <factor> after downsampling",
+// scale *= downsample_factor): when the sparse support exceeds max_coords the
+// official pipeline decodes on the downsampled grid and compensates the
+// instance scale by the same factor.  It multiplies the decoded scale only -
+// the rotation is decomposed before the rescale, exactly like the official
+// order (pose_decoder first, scale rescale after).  Standalone decoders pass
+// the default 1.
 bool decode_scale_shift_invariant_pose(const float normalized_rotation_6d[6],
                                        const float log_scale[3],
                                        const float translation[3],
@@ -34,7 +43,8 @@ bool decode_scale_shift_invariant_pose(const float normalized_rotation_6d[6],
                                        const float scene_scale[3],
                                        const float scene_shift[3],
                                        NativeInstancePose& output,
-                                       std::string& error);
+                                       std::string& error,
+                                       int downsample_factor = 1);
 
 // Serialize an independently comparable, stable JSON pose artifact.  This is
 // deliberately separate from GLB export: the official inference pipeline

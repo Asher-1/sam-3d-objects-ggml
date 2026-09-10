@@ -38,8 +38,12 @@ struct GaussianRenderConfig {
     float far_plane = 1.6f;
     float radius = 2.0f;
     float fov_degrees = 40.0f;
-    // This is GaussianRenderer.pipe.kernel_size in the official renderer.
-    float kernel_size = 0.1f;
+    // gsplat parity: the official render paths all go through the gsplat
+    // backend, where GaussianRenderer.pipe.kernel_size is never consumed and
+    // the rasterizer applies its default eps2d = 0.3 screen-space low-pass.
+    // The vendored fork reads this value directly (see the fork's
+    // UPSTREAM.md "Local deltas"), so 0.3 reproduces the official dilation.
+    float kernel_size = 0.3f;
 };
 
 // Read the binary-little-endian PLY emitted by Gaussian.save_ply or the native

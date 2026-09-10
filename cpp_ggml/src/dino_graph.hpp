@@ -26,6 +26,8 @@ struct DinoGraph {
     // LayerNorm(eps 1e-5) of the pre-final-norm features, instead of the
     // register-dropped final-norm 1370.
     bool prenorm = false;
+    // A/B bisect: graph-level F32 QK^T -> softmax -> V instead of flash.
+    bool manual_attention = false;
     std::vector<ggml_tensor*> inputs;  // graph inputs (patch gather table)
     std::vector<std::shared_ptr<std::vector<int32_t>>> table_data;
 

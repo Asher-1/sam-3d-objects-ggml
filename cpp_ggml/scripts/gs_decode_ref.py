@@ -21,32 +21,15 @@ import os
 import struct
 
 import numpy as np
+from samt_io import read_samt as load_samt
+from samt_io import write_samt_f32
 import torch
 
-SAMT_MAGIC = b"SAMT"
 
 
-def load_samt(path):
-    with open(path, "rb") as f:
-        f.read(4)
-        nd = struct.unpack("<i", f.read(4))[0]
-        ne = struct.unpack(f"<{nd}q", f.read(8 * nd))
-        dt = struct.unpack("<i", f.read(4))[0]
-        if dt in (26, 30, 1):
-            data = np.frombuffer(f.read(), dtype="<i4")
-        else:
-            data = np.frombuffer(f.read(), dtype="<f4")
-    return ne, data
 
 
-def write_samt_f32(path, ne, data):
-    data = np.ascontiguousarray(data, dtype="<f4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))
-        f.write(struct.pack("<i", 0))
-        f.write(data.tobytes())
+
 
 
 def main():

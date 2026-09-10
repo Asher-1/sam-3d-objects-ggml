@@ -107,20 +107,16 @@ __device__ float4 computeCov2D(const float3& mean, float focal_x, float focal_y,
 
 	// Apply low-pass filter: every Gaussian should be at least
 	// one pixel wide/high. Discard 3rd row and column.
-
-	// compute the coef of alpha based on the detemintant
-	const float det_0 = max(1e-6, cov[0][0] * cov[1][1] - cov[0][1] * cov[0][1]);
-	const float det_1 = max(1e-6, (cov[0][0] + kernel_size) * (cov[1][1] + kernel_size) - cov[0][1] * cov[0][1]);
-	float coef = sqrt(det_0 / (det_1+1e-6) + 1e-6);
-
-	if (det_0 <= 1e-6 || det_1 <= 1e-6){
-		coef = 0.0f;
-	}
-
+	// Local delta (gsplat parity, recorded in UPSTREAM.md): the official
+	// scene render path is the gsplat backend with antialiased=False, which
+	// applies the eps2d screen-space low-pass WITHOUT the mip-splatting
+	// determinant compensation and never zeroes alpha for tiny determinants.
+	// The mip-splatting coef therefore stays 1 and cov2d only receives the
+	// low-pass term (the wrapper passes kernel_size = gsplat's eps2d = 0.3).
 	cov[0][0] += kernel_size;
 	cov[1][1] += kernel_size;
 
-	return { float(cov[0][0]), float(cov[0][1]), float(cov[1][1]), float(coef)};
+	return { float(cov[0][0]), float(cov[0][1]), float(cov[1][1]), 1.0f};
 }
 
 // Forward method for converting scale and rotation properties of each
@@ -197,7 +193,9 @@ __global__ void preprocessCUDA(int P, int D, int M,
 
 	// Initialize radius and touched tiles to 0. If this isn't changed,
 	// this Gaussian will not be processed further.
-	radii[idx] = 0;
+	// Local delta (gsplat parity): per-axis radii, see UPSTREAM.md.
+	radii[2 * idx] = 0;
+	radii[2 * idx + 1] = 0;
 	tiles_touched[idx] = 0;
 
 	// Perform near culling, quit if outside.
@@ -237,14 +235,40 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	// Compute extent in screen space (by finding eigenvalues of
 	// 2D covariance matrix). Use extent to compute a bounding rectangle
 	// of screen-space tiles that this Gaussian overlaps with. Quit if
-	// rectangle covers 0 tiles. 
-	float mid = 0.5f * (cov.x + cov.z);
-	float lambda1 = mid + sqrt(max(0.1f, mid * mid - det));
-	float lambda2 = mid - sqrt(max(0.1f, mid * mid - det));
-	float my_radius = ceil(3.f * sqrt(max(lambda1, lambda2)));
+	// rectangle covers 0 tiles.
+	// Local delta (gsplat parity, recorded in UPSTREAM.md): gsplat's
+	// ProjectionEWA3DGSFused uses an opacity-aware elliptical bounding
+	// box instead of the 3-sigma circle - the per-axis radius is
+	// extend * sqrt(cov2d[axis][axis]) with
+	// extend = min(3.33, sqrt(2 * ln(opacity / ALPHA_THRESHOLD))),
+	// splats below the alpha cutoff are culled before tiling, and the
+	// radii array becomes per-axis (radii[2*idx], radii[2*idx+1]).
+	const float opacity = opacities[idx];
+	if (opacity < 1.0f / 255.0f)
+		return;
+	float extend = 3.33f;
+	extend = min(extend, sqrtf(2.0f * __logf(opacity * 255.0f)));
 	float2 point_image = { ndc2Pix(p_proj.x, W), ndc2Pix(p_proj.y, H) };
+	float radius_x = ceilf(extend * sqrtf(cov.x));
+	float radius_y = ceilf(extend * sqrtf(cov.z));
+	if (radius_x <= 0.0f || radius_y <= 0.0f)
+		return;
+	radii[2 * idx] = (int)radius_x;
+	radii[2 * idx + 1] = (int)radius_y;
+	// Tile range exactly as gsplat's intersect_tile_kernel computes it,
+	// including its unsigned clamp order (floor of a negative coordinate
+	// wraps and clamps to tile_width, emptying the cover for splats fully
+	// outside the left/top image edge).
+	const float tile_size_f = 16.0f;
+	const float tile_fx = point_image.x / tile_size_f;
+	const float tile_fy = point_image.y / tile_size_f;
+	const float tile_radius_x = radius_x / tile_size_f;
+	const float tile_radius_y = radius_y / tile_size_f;
 	uint2 rect_min, rect_max;
-	getRect(point_image, my_radius, rect_min, rect_max, grid);
+	rect_min.x = min(max(0u, (uint32_t)floorf(tile_fx - tile_radius_x)), grid.x);
+	rect_min.y = min(max(0u, (uint32_t)floorf(tile_fy - tile_radius_y)), grid.y);
+	rect_max.x = min(max(0u, (uint32_t)ceilf(tile_fx + tile_radius_x)), grid.x);
+	rect_max.y = min(max(0u, (uint32_t)ceilf(tile_fy + tile_radius_y)), grid.y);
 	if ((rect_max.x - rect_min.x) * (rect_max.y - rect_min.y) == 0)
 		return;
 
@@ -260,7 +284,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 
 	// Store some useful helper data for the next steps.
 	depths[idx] = p_view.z;
-	radii[idx] = my_radius;
 	points_xy_image[idx] = point_image;
 	// Inverse 2D covariance and opacity neatly pack into one float4
 	conic_opacity[idx] = { conic.x, conic.y, conic.z, opacities[idx] * cov.w };
@@ -360,8 +383,11 @@ renderCUDA(
 			// Eq. (2) from 3D Gaussian splatting paper.
 			// Obtain alpha by multiplying with Gaussian opacity
 			// and its exponential falloff from mean.
-			// Avoid numerical instabilities (see paper appendix). 
-			float alpha = min(0.99f, con_o.w * exp(power));
+			// Avoid numerical instabilities (see paper appendix).
+			// Local delta (gsplat parity, recorded in UPSTREAM.md):
+			// clamp 0.999 and the fast-math __expf match the official
+			// gsplat classic rasterization path exactly.
+			float alpha = min(0.999f, con_o.w * __expf(power));
 			if (alpha < 1.0f / 255.0f)
 				continue;
 			float test_T = T * (1 - alpha);

@@ -6,17 +6,17 @@
   },
   "model_directory": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf",
   "binary_sha256": {
-    "cuda": "eae7cf830615fd11cdc3b66a0b7b8e1ea098e0608c831141781492eee2bafca0",
-    "vulkan": "068a080418958ba3f4647c5611b041097b45adcdc55a7f73897735ebbf6a403c",
-    "native_pbr": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021"
+    "cuda": "273fd4f50a179f831ba0475582464699c9137db8a9975ff9b05400f5898ac149",
+    "vulkan": "e6ae6767151f8142cac4b53423c5b1921610ddce0f3851725c397c7b6f9c6949",
+    "native_pbr": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c"
   },
-  "ggml_patch_sha256": "3a1e9abca3df1c99728c6a2f21cb0158f6f38ae7f8c00dca3ed0ffa9f261b270",
+  "ggml_patch_sha256": "318c0cd14c3bbc40764ea5baa09117d759f00acbd4e3197419165ed9bfa80e6c",
   "variants": {
     "f16": {
       "schema": "sam3d.e2e.provenance.v1",
-      "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+      "source_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
       "source_dirty": true,
-      "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+      "sam3d_cli_sha256": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c",
       "models": {
         "ss_generator": {
           "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-f16.gguf",
@@ -46,13 +46,13 @@
     },
     "q8_0": {
       "schema": "sam3d.e2e.provenance.v1",
-      "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+      "source_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
       "source_dirty": true,
-      "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+      "sam3d_cli_sha256": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c",
       "models": {
         "ss_generator": {
           "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q8_0.gguf",
-          "sha256": "02caa95014b18926926da8697a35cf83b633f023d5e9e6870e3b7aa14e21368e"
+          "sha256": "0ebb65088076191ccddd075fbaab80ef63de8760386462f1e929daf5b68b00f2"
         },
         "ss_decoder": {
           "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q8_0.gguf",
@@ -76,31 +76,31 @@
         }
       }
     },
-    "q4_0": {
+    "q4_k": {
       "schema": "sam3d.e2e.provenance.v1",
-      "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+      "source_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
       "source_dirty": true,
-      "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+      "sam3d_cli_sha256": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c",
       "models": {
         "ss_generator": {
-          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q4_0.gguf",
-          "sha256": "8d477ef5c236f2cbf9066a1bb5279fea144fe14f44907f677a9ad120614c8fbe"
+          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q4_k.gguf",
+          "sha256": "b658beeaee87e338761bc9507bd4d090045bd3ba784abf20132749f6e0200990"
         },
         "ss_decoder": {
-          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q4_0.gguf",
-          "sha256": "640c98f49a7a3ce22d91bfe29664c689bc7fd8ea51a7bf96c887e7cd465dd5ca"
+          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q4_k.gguf",
+          "sha256": "5de992845dc979067210052b49606a6e321fe300f588041b3be402cc508caad1"
         },
         "slat_generator": {
-          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q4_0.gguf",
-          "sha256": "fc2b67284646665a7939669d43b8de1416ccf2d8408b2ccacb4c04bef4d6aee1"
+          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q4_k.gguf",
+          "sha256": "2ccc9cf41681989a1141a342b837c8fd79898da5057e0abb33e0541a7e0db107"
         },
         "slat_decoder_gs": {
-          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q4_0.gguf",
-          "sha256": "a39d9669d3a9f71bb684d4550eff58e6beee099785e9153e52617bdbbc4da8d2"
+          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q4_k.gguf",
+          "sha256": "118ac7225383dc4d73201050aa4ac265b9a2021aa217fea03d04e609623b15ed"
         },
         "slat_decoder_mesh": {
-          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-q4_0.gguf",
-          "sha256": "b619645df5d15fd0b0f871f71850a3866e6b73468ada4e3b2ab9cf3363e5da68"
+          "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-q4_k.gguf",
+          "sha256": "a5b7b3e5691596d0e842bf0bab610a77add27a1cc0e68fb1093fd1137c68d287"
         },
         "moge": {
           "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf",

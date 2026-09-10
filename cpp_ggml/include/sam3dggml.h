@@ -62,6 +62,9 @@ struct RunStats {
     double gs_decode_ms = 0;
     int n_active_voxels = 0;
     int n_gaussians = 0;
+    // Session batch diagnostics: true when this request skipped the MoGe
+    // forward because the RGB content matched the previous request.
+    bool moge_pointmap_reused = false;
 };
 
 struct RunOutput {
@@ -114,9 +117,27 @@ struct ImageTo3DOptions {
     std::string conditions_out;
     int n_threads = 8;
     int seed = 42;
-    // Explicit F32 SS attention for an accuracy-first replay. This is slower
-    // and has a larger transient allocation than the normal flash path.
-    bool strict_ss_attention = false;
+    // Explicit F32 SS attention for an accuracy-first replay. The official
+    // SS backbone is an F32 model, so this is the default contract;
+    // --ss-attention normal (CLI) opts out for A/B bisects.
+    bool strict_ss_attention = true;
+    // A/B bisect: portable attention in the GS decoder even on CUDA.
+    bool gs_portable_attention = false;
+    // Vulkan/CPU path: PyTorch CUDA Philox distribution-block contract from
+    // `sam3d-cli rng-dump`. 0 falls back to the documented environment
+    // variable; a positive value makes the request self-contained.
+    unsigned philox_blocks = 0;
+    // Trajectory length for the SS and SLat flow samplers. The repository
+    // trajectory gate fixes 25 steps for both; the official deployment
+    // pipeline (pipeline.yaml) distills SS (ShortCut) to 2 steps and SLat to
+    // 12, which is the caliber the scene timings can be compared against.
+    int ss_steps = 25;
+    int slat_steps = 25;
+    // Hot-timing diagnostic: force the MoGe forward on every request even
+    // when the RGB content matches the previous one. Timing runs set this so
+    // the measured latency includes the real per-request MoGe cost instead
+    // of a cache hit that a production batch would take.
+    bool disable_moge_pointmap_cache = false;
 };
 
 // Execute the full native conditioned generation graph and write Gaussian PLY.
@@ -127,6 +148,36 @@ RunResult run_pipeline(const CliOptions& opts);
 // generation -> optional native PBR export. No Python or Torch process is
 // started by this API.
 RunResult run_image_to_3d(const ImageTo3DOptions& opts);
+
+// Reusable session for multi-mask batches over one source image. init() loads
+// the MoGe weights once and fixes the model/backend/dtype/thread settings;
+// every run() serves one request with complete isolation (fresh noise from
+// its seed, request-scoped activations and outputs). Repeated requests with
+// the same RGB content reuse the RGB-only MoGe point map; the mask merge and
+// condition preprocessing always run per request. The single-request
+// run_image_to_3d above is a thin one-shot session wrapper with identical
+// numerics.
+class ImageTo3DSession {
+  public:
+    ImageTo3DSession();
+    ~ImageTo3DSession();
+    ImageTo3DSession(const ImageTo3DSession&) = delete;
+    ImageTo3DSession& operator=(const ImageTo3DSession&) = delete;
+
+    // Prepares the shared resources from the request template. The models,
+    // backend, dtype and thread settings recorded here are fixed for the
+    // session; run() rejects requests that change any of them.
+    bool init(const ImageTo3DOptions& config, std::string& error);
+
+    // Executes one request. image_path/mask_path/seed/output paths may vary
+    // per request; models_dir/moge_model/backend/dtype/n_threads must match
+    // the init configuration.
+    RunResult run(const ImageTo3DOptions& opts);
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 // Version of the graph format emitted by the converter understood here.
 inline constexpr const char* kGraphFormatVersion = "1";

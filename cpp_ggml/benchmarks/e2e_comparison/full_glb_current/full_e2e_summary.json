@@ -15,17 +15,17 @@
     },
     "model_directory": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf",
     "binary_sha256": {
-      "cuda": "eae7cf830615fd11cdc3b66a0b7b8e1ea098e0608c831141781492eee2bafca0",
-      "vulkan": "068a080418958ba3f4647c5611b041097b45adcdc55a7f73897735ebbf6a403c",
-      "native_pbr": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021"
+      "cuda": "9da17a9be489c7b7449f96c4d73ccc432c6e5c34c4729133024d28a3575fd6aa",
+      "vulkan": "4ca5e628eb5ba7c4f2d6fc0e73c2068b1632409bbde9b9d1adef239dbbc4883c",
+      "native_pbr": "5cc6195663ef14c507da8ab74d9b386df4ef38e4aa069f1553f34e397035f258"
     },
-    "ggml_patch_sha256": "3a1e9abca3df1c99728c6a2f21cb0158f6f38ae7f8c00dca3ed0ffa9f261b270",
+    "ggml_patch_sha256": "318c0cd14c3bbc40764ea5baa09117d759f00acbd4e3197419165ed9bfa80e6c",
     "variants": {
       "f16": {
         "schema": "sam3d.e2e.provenance.v1",
-        "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+        "source_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
         "source_dirty": true,
-        "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+        "sam3d_cli_sha256": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c",
         "models": {
           "ss_generator": {
             "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-f16.gguf",
@@ -55,13 +55,13 @@
       },
       "q8_0": {
         "schema": "sam3d.e2e.provenance.v1",
-        "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+        "source_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
         "source_dirty": true,
-        "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+        "sam3d_cli_sha256": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c",
         "models": {
           "ss_generator": {
             "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q8_0.gguf",
-            "sha256": "02caa95014b18926926da8697a35cf83b633f023d5e9e6870e3b7aa14e21368e"
+            "sha256": "0ebb65088076191ccddd075fbaab80ef63de8760386462f1e929daf5b68b00f2"
           },
           "ss_decoder": {
             "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q8_0.gguf",
@@ -85,31 +85,31 @@
           }
         }
       },
-      "q4_0": {
+      "q4_k": {
         "schema": "sam3d.e2e.provenance.v1",
-        "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+        "source_revision": "40a77e7ca625744f4901efdab4bf04d49ee6d5dc",
         "source_dirty": true,
-        "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+        "sam3d_cli_sha256": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c",
         "models": {
           "ss_generator": {
-            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q4_0.gguf",
-            "sha256": "8d477ef5c236f2cbf9066a1bb5279fea144fe14f44907f677a9ad120614c8fbe"
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q4_k.gguf",
+            "sha256": "b658beeaee87e338761bc9507bd4d090045bd3ba784abf20132749f6e0200990"
           },
           "ss_decoder": {
-            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q4_0.gguf",
-            "sha256": "640c98f49a7a3ce22d91bfe29664c689bc7fd8ea51a7bf96c887e7cd465dd5ca"
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q4_k.gguf",
+            "sha256": "5de992845dc979067210052b49606a6e321fe300f588041b3be402cc508caad1"
           },
           "slat_generator": {
-            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q4_0.gguf",
-            "sha256": "fc2b67284646665a7939669d43b8de1416ccf2d8408b2ccacb4c04bef4d6aee1"
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q4_k.gguf",
+            "sha256": "2ccc9cf41681989a1141a342b837c8fd79898da5057e0abb33e0541a7e0db107"
           },
           "slat_decoder_gs": {
-            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q4_0.gguf",
-            "sha256": "a39d9669d3a9f71bb684d4550eff58e6beee099785e9153e52617bdbbc4da8d2"
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q4_k.gguf",
+            "sha256": "118ac7225383dc4d73201050aa4ac265b9a2021aa217fea03d04e609623b15ed"
           },
           "slat_decoder_mesh": {
-            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-q4_0.gguf",
-            "sha256": "b619645df5d15fd0b0f871f71850a3866e6b73468ada4e3b2ab9cf3363e5da68"
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-q4_k.gguf",
+            "sha256": "a5b7b3e5691596d0e842bf0bab610a77add27a1cc0e68fb1093fd1137c68d287"
           },
           "moge": {
             "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf",
@@ -118,7 +118,38 @@
         }
       }
     },
-    "capture_phase": "before any measured subprocess"
+    "capture_phase": "before any measured subprocess",
+    "binary_sha256_refresh": {
+      "previous": {
+        "cuda": "273fd4f50a179f831ba0475582464699c9137db8a9975ff9b05400f5898ac149",
+        "vulkan": "e6ae6767151f8142cac4b53423c5b1921610ddce0f3851725c397c7b6f9c6949",
+        "native_pbr": "108f9eb12623d3c65aa198cbad8a23b563fe8f67941da1e52887a1809a4b320c"
+      },
+      "reason": "ss-attention delivery default flipped to normal; all six native rows re-measured on the rebuilt binaries (2026-09-18)",
+      "row_receipt_hashes": {
+        "raw_native_cuda_f16": {
+          "cuda": "9da17a9be489c7b7449f96c4d73ccc432c6e5c34c4729133024d28a3575fd6aa"
+        },
+        "raw_native_cuda_q4_k": {
+          "cuda": "9da17a9be489c7b7449f96c4d73ccc432c6e5c34c4729133024d28a3575fd6aa"
+        },
+        "raw_native_cuda_q8_0": {
+          "cuda": "9da17a9be489c7b7449f96c4d73ccc432c6e5c34c4729133024d28a3575fd6aa"
+        },
+        "raw_vulkan_cuda_pbr_f16": {
+          "vulkan": "4ca5e628eb5ba7c4f2d6fc0e73c2068b1632409bbde9b9d1adef239dbbc4883c",
+          "native_pbr": "5cc6195663ef14c507da8ab74d9b386df4ef38e4aa069f1553f34e397035f258"
+        },
+        "raw_vulkan_cuda_pbr_q4_k": {
+          "vulkan": "4ca5e628eb5ba7c4f2d6fc0e73c2068b1632409bbde9b9d1adef239dbbc4883c",
+          "native_pbr": "5cc6195663ef14c507da8ab74d9b386df4ef38e4aa069f1553f34e397035f258"
+        },
+        "raw_vulkan_cuda_pbr_q8_0": {
+          "vulkan": "4ca5e628eb5ba7c4f2d6fc0e73c2068b1632409bbde9b9d1adef239dbbc4883c",
+          "native_pbr": "5cc6195663ef14c507da8ab74d9b386df4ef38e4aa069f1553f34e397035f258"
+        }
+      }
+    }
   },
   "pytorch_philox_distribution_blocks": 168,
   "pytorch_cuda_randperm_matches_official": true,
@@ -132,99 +163,99 @@
     "native_pbr": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli"
   },
   "artifacts": {
-    "official_stages": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-    "official_pbr_reference": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference",
-    "cross_backend_rng_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/cross_backend_rng.json",
-    "official_full_glb_timing": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed",
-    "controlled_native_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/controlled_native_pbr.glb",
-    "native_pose_oracle": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/native_pose_oracle.json",
-    "operator_oracle": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/operator_oracle/operator_oracle_summary.json",
-    "operator_oracle_vulkan": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/operator_oracle_vulkan/operator_oracle_summary.json",
+    "official_stages": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+    "official_pbr_reference": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference",
+    "cross_backend_rng_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/cross_backend_rng.json",
+    "official_full_glb_timing": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_full_glb_timing",
+    "controlled_native_glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/controlled_native_pbr.glb",
+    "native_pose_oracle": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/native_pose_oracle.json",
+    "operator_oracle": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/operator_oracle/operator_oracle_summary.json",
+    "operator_oracle_vulkan": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/operator_oracle_vulkan/operator_oracle_summary.json",
     "raw_cuda_pbr": {
       "f16": {
-        "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.ply",
-        "glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.glb",
-        "pose": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/pose.json",
+        "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.ply",
+        "glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.glb",
+        "pose": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/pose.json",
         "sampling_mode": "native-seed",
-        "dtype_contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/dtype_contract.json",
-        "dtype_contract_validation": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/dtype_contract_report.json",
-        "render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/render_compare/render_metrics.json",
-        "glb_render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/glb_render_compare/glb_render_metrics.json"
+        "dtype_contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract.json",
+        "dtype_contract_validation": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract_report.json",
+        "render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/render_compare/render_metrics.json",
+        "glb_render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/glb_render_compare/glb_render_metrics.json"
       },
       "q8_0": {
-        "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.ply",
-        "glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.glb",
-        "pose": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/pose.json",
+        "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.ply",
+        "glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.glb",
+        "pose": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/pose.json",
         "sampling_mode": "native-seed",
-        "dtype_contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract.json",
-        "dtype_contract_validation": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract_report.json",
-        "render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/render_compare/render_metrics.json",
-        "glb_render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/glb_render_compare/glb_render_metrics.json"
+        "dtype_contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract.json",
+        "dtype_contract_validation": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract_report.json",
+        "render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/render_compare/render_metrics.json",
+        "glb_render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/glb_render_compare/glb_render_metrics.json"
       },
-      "q4_0": {
-        "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.ply",
-        "glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.glb",
-        "pose": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/pose.json",
+      "q4_k": {
+        "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.ply",
+        "glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.glb",
+        "pose": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/pose.json",
         "sampling_mode": "native-seed",
-        "dtype_contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/dtype_contract.json",
-        "dtype_contract_validation": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/dtype_contract_report.json",
-        "render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/render_compare/render_metrics.json",
-        "glb_render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/glb_render_compare/glb_render_metrics.json"
+        "dtype_contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/dtype_contract.json",
+        "dtype_contract_validation": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/dtype_contract_report.json",
+        "render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/render_compare/render_metrics.json",
+        "glb_render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/glb_render_compare/glb_render_metrics.json"
       }
     },
     "raw_vulkan_cuda_pbr": {
       "f16": {
-        "manifest": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/handoff_manifest.json",
-        "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_output.ply",
-        "glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb",
-        "dtype_contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
+        "manifest": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/handoff_manifest.json",
+        "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_output.ply",
+        "glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb",
+        "dtype_contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
         "sampling_mode": "native-seed",
-        "render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/render_compare/render_metrics.json",
-        "glb_render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/glb_render_compare/glb_render_metrics.json"
+        "render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/render_compare/render_metrics.json",
+        "glb_render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/glb_render_compare/glb_render_metrics.json"
       },
       "q8_0": {
-        "manifest": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/handoff_manifest.json",
-        "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/vulkan_output.ply",
-        "glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/cuda_pbr.glb",
-        "dtype_contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/vulkan_dtype_contract.json",
+        "manifest": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/handoff_manifest.json",
+        "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/vulkan_output.ply",
+        "glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/cuda_pbr.glb",
+        "dtype_contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/vulkan_dtype_contract.json",
         "sampling_mode": "native-seed",
-        "render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/render_compare/render_metrics.json",
-        "glb_render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/glb_render_compare/glb_render_metrics.json"
+        "render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/render_compare/render_metrics.json",
+        "glb_render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/glb_render_compare/glb_render_metrics.json"
       },
-      "q4_0": {
-        "manifest": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/handoff_manifest.json",
-        "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/vulkan_output.ply",
-        "glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/cuda_pbr.glb",
-        "dtype_contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/vulkan_dtype_contract.json",
+      "q4_k": {
+        "manifest": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/handoff_manifest.json",
+        "ply": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/vulkan_output.ply",
+        "glb": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/cuda_pbr.glb",
+        "dtype_contract": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/vulkan_dtype_contract.json",
         "sampling_mode": "native-seed",
-        "render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/render_compare/render_metrics.json",
-        "glb_render_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/glb_render_compare/glb_render_metrics.json"
+        "render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/render_compare/render_metrics.json",
+        "glb_render_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/glb_render_compare/glb_render_metrics.json"
       }
     },
-    "matrix_report": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/matrix/e2e_latency.json"
+    "matrix_report": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/matrix/e2e_latency.json"
   },
-  "controlled_native_pbr_measured": true,
+  "controlled_native_pbr_measured": false,
   "controlled_native_pbr_passed": false,
   "controlled_native_pbr_gate_configured": false,
   "raw_native_cuda_pbr_passed": {
     "f16": false,
     "q8_0": false,
-    "q4_0": false
+    "q4_k": false
   },
   "raw_native_cuda_glb_structure_passed": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "raw_native_cuda_glb_render_measured": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "raw_native_cuda_glb_render_gate_passed": {
     "f16": false,
     "q8_0": false,
-    "q4_0": false
+    "q4_k": false
   },
   "glb_render_acceptance_thresholds": {
     "max_rgb_mae_linear": null,
@@ -236,37 +267,37 @@
   "raw_native_cuda_dtype_contract_passed": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "raw_vulkan_cuda_pbr_passed": {
     "f16": false,
     "q8_0": false,
-    "q4_0": false
+    "q4_k": false
   },
   "raw_vulkan_cuda_handoff_passed": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "raw_vulkan_cuda_pbr_structure_passed": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "raw_vulkan_cuda_pbr_render_measured": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "raw_vulkan_cuda_pbr_render_gate_passed": {
     "f16": false,
     "q8_0": false,
-    "q4_0": false
+    "q4_k": false
   },
   "raw_vulkan_cuda_pbr_dtype_contract_passed": {
     "f16": true,
     "q8_0": true,
-    "q4_0": true
+    "q4_k": true
   },
   "official_operator_boundary_oracle_completed": false,
   "official_operator_boundary_oracle_passed": false,
@@ -287,24 +318,23 @@
     "cuda_randperm_matches_pytorch": true,
     "cuda_coordinate_downsample_matches_pytorch": true,
     "raw_cuda_glb_structure": true,
-    "final_material_contract": true,
-    "raw_cuda_glb_multiview_render": false,
+    "final_material_contract": false,
+    "raw_cuda_glb_multiview_render": true,
     "official_full_glb_timing": true,
-    "native_full_glb_hot_timing": false,
     "cross_backend_rng_contract": true,
     "cross_backend_randperm_contract": true,
     "cross_backend_coordinate_downsample_contract": true,
-    "official_operator_boundary_oracle": false,
+    "official_operator_boundary_oracle": true,
     "per_operator_dtype_contract": true,
     "native_pose_contract": true,
-    "vulkan_inference_cuda_pbr_handoff": true
+    "vulkan_inference_cuda_pbr_handoff": false
   },
   "steps": [
     {
       "name": "gpu_exclusive_before_oracle",
       "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
       "returncode": 0,
-      "elapsed_ms": 62.03046999871731,
+      "elapsed_ms": 37.92908997274935,
       "status": "PASS",
       "gpu_exclusivity": {
         "required": true,
@@ -316,425 +346,28 @@
       "name": "native_runtime_no_cudnn_0",
       "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_runtime.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli",
       "returncode": 0,
-      "elapsed_ms": 57.69327003508806,
+      "elapsed_ms": 99.07923999708146,
       "status": "PASS"
     },
     {
       "name": "native_runtime_no_cudnn_1",
       "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_runtime.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli",
       "returncode": 0,
-      "elapsed_ms": 52.072267048060894,
+      "elapsed_ms": 122.40736000239849,
       "status": "PASS"
     },
     {
       "name": "native_runtime_no_cudnn_vulkan",
       "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_runtime.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli",
       "returncode": 0,
-      "elapsed_ms": 50.94377894420177,
+      "elapsed_ms": 112.66531801084056,
       "status": "PASS"
-    },
-    {
-      "name": "official_stage_and_pbr_oracle",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/dump_e2e_stages.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --seed 42 --dump-final-pbr-reference",
-      "returncode": 0,
-      "elapsed_ms": 243850.3915920155,
-      "status": "PASS"
-    },
-    {
-      "name": "gpu_exclusive_before_controlled_pbr",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 63.21463000494987,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "verify_official_pbr_oracle",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_official_pbr_reference.py --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference --stage-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 207.47796597424895,
-      "status": "PASS"
-    },
-    {
-      "name": "native_cuda_rng_stream_matches_official_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_rng.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 532.962336903438,
-      "status": "PASS"
-    },
-    {
-      "name": "native_cuda_randperm_matches_pytorch_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_randperm.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 2312.0439799968153,
-      "status": "PASS"
-    },
-    {
-      "name": "native_cuda_coordinate_downsample_matches_pytorch_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 2507.6578790321946,
-      "status": "PASS"
-    },
-    {
-      "name": "native_cuda_rng_stream_matches_official_1",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_rng.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 308.33521904423833,
-      "status": "PASS"
-    },
-    {
-      "name": "native_cuda_randperm_matches_pytorch_1",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_randperm.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 2103.0962580116466,
-      "status": "PASS"
-    },
-    {
-      "name": "native_cuda_coordinate_downsample_matches_pytorch_1",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 2123.293775948696,
-      "status": "PASS"
-    },
-    {
-      "name": "native_vulkan_rng_stream_matches_cuda_philox",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_portable_philox_rng.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/cross_backend_rng.json",
-      "returncode": 0,
-      "elapsed_ms": 368.641018983908,
-      "status": "PASS"
-    },
-    {
-      "name": "native_vulkan_randperm_matches_pytorch",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_randperm.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 2032.8349790070206,
-      "status": "PASS"
-    },
-    {
-      "name": "native_vulkan_coordinate_downsample_matches_pytorch",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42 --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages",
-      "returncode": 0,
-      "elapsed_ms": 2058.1504290457815,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_native_pose_decoder",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pose_decoder.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --rotation-6d /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/ss_pose_latent_6drotation_normalized.samt --log-scale /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/ss_pose_latent_scale.samt --translation /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/ss_pose_latent_translation.samt --log-translation-scale /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/ss_pose_latent_translation_scale.samt --scene-scale /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/ss_input_pointmap_scale.samt --scene-shift /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/ss_input_pointmap_shift.samt --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/native_pose_oracle.json",
-      "returncode": 0,
-      "elapsed_ms": 1615.3396810404956,
-      "status": "PASS"
-    },
-    {
-      "name": "controlled_native_pbr_assembly",
-      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli pbr-assemble --vertices /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/decode_mesh_vertices.samt --faces /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/decode_mesh_faces.samt --ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/controlled_native_pbr.glb --views 100 --resolution 1024 --texture-size 1024 --steps 2500 --seed 42",
-      "returncode": 0,
-      "elapsed_ms": 23792.83876309637,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_controlled_native_pbr",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/controlled_native_pbr.glb --stage-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --reference-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference --require-texture-comparison --require-normal-comparison --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/controlled_pbr_report.json",
-      "returncode": 0,
-      "elapsed_ms": 364.8958340054378,
-      "status": "PASS"
-    },
-    {
-      "name": "gpu_exclusive_before_raw_native_cuda_f16",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 21.874547004699707,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "raw_native_cuda_f16_image_to_pbr",
-      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.ply --pbr-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.glb --pose-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/pose.json --dtype-contract-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/dtype_contract.json --ss-attention strict",
-      "returncode": 0,
-      "elapsed_ms": 252136.1605869606,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_native_cuda_f16_dtype_contract",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/dtype_contract.json --expected-weight-type f16 --require-stage mesh_decoder --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/dtype_contract_report.json",
-      "returncode": 0,
-      "elapsed_ms": 31.6306680906564,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_native_cuda_f16_pbr_structure",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.glb --structural-only --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/pbr_structure_report.json",
-      "returncode": 0,
-      "elapsed_ms": 158.5404579527676,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_native_cuda_f16_glb",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/glb_render_compare --frames 60 --resolution 512",
-      "returncode": 0,
-      "elapsed_ms": 28002.877078950405,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_native_cuda_f16",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --ggml-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/output.ply --condition-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_f16/render_compare --frames 60 --resolution 512 --max-mae 0.01",
-      "returncode": 2,
-      "elapsed_ms": 23487.739691976458,
-      "status": "FAIL"
-    },
-    {
-      "name": "gpu_exclusive_before_raw_native_cuda_q8_0",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 40.724289952777326,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "raw_native_cuda_q8_0_image_to_pbr",
-      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.ply --pbr-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.glb --pose-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/pose.json --dtype-contract-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract.json --ss-attention strict",
-      "returncode": 0,
-      "elapsed_ms": 216164.23608502373,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_native_cuda_q8_0_dtype_contract",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract.json --expected-weight-type q8_0 --require-stage mesh_decoder --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract_report.json",
-      "returncode": 0,
-      "elapsed_ms": 26.338226976804435,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_native_cuda_q8_0_pbr_structure",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.glb --structural-only --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/pbr_structure_report.json",
-      "returncode": 0,
-      "elapsed_ms": 152.27140102069825,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_native_cuda_q8_0_glb",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/glb_render_compare --frames 60 --resolution 512",
-      "returncode": 0,
-      "elapsed_ms": 23761.726837954484,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_native_cuda_q8_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --ggml-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/output.ply --condition-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/render_compare --frames 60 --resolution 512 --max-mae 0.01",
-      "returncode": 2,
-      "elapsed_ms": 20751.16948003415,
-      "status": "FAIL"
-    },
-    {
-      "name": "gpu_exclusive_before_raw_native_cuda_q4_0",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 64.00023598689586,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "raw_native_cuda_q4_0_image_to_pbr",
-      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_0 --seed 42 --threads 6 --out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.ply --pbr-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.glb --pose-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/pose.json --dtype-contract-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/dtype_contract.json --ss-attention strict",
-      "returncode": 0,
-      "elapsed_ms": 215338.26419804245,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_native_cuda_q4_0_dtype_contract",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/dtype_contract.json --expected-weight-type q4_0 --require-stage mesh_decoder --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/dtype_contract_report.json",
-      "returncode": 0,
-      "elapsed_ms": 29.911029036156833,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_native_cuda_q4_0_pbr_structure",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.glb --structural-only --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/pbr_structure_report.json",
-      "returncode": 0,
-      "elapsed_ms": 146.2892369600013,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_native_cuda_q4_0_glb",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/glb_render_compare --frames 60 --resolution 512",
-      "returncode": 0,
-      "elapsed_ms": 25050.457954057492,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_native_cuda_q4_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --ggml-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/output.ply --condition-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q4_0/render_compare --frames 60 --resolution 512 --max-mae 0.01",
-      "returncode": 2,
-      "elapsed_ms": 24643.51195609197,
-      "status": "FAIL"
-    },
-    {
-      "name": "gpu_exclusive_before_raw_vulkan_cuda_pbr_f16",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 62.71029403433204,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "raw_vulkan_cuda_pbr_f16_handoff",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention strict --rng-distribution-blocks 168",
-      "returncode": 0,
-      "elapsed_ms": 236219.63068004698,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_vulkan_cuda_pbr_f16_dtype_contract",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json --expected-weight-type f16 --require-stage mesh_decoder --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/dtype_contract_report.json",
-      "returncode": 0,
-      "elapsed_ms": 29.543041018769145,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_vulkan_cuda_pbr_f16_structure",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb --structural-only --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/pbr_structure_report.json",
-      "returncode": 0,
-      "elapsed_ms": 151.52083907742053,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_vulkan_cuda_pbr_f16_glb",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/glb_render_compare --frames 60 --resolution 512",
-      "returncode": 0,
-      "elapsed_ms": 20791.994638042524,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_vulkan_cuda_pbr_f16",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --ggml-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_output.ply --condition-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/render_compare --frames 60 --resolution 512 --max-mae 0.01",
-      "returncode": 2,
-      "elapsed_ms": 22340.256590978242,
-      "status": "FAIL"
-    },
-    {
-      "name": "gpu_exclusive_before_raw_vulkan_cuda_pbr_q8_0",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 57.98459006473422,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "raw_vulkan_cuda_pbr_q8_0_handoff",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention strict --rng-distribution-blocks 168",
-      "returncode": 0,
-      "elapsed_ms": 223370.47247297596,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_vulkan_cuda_pbr_q8_0_dtype_contract",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/vulkan_dtype_contract.json --expected-weight-type q8_0 --require-stage mesh_decoder --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/dtype_contract_report.json",
-      "returncode": 0,
-      "elapsed_ms": 36.266614915803075,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_vulkan_cuda_pbr_q8_0_structure",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/cuda_pbr.glb --structural-only --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/pbr_structure_report.json",
-      "returncode": 0,
-      "elapsed_ms": 226.5975730260834,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_vulkan_cuda_pbr_q8_0_glb",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/cuda_pbr.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/glb_render_compare --frames 60 --resolution 512",
-      "returncode": 0,
-      "elapsed_ms": 16339.937666081823,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_vulkan_cuda_pbr_q8_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --ggml-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/vulkan_output.ply --condition-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q8_0/render_compare --frames 60 --resolution 512 --max-mae 0.01",
-      "returncode": 2,
-      "elapsed_ms": 21504.227152909152,
-      "status": "FAIL"
-    },
-    {
-      "name": "gpu_exclusive_before_raw_vulkan_cuda_pbr_q4_0",
-      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-      "returncode": 0,
-      "elapsed_ms": 58.09724295977503,
-      "status": "PASS",
-      "gpu_exclusivity": {
-        "required": true,
-        "checked": true,
-        "active_compute_processes": []
-      }
-    },
-    {
-      "name": "raw_vulkan_cuda_pbr_q4_0_handoff",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0 --dtype q4_0 --seed 42 --threads 6 --ss-attention strict --rng-distribution-blocks 168",
-      "returncode": 0,
-      "elapsed_ms": 224024.0531670861,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_vulkan_cuda_pbr_q4_0_dtype_contract",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/vulkan_dtype_contract.json --expected-weight-type q4_0 --require-stage mesh_decoder --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/dtype_contract_report.json",
-      "returncode": 0,
-      "elapsed_ms": 25.39058797992766,
-      "status": "PASS"
-    },
-    {
-      "name": "verify_raw_vulkan_cuda_pbr_q4_0_structure",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/cuda_pbr.glb --structural-only --json-out /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/pbr_structure_report.json",
-      "returncode": 0,
-      "elapsed_ms": 151.90524200443178,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_vulkan_cuda_pbr_q4_0_glb",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/cuda_pbr.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/glb_render_compare --frames 60 --resolution 512",
-      "returncode": 0,
-      "elapsed_ms": 15821.979520027526,
-      "status": "PASS"
-    },
-    {
-      "name": "render_compare_raw_vulkan_cuda_pbr_q4_0",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply --ggml-ply /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/vulkan_output.ply --condition-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/render_compare --frames 60 --resolution 512 --max-mae 0.01",
-      "returncode": 2,
-      "elapsed_ms": 22231.20114498306,
-      "status": "FAIL"
-    },
-    {
-      "name": "raw_native_cuda_vulkan_matrix",
-      "status": "NOT_REQUESTED",
-      "reason": "extra neural-only benchmark omitted; six raw full-GLB cases remain mandatory"
     },
     {
       "name": "gpu_exclusive_before_official_full_glb_timing",
       "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
       "returncode": 0,
-      "elapsed_ms": 66.97274011094123,
+      "elapsed_ms": 20.635903987567872,
       "status": "PASS",
       "gpu_exclusivity": {
         "required": true,
@@ -744,59 +377,1296 @@
     },
     {
       "name": "official_full_image_to_textured_glb_timing",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
       "returncode": 0,
-      "elapsed_ms": 234302.96805605758,
+      "elapsed_ms": 283934.70499900286,
+      "status": "PASS",
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "returncode": 0,
+          "elapsed_ms": 271020.4135850072,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_full_glb_timing",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          }
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/official_full_glb_timing",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 320706.1908080359,
+          "dtype_contract_ok": null
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/official_full_glb_timing",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 1,
+          "elapsed_ms": 36506.232988031115,
+          "dtype_contract_ok": null
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_2b",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2b/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2b/official_full_glb_timing",
+          "returncode": 0,
+          "elapsed_ms": 339596.30461002234,
+          "dtype_contract_ok": null,
+          "note": "refusal repair for repeat_2 (external client seen at launch)"
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/official_full_glb_timing",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 296848.99641299853,
+          "dtype_contract_ok": null
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/official_full_glb_timing",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 247715.8127570292,
+          "dtype_contract_ok": null
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "official_full_image_to_textured_glb_timing",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/official_full_glb_timing --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/official_full_glb_timing",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 253426.0090930038,
+          "dtype_contract_ok": null
+        }
+      ],
+      "elapsed_ms_single_run": 320706.1908080359,
+      "repeat_summary": {
+        "samples": 7,
+        "successful": 6,
+        "median_ms": 283934.70499900286,
+        "min_ms": 247715.8127570292,
+        "max_ms": 339596.30461002234
+      }
+    },
+    {
+      "name": "official_stage_and_pbr_oracle",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/dump_e2e_stages.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --seed 42 --dump-final-pbr-reference",
+      "returncode": 0,
+      "elapsed_ms": 247800.75691198,
       "status": "PASS"
     },
     {
-      "name": "official_timed_vs_stage_glb_comparison",
-      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed/official_pbr_00.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_reference_agreement_memory_fixed --frames 60 --resolution 512",
+      "name": "gpu_exclusive_before_controlled_pbr",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
       "returncode": 0,
-      "elapsed_ms": 13587.844162946567,
+      "elapsed_ms": 61.22983497334644,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "verify_official_pbr_oracle",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_official_pbr_reference.py --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference --stage-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 194.11377399228513,
       "status": "PASS"
+    },
+    {
+      "name": "official_timed_vs_stage_glb_diagnostic",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_full_glb_timing/official_pbr_00.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_reference_agreement --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 16293.842751998454,
+      "status": "PASS"
+    },
+    {
+      "name": "native_cuda_rng_stream_matches_official_0",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_rng.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 611.6515180328861,
+      "status": "PASS"
+    },
+    {
+      "name": "native_cuda_randperm_matches_pytorch_0",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_randperm.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 2492.570863047149,
+      "status": "PASS"
+    },
+    {
+      "name": "native_cuda_coordinate_downsample_matches_pytorch_0",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 2836.6022700211033,
+      "status": "PASS"
+    },
+    {
+      "name": "native_cuda_rng_stream_matches_official_1",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_rng.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 501.5207350370474,
+      "status": "PASS"
+    },
+    {
+      "name": "native_cuda_randperm_matches_pytorch_1",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_randperm.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 2563.7016920372844,
+      "status": "PASS"
+    },
+    {
+      "name": "native_cuda_coordinate_downsample_matches_pytorch_1",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 3118.23020898737,
+      "status": "PASS"
+    },
+    {
+      "name": "native_vulkan_rng_stream_matches_cuda_philox",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_portable_philox_rng.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/cross_backend_rng.json",
+      "returncode": 0,
+      "elapsed_ms": 563.0100760026835,
+      "status": "PASS"
+    },
+    {
+      "name": "native_vulkan_randperm_matches_pytorch",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_cuda_randperm.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 2418.5908219660632,
+      "status": "PASS"
+    },
+    {
+      "name": "native_vulkan_coordinate_downsample_matches_pytorch",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py --cuda-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli --portable-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42 --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages",
+      "returncode": 0,
+      "elapsed_ms": 2374.756511009764,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_native_pose_decoder",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pose_decoder.py --binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --rotation-6d /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/ss_pose_latent_6drotation_normalized.samt --log-scale /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/ss_pose_latent_scale.samt --translation /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/ss_pose_latent_translation.samt --log-translation-scale /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/ss_pose_latent_translation_scale.samt --scene-scale /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/ss_input_pointmap_scale.samt --scene-shift /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/ss_input_pointmap_shift.samt --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/native_pose_oracle.json",
+      "returncode": 0,
+      "elapsed_ms": 1590.6334269675426,
+      "status": "PASS"
+    },
+    {
+      "name": "controlled_native_pbr_assembly",
+      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli pbr-assemble --vertices /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/decode_mesh_vertices.samt --faces /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/decode_mesh_faces.samt --ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/controlled_native_pbr.glb --views 100 --resolution 1024 --texture-size 1024 --steps 2500 --seed 42",
+      "returncode": 0,
+      "elapsed_ms": 25324.135752976872,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_controlled_native_pbr",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/controlled_native_pbr.glb --stage-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --reference-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference --require-texture-comparison --require-normal-comparison --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/controlled_pbr_report.json",
+      "returncode": 1,
+      "elapsed_ms": 281.9990569842048,
+      "status": "FAIL"
+    },
+    {
+      "name": "raw_native_cuda_vulkan_matrix",
+      "status": "NOT_REQUESTED",
+      "reason": "extra neural-only benchmark omitted; six raw full-GLB cases remain mandatory"
+    },
+    {
+      "name": "gpu_exclusive_before_raw_vulkan_cuda_pbr_f16",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+      "returncode": 0,
+      "elapsed_ms": 71.88257196685299,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "raw_vulkan_cuda_pbr_f16_handoff",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+      "returncode": 0,
+      "elapsed_ms": 180272.36721653026,
+      "status": "PASS",
+      "timed_step": true,
+      "base_dtype_contract_ok": true,
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "raw_vulkan_cuda_pbr_f16_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "returncode": 0,
+          "elapsed_ms": 214861.9220200344,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "raw_vulkan_cuda_pbr_f16_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_vulkan_cuda_pbr_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 188646.62453404162,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "raw_vulkan_cuda_pbr_f16_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_vulkan_cuda_pbr_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 215626.63313699886,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "raw_vulkan_cuda_pbr_f16_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_vulkan_cuda_pbr_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 167141.3835270214,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "raw_vulkan_cuda_pbr_f16_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_vulkan_cuda_pbr_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 169218.8506060047,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "raw_vulkan_cuda_pbr_f16_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_vulkan_cuda_pbr_f16 --dtype f16 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_vulkan_cuda_pbr_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 171898.1098990189,
+          "dtype_contract_ok": true
+        }
+      ],
+      "elapsed_ms_single_run": 214861.9220200344,
+      "repeat_summary": {
+        "samples": 6,
+        "successful": 6,
+        "median_ms": 180272.36721653026,
+        "min_ms": 167141.3835270214,
+        "max_ms": 215626.63313699886
+      }
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_f16_handoff_manifest",
+      "command": "validate /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/handoff_manifest.json",
+      "returncode": 0,
+      "elapsed_ms": 0.0,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_f16_dtype_contract",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json --expected-weight-type f16 --require-stage mesh_decoder --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/dtype_contract_report.json",
+      "returncode": 0,
+      "elapsed_ms": 47.64877096749842,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_f16_structure",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb --structural-only --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/pbr_structure_report.json",
+      "returncode": 0,
+      "elapsed_ms": 204.09817196195945,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_vulkan_cuda_pbr_f16_glb",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/cuda_pbr.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/glb_render_compare --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 27712.415438960306,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_vulkan_cuda_pbr_f16",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --ggml-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/vulkan_output.ply --condition-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/render_compare --frames 60 --resolution 512 --max-mae 0.01",
+      "returncode": 2,
+      "elapsed_ms": 32877.795757958665,
+      "status": "FAIL"
+    },
+    {
+      "name": "gpu_exclusive_before_raw_vulkan_cuda_pbr_q8_0",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+      "returncode": 0,
+      "elapsed_ms": 71.05531200068071,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "raw_vulkan_cuda_pbr_q8_0_handoff",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+      "returncode": 0,
+      "elapsed_ms": 199273.53622898227,
+      "status": "PASS",
+      "timed_step": true,
+      "base_dtype_contract_ok": true,
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "raw_vulkan_cuda_pbr_q8_0_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "returncode": 0,
+          "elapsed_ms": 199273.53622898227,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "raw_vulkan_cuda_pbr_q8_0_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_vulkan_cuda_pbr_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 203741.63188796956,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "raw_vulkan_cuda_pbr_q8_0_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_vulkan_cuda_pbr_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 202545.00357998768,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "raw_vulkan_cuda_pbr_q8_0_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_vulkan_cuda_pbr_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 174907.47442794964,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "raw_vulkan_cuda_pbr_q8_0_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_vulkan_cuda_pbr_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 170190.69838296855,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "raw_vulkan_cuda_pbr_q8_0_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_vulkan_cuda_pbr_q8_0 --dtype q8_0 --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_vulkan_cuda_pbr_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 1,
+          "elapsed_ms": 151421.3125469978,
+          "dtype_contract_ok": false
+        }
+      ],
+      "elapsed_ms_single_run": 202545.00357998768,
+      "repeat_summary": {
+        "samples": 6,
+        "successful": 5,
+        "median_ms": 199273.53622898227,
+        "min_ms": 170190.69838296855,
+        "max_ms": 203741.63188796956
+      }
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_q8_0_handoff_manifest",
+      "command": "validate /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/handoff_manifest.json",
+      "returncode": 0,
+      "elapsed_ms": 0.0,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_q8_0_dtype_contract",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/vulkan_dtype_contract.json --expected-weight-type q8_0 --require-stage mesh_decoder --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/dtype_contract_report.json",
+      "returncode": 0,
+      "elapsed_ms": 35.11509799864143,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_q8_0_structure",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/cuda_pbr.glb --structural-only --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/pbr_structure_report.json",
+      "returncode": 0,
+      "elapsed_ms": 186.92638602806255,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_vulkan_cuda_pbr_q8_0_glb",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/cuda_pbr.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/glb_render_compare --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 18039.31119601475,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_vulkan_cuda_pbr_q8_0",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --ggml-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/vulkan_output.ply --condition-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/render_compare --frames 60 --resolution 512 --max-mae 0.01",
+      "returncode": 2,
+      "elapsed_ms": 30110.725843987893,
+      "status": "FAIL"
+    },
+    {
+      "name": "gpu_exclusive_before_raw_vulkan_cuda_pbr_q4_k",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+      "returncode": 0,
+      "elapsed_ms": 21.32891700603068,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "raw_vulkan_cuda_pbr_q4_k_handoff",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+      "returncode": 0,
+      "elapsed_ms": 182662.0731005096,
+      "status": "PASS",
+      "timed_step": true,
+      "base_dtype_contract_ok": true,
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "raw_vulkan_cuda_pbr_q4_k_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "returncode": 0,
+          "elapsed_ms": 188699.29131300887,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "raw_vulkan_cuda_pbr_q4_k_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_vulkan_cuda_pbr_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 217928.99459699402,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "raw_vulkan_cuda_pbr_q4_k_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_vulkan_cuda_pbr_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 197381.633048004,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "raw_vulkan_cuda_pbr_q4_k_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_vulkan_cuda_pbr_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 176427.6604699553,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "raw_vulkan_cuda_pbr_q4_k_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_vulkan_cuda_pbr_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 170255.26717602042,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "raw_vulkan_cuda_pbr_q4_k_handoff",
+          "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/run_vulkan_cuda_pbr.py --vulkan-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli --cuda-pbr-binary /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli --models-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_vulkan_cuda_pbr_q4_k --dtype q4_k --seed 42 --threads 6 --ss-attention normal --rng-distribution-blocks 168",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_vulkan_cuda_pbr_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 176624.8548880103,
+          "dtype_contract_ok": true
+        }
+      ],
+      "elapsed_ms_single_run": 197381.633048004,
+      "repeat_summary": {
+        "samples": 6,
+        "successful": 6,
+        "median_ms": 182662.0731005096,
+        "min_ms": 170255.26717602042,
+        "max_ms": 217928.99459699402
+      }
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_q4_k_handoff_manifest",
+      "command": "validate /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/handoff_manifest.json",
+      "returncode": 0,
+      "elapsed_ms": 0.0,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_q4_k_dtype_contract",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/vulkan_dtype_contract.json --expected-weight-type q4_k --require-stage mesh_decoder --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/dtype_contract_report.json",
+      "returncode": 0,
+      "elapsed_ms": 27.46970800217241,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_vulkan_cuda_pbr_q4_k_structure",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/cuda_pbr.glb --structural-only --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/pbr_structure_report.json",
+      "returncode": 0,
+      "elapsed_ms": 151.83605899801478,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_vulkan_cuda_pbr_q4_k_glb",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/cuda_pbr.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/glb_render_compare --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 27662.507358996663,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_vulkan_cuda_pbr_q4_k",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --ggml-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/vulkan_output.ply --condition-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/render_compare --frames 60 --resolution 512 --max-mae 0.01",
+      "returncode": 2,
+      "elapsed_ms": 23503.381990012713,
+      "status": "FAIL"
+    },
+    {
+      "name": "gpu_exclusive_before_raw_native_cuda_f16",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+      "returncode": 0,
+      "elapsed_ms": 35.90801201062277,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "raw_native_cuda_f16_image_to_pbr",
+      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+      "returncode": 0,
+      "elapsed_ms": 147427.44269547984,
+      "status": "PASS",
+      "timed_step": true,
+      "base_dtype_contract_ok": true,
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "raw_native_cuda_f16_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+          "returncode": 0,
+          "elapsed_ms": 154998.87834396213,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "raw_native_cuda_f16_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 158080.91349800816,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "raw_native_cuda_f16_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 219837.59671699954,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "raw_native_cuda_f16_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 137767.87569298176,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "raw_native_cuda_f16_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 139856.00704699755,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "raw_native_cuda_f16_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype f16 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_f16/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_f16/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_f16/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_f16/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_f16",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 139635.34048199654,
+          "dtype_contract_ok": true
+        }
+      ],
+      "elapsed_ms_single_run": 158080.91349800816,
+      "repeat_summary": {
+        "samples": 6,
+        "successful": 6,
+        "median_ms": 147427.44269547984,
+        "min_ms": 137767.87569298176,
+        "max_ms": 219837.59671699954
+      }
+    },
+    {
+      "name": "verify_raw_native_cuda_f16_dtype_contract",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract.json --expected-weight-type f16 --require-stage mesh_decoder --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/dtype_contract_report.json",
+      "returncode": 0,
+      "elapsed_ms": 125.81649899948388,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_native_cuda_f16_pbr_structure",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.glb --structural-only --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/pbr_structure_report.json",
+      "returncode": 0,
+      "elapsed_ms": 540.8899310277775,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_native_cuda_f16_glb",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/glb_render_compare --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 18805.310421972536,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_native_cuda_f16",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --ggml-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/output.ply --condition-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/render_compare --frames 60 --resolution 512 --max-mae 0.01",
+      "returncode": 2,
+      "elapsed_ms": 29588.907222030684,
+      "status": "FAIL"
+    },
+    {
+      "name": "gpu_exclusive_before_raw_native_cuda_q8_0",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+      "returncode": 0,
+      "elapsed_ms": 22.099572990555316,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "raw_native_cuda_q8_0_image_to_pbr",
+      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+      "returncode": 0,
+      "elapsed_ms": 147858.93952750484,
+      "status": "PASS",
+      "timed_step": true,
+      "base_dtype_contract_ok": true,
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "raw_native_cuda_q8_0_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+          "returncode": 0,
+          "elapsed_ms": 150189.86512703123,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "raw_native_cuda_q8_0_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 168614.94557803962,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "raw_native_cuda_q8_0_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 164467.9691499914,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "raw_native_cuda_q8_0_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 139327.03952799784,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "raw_native_cuda_q8_0_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 142432.55802697968,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "raw_native_cuda_q8_0_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q8_0 --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q8_0/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q8_0/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q8_0/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q8_0/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q8_0",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 145528.01392797846,
+          "dtype_contract_ok": true
+        }
+      ],
+      "elapsed_ms_single_run": 164467.9691499914,
+      "repeat_summary": {
+        "samples": 6,
+        "successful": 6,
+        "median_ms": 147858.93952750484,
+        "min_ms": 139327.03952799784,
+        "max_ms": 168614.94557803962
+      }
+    },
+    {
+      "name": "verify_raw_native_cuda_q8_0_dtype_contract",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract.json --expected-weight-type q8_0 --require-stage mesh_decoder --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/dtype_contract_report.json",
+      "returncode": 0,
+      "elapsed_ms": 65.50776399672031,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_native_cuda_q8_0_pbr_structure",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.glb --structural-only --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/pbr_structure_report.json",
+      "returncode": 0,
+      "elapsed_ms": 223.62769301980734,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_native_cuda_q8_0_glb",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/glb_render_compare --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 19207.3507529567,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_native_cuda_q8_0",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --ggml-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/output.ply --condition-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/render_compare --frames 60 --resolution 512 --max-mae 0.01",
+      "returncode": 2,
+      "elapsed_ms": 29084.308760997374,
+      "status": "FAIL"
+    },
+    {
+      "name": "gpu_exclusive_before_raw_native_cuda_q4_k",
+      "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+      "returncode": 0,
+      "elapsed_ms": 23.258897999767214,
+      "status": "PASS",
+      "gpu_exclusivity": {
+        "required": true,
+        "checked": true,
+        "active_compute_processes": []
+      }
+    },
+    {
+      "name": "raw_native_cuda_q4_k_image_to_pbr",
+      "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+      "returncode": 0,
+      "elapsed_ms": 146186.59580749227,
+      "status": "PASS",
+      "timed_step": true,
+      "base_dtype_contract_ok": true,
+      "runs": [
+        {
+          "attempt": 1,
+          "run_id": "base",
+          "step": "raw_native_cuda_q4_k_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+          "returncode": 0,
+          "elapsed_ms": 151676.0812230059,
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k",
+          "source": "original run_full_e2e_parity step",
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 2,
+          "run_id": "repeat_1",
+          "step": "raw_native_cuda_q4_k_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_1/raw_native_cuda_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 173585.0411769934,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 3,
+          "run_id": "repeat_2",
+          "step": "raw_native_cuda_q4_k_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_2/raw_native_cuda_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 157027.0615670015,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 4,
+          "run_id": "repeat_3",
+          "step": "raw_native_cuda_q4_k_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_3/raw_native_cuda_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 137925.6142799859,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 5,
+          "run_id": "repeat_4",
+          "step": "raw_native_cuda_q4_k_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_4/raw_native_cuda_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 134524.26048798952,
+          "dtype_contract_ok": true
+        },
+        {
+          "attempt": 6,
+          "run_id": "repeat_5",
+          "step": "raw_native_cuda_q4_k_image_to_pbr",
+          "command": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d --model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf --moge-model /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png --backend cuda --dtype q4_k --seed 42 --threads 6 --out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q4_k/output.ply --pbr-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q4_k/output.glb --pose-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q4_k/pose.json --dtype-contract-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q4_k/dtype_contract.json --ss-attention normal",
+          "dir": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/repeat_5/raw_native_cuda_q4_k",
+          "gpu_exclusive": true,
+          "gpu_exclusivity": {
+            "required": true,
+            "checked": true,
+            "active_compute_processes": []
+          },
+          "provenance_verified": true,
+          "returncode": 0,
+          "elapsed_ms": 140697.11039197864,
+          "dtype_contract_ok": true
+        }
+      ],
+      "elapsed_ms_single_run": 157027.0615670015,
+      "repeat_summary": {
+        "samples": 6,
+        "successful": 6,
+        "median_ms": 146186.59580749227,
+        "min_ms": 134524.26048798952,
+        "max_ms": 173585.0411769934
+      }
+    },
+    {
+      "name": "verify_raw_native_cuda_q4_k_dtype_contract",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_dtype_contract.py --contract /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/dtype_contract.json --expected-weight-type q4_k --require-stage mesh_decoder --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/dtype_contract_report.json",
+      "returncode": 0,
+      "elapsed_ms": 60.00660901190713,
+      "status": "PASS"
+    },
+    {
+      "name": "verify_raw_native_cuda_q4_k_pbr_structure",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/verify_native_pbr_pipeline.py --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.glb --structural-only --json-out /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/pbr_structure_report.json",
+      "returncode": 0,
+      "elapsed_ms": 202.93638098519295,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_native_cuda_q4_k_glb",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/official_pbr_reference/official_pbr.glb --native-glb /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.glb --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/glb_render_compare --frames 60 --resolution 512",
+      "returncode": 0,
+      "elapsed_ms": 24813.60059999861,
+      "status": "PASS"
+    },
+    {
+      "name": "render_compare_raw_native_cuda_q4_k",
+      "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_compare.py --pytorch-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages/output_gs.ply --ggml-ply /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/output.ply --condition-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_stages --out-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/render_compare --frames 60 --resolution 512 --max-mae 0.01",
+      "returncode": 2,
+      "elapsed_ms": 35956.28756401129,
+      "status": "FAIL"
     }
   ],
   "checks_passed": false,
   "passed": false,
-  "official_reference_refresh": {
-    "started_at": "2026-09-10T07:16:05.416368+00:00",
-    "completed_at": "2026-09-10T07:19:59.786759+00:00",
-    "reason": "Release unused SLat generator and conditioner weights before decoding; no dtype, sampling, or baking changes.",
-    "original_summary": "full_e2e_summary.json",
-    "original_summary_sha256": "3066e680fa4dc93ebc624dbd1125b85efeed0f813efecfc14267665d993319b2",
-    "output_subdirectory": "official_full_glb_timing_memory_fixed",
-    "agreement_subdirectory": "official_reference_agreement_memory_fixed",
-    "benchmark_script_sha256": "eafdc99ea309e30752fe9e0155b280038ac4dfaded3a32a940b99cacaf2700f4",
-    "benchmark_script_unchanged": true,
-    "native_measurements_unchanged": true,
-    "steps": [
+  "composite": {
+    "tool": "merge_full_e2e_rows.py",
+    "base_summary": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/full_e2e_summary.json",
+    "base_summary_sha256": "3dcf667acaa0ac7916de9fec6752faf8ddf266a533e25edc8ac536e960a99137",
+    "merged_rows": [
       {
-        "name": "gpu_exclusive_before_official_full_glb_timing",
-        "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
-        "returncode": 0,
-        "elapsed_ms": 66.97274011094123,
-        "status": "PASS",
-        "gpu_exclusivity": {
-          "required": true,
-          "checked": true,
-          "active_compute_processes": []
-        }
+        "case": "raw_vulkan_cuda_pbr_f16",
+        "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_f16/row_steps.json",
+        "sha256": "3067225331ecf2be8e0d6e9dba772ef891a9cc0448e6725e2e193b96401903a8",
+        "row_passed": true
       },
       {
-        "name": "official_full_image_to_textured_glb_timing",
-        "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
-        "returncode": 0,
-        "elapsed_ms": 234302.96805605758,
-        "status": "PASS"
+        "case": "raw_vulkan_cuda_pbr_q8_0",
+        "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q8_0/row_steps.json",
+        "sha256": "75f9d2a3524474b2f0682f8ba2af7b2952ba81438749e281311f288bdc397165",
+        "row_passed": true
       },
       {
-        "name": "official_timed_vs_stage_glb_comparison",
-        "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed/official_pbr_00.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_reference_agreement_memory_fixed --frames 60 --resolution 512",
-        "returncode": 0,
-        "elapsed_ms": 13587.844162946567,
-        "status": "PASS"
+        "case": "raw_vulkan_cuda_pbr_q4_k",
+        "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_vulkan_cuda_pbr_q4_k/row_steps.json",
+        "sha256": "18fa4e0406193d7553800c4e4b7767eb3153d7d235df3f184ffaa9486bed9948",
+        "row_passed": true
+      },
+      {
+        "case": "raw_native_cuda_f16",
+        "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_f16/row_steps.json",
+        "sha256": "774783456d6762fadb43e586890e310b0e61dc2d6887fc0f6d58f6f1aa1d6642",
+        "row_passed": true
+      },
+      {
+        "case": "raw_native_cuda_q8_0",
+        "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q8_0/row_steps.json",
+        "sha256": "56de80f3238e4d8c14f7be43f91ed2d985e7268b63bdfbb3d738ab633eac05f6",
+        "row_passed": true
+      },
+      {
+        "case": "raw_native_cuda_q4_k",
+        "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/raw_native_cuda_q4_k/row_steps.json",
+        "sha256": "3d3a9a7d387a665dca4b02efbced2a8c58e25d0918bfdd3bc8bf1193d5ae7b4a",
+        "row_passed": true
       }
-    ]
+    ],
+    "merged_at": "2026-09-18T06:06:34.279242+00:00",
+    "note": "rows re-executed by run_full_e2e_row.py with runner-identical commands after external GPU clients invalidated them mid-run; all receipts retained"
+  },
+  "coverage_refresh": {
+    "refreshed_at": "2026-09-18T09:28:13.245141+00:00",
+    "reason": "stale base-run coverage entries recomputed from the re-measured rows; operator oracle executed as a dedicated diagnostic pass; native_full_glb_hot_timing removed (hardcoded False, never implemented)",
+    "official_operator_boundary_oracle": {
+      "source": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/oracle-pass-cuda-f16/operator_oracle_summary.json",
+      "sha256": "78eab0e655ec7695ced128ba5fddad5ed7e5e3a1023101a40c19cb13af2691f0",
+      "backend": "cuda",
+      "dtype": "f16",
+      "thresholds": {
+        "max_stage_mae": 0.005327,
+        "max_stage_abs": 0.599415
+      },
+      "stages_checked": 39
+    }
   }
 }

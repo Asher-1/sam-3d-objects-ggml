@@ -23,7 +23,10 @@ class PatchDeliveryTests(unittest.TestCase):
             shutil.copy2(cpp / "third_party/ggml-patches/0001-sam3d-ggml-combined.patch", patch_dir)
             clone = fixture / "third_party/ggml"
             subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout", str(upstream), str(clone)], check=True)
-            subprocess.run(["git", "-C", str(clone), "checkout", "--quiet", "--detach", revision], check=True)
+            # --shared --no-checkout clones carry index entries that make a
+            # plain checkout silently skip writing files; -f materialises the
+            # tree the replay below needs.
+            subprocess.run(["git", "-C", str(clone), "checkout", "--quiet", "--detach", "-f", revision], check=True)
 
             def invoke(*arguments: str) -> subprocess.CompletedProcess:
                 return subprocess.run(["bash", str(helper), *arguments], capture_output=True, text=True, check=False)

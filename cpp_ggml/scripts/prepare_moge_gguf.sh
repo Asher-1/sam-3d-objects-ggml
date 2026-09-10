@@ -68,5 +68,9 @@ trap 'rm -f "${CONVERSION_DIR}/moge_vitl-${DTYPE}.gguf"; rmdir "$CONVERSION_DIR"
 [[ "$(head -c 4 "${CONVERSION_DIR}/moge_vitl-${DTYPE}.gguf")" == GGUF ]] || {
     echo "error: conversion did not produce a GGUF model" >&2; exit 1;
 }
+# Verify the fresh GGUF against the requested checkpoint before publishing it.
+"${PYTHON_BIN}" "${SCRIPT_DIR}/verify_moge_gguf.py" \
+    --model "${CONVERSION_DIR}/moge_vitl-${DTYPE}.gguf" \
+    --checkpoint "${CHECKPOINT}"
 mv "${CONVERSION_DIR}/moge_vitl-${DTYPE}.gguf" "$OUTPUT"
 echo "prepared: $OUTPUT"

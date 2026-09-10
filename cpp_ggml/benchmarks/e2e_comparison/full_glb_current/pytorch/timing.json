@@ -75,16 +75,16 @@
     "conditioners.slat_condition_embedder": "torch.float16",
     "depth_model": "torch.float32"
   },
-  "pipeline_initialization_ms_excluded": 30115.06185797043,
+  "pipeline_initialization_ms_excluded": 56081.85505797155,
   "warmup": 0,
   "iters": 1,
   "latency_ms": {
-    "mean": 188617.614984978,
-    "p50": 188617.614984978,
-    "max": 188617.614984978
+    "mean": 196583.20082101272,
+    "p50": 196583.20082101272,
+    "max": 196583.20082101272
   },
   "outputs": [
-    "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed/official_pbr_00.glb"
+    "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/output/full-glb-respin-gsplat-20260917d/official_full_glb_timing/official_pbr_00.glb"
   ],
   "gpu_exclusivity": {
     "required": true,

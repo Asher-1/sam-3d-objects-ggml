@@ -33,10 +33,11 @@ Usage: download_gguf.sh [--dtype TYPE] [--model NAME] [--out DIR] [--force]
 
 TYPE: f16 (default), f32, q8_0, q4_0, q4_1, q4_k.
 NAME: ss_generator, ss_decoder, slat_generator, slat_decoder_gs,
-      slat_decoder_gs_4, slat_decoder_mesh. Omit to fetch all six.
+      slat_decoder_gs_4, slat_decoder_mesh, moge_vitl. Omit to fetch all seven.
 Existing files from a different revision are preserved unless --force is used.
 Downloads are checked against the published byte sizes and GGUF header.
-MoGe is separate: run scripts/prepare_moge_gguf.sh for full raw inference.
+MoGe ViT-L is published as f16 only; scripts/prepare_moge_gguf.sh reconverts
+other dtypes from the official Ruicheng/moge-vitl checkpoint.
 EOF
 }
 while [[ $# -gt 0 ]]; do
@@ -60,7 +61,7 @@ case "$DTYPE" in
     *) echo "error: unsupported dtype: $DTYPE" >&2; exit 2 ;;
 esac
 case "$MODEL" in
-    ""|ss_generator|ss_decoder|slat_generator|slat_decoder_gs|slat_decoder_gs_4|slat_decoder_mesh) ;;
+    ""|ss_generator|ss_decoder|slat_generator|slat_decoder_gs|slat_decoder_gs_4|slat_decoder_mesh|moge_vitl) ;;
     *) echo "error: unknown model: $MODEL" >&2; exit 2 ;;
 esac
 command -v curl >/dev/null || { echo "error: curl is required" >&2; exit 1; }
@@ -73,6 +74,7 @@ MANIFEST=(
     "slat_decoder_gs|170914240|341484160|90965440|48326080|53656000|48326080"
     "slat_decoder_gs_4|170310400|340278048|90643840|48155008|53466112|48155008"
     "slat_decoder_mesh|182036640|363715680|96880352|51463680|57140768|51477600"
+    "moge_vitl|629144832|0|0|0|0|0"
 )
 
 mkdir -p "${OUT}"
@@ -93,6 +95,11 @@ for row in "${MANIFEST[@]}"; do
         q4_k) size="${sq4k}" ;;
         *) echo "unsupported dtype: ${DTYPE} (use f16 | f32 | q4_0 | q4_1 | q4_k | q8_0)" >&2; exit 1 ;;
     esac
+    if [[ "${size}" == "0" ]]; then
+        echo "skip  ${name}-${DTYPE}.gguf (not published; run with --model ${name} for its published dtypes)"
+        skipped=$((skipped + 1))
+        continue
+    fi
     file="${OUT}/${name}-${DTYPE}.gguf"
     url="${BASE}/${name}-${DTYPE}.gguf"
     if [[ -f "${file}" ]]; then

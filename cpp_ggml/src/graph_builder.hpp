@@ -32,7 +32,10 @@ class GraphContext {
 };
 
 // x: (in, N) -> mul_mat(w, x) + b
-ggml_tensor* gb_linear(ggml_context* ctx, ggml_tensor* w, ggml_tensor* b, ggml_tensor* x);
+// strict_f32 forces GGML_PREC_F32 on the mul_mat (true-F32 math instead of
+// the default TF32 tensor-core lowering); used by the F32 SS backbone.
+ggml_tensor* gb_linear(ggml_context* ctx, ggml_tensor* w, ggml_tensor* b, ggml_tensor* x,
+                       bool strict_f32 = false);
 
 // layer_norm over ne[0] with optional affine weights (eps from call site)
 ggml_tensor* gb_layer_norm(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
@@ -41,6 +44,13 @@ ggml_tensor* gb_layer_norm(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, gg
 // RMS normalize the last (head) dim of (D, N, H) tensors per head
 ggml_tensor* gb_rms_norm_head(ggml_context* ctx, ggml_tensor* x, ggml_tensor* gamma,
                               float head_dim);
+
+// Attention formulation options. Defaults match the throughput path; the
+// parity bisects opt into the explicit formulations per call site.
+struct AttentionOptions {
+    bool force_manual = false;  // graph-level F32 QK^T -> softmax -> V
+    bool strict_kv = false;     // keep K/V in F32 for the flash kernel
+};
 
 // multi-head self attention with fused qkv weight (3C, C): x (C, N, B)
 // qk_rms_norm applies per-head RMS normalization with gamma (H, D) weights.
@@ -52,7 +62,8 @@ ggml_tensor* gb_self_attention_core(ggml_context* ctx, ggml_tensor* qkv, int n_h
 // to_kv (2C, Cctx). qk_rms handled by caller via gb_self_attention_core-like
 // ops; this helper expects q and kv already projected and reshaped.
 ggml_tensor* gb_attention(ggml_context* ctx, ggml_tensor* q, ggml_tensor* k, ggml_tensor* v,
-                          float scale, bool use_flash, bool force_manual = false);
+                          float scale, bool use_flash,
+                          const AttentionOptions& opts = {});
 
 // FFN: Linear -> GELU -> Linear (default tanh approximation; erf = exact)
 ggml_tensor* gb_ffn_gelu(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w0, ggml_tensor* b0,

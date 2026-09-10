@@ -14,9 +14,10 @@ import struct
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt
 
 
-SAMT_MAGIC = b"SAMT"
+
 GGML_TYPE_F32 = 0
 FIELDS = (
     "ss_input_image.samt",
@@ -32,29 +33,6 @@ FIELDS = (
 )
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != SAMT_MAGIC:
-            raise ValueError(f"{path}: invalid SAMT magic")
-        rank_data = stream.read(4)
-        if len(rank_data) != 4:
-            raise ValueError(f"{path}: truncated rank")
-        (rank,) = struct.unpack("<i", rank_data)
-        if not 1 <= rank <= 8:
-            raise ValueError(f"{path}: invalid rank {rank}")
-        dimensions = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        type_data = stream.read(4)
-        if len(type_data) != 4:
-            raise ValueError(f"{path}: truncated type")
-        (ggml_type,) = struct.unpack("<i", type_data)
-        if ggml_type != GGML_TYPE_F32:
-            raise ValueError(f"{path}: expected F32 SAMT, got ggml type {ggml_type}")
-        count = int(np.prod(dimensions, dtype=np.int64))
-        payload = stream.read()
-    expected = count * np.dtype("<f4").itemsize
-    if len(payload) != expected:
-        raise ValueError(f"{path}: expected {expected} payload bytes, found {len(payload)}")
-    return dimensions, np.frombuffer(payload, dtype="<f4")
 
 
 def compare(actual: np.ndarray, expected: np.ndarray) -> dict[str, float | int]:

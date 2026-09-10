@@ -14,25 +14,13 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt
 from PIL import Image
 import torch
 
 from moge.model.v1 import MoGeModel
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (dtype,) = struct.unpack("<i", stream.read(4))
-        if dtype != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got ggml type {dtype}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    if values.size != int(np.prod(shape)):
-        raise ValueError(f"{path}: truncated tensor")
-    return shape, values
 
 
 def metric(actual: np.ndarray, reference: np.ndarray) -> dict[str, float]:

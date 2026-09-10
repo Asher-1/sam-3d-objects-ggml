@@ -14,12 +14,11 @@ from pathlib import Path
 
 import numpy as np
 
+from samt_io import SAMT_MAGIC, GGML_F32 as GGML_TYPE_F32, GGML_I32 as GGML_TYPE_I32
 
-SAMT_MAGIC = b"SAMT"
-GGML_TYPE_F32 = 0
-# The SAMT scalar payload is stable but ggml assigned I32 both 26 (vendored)
-# and 30 (newer upstream used by the canonical E2E capture).
-GGML_TYPE_I32 = 26
+# SAMT fixtures span ggml revisions: this build writes I32 as 26, while the
+# canonical E2E capture was written by newer upstream code that used 30. The
+# coordinates carry the same signed 32-bit payload in both cases.
 GGML_TYPE_I32_LEGACY_UPSTREAM = 30
 DTYPES = {
     GGML_TYPE_F32: np.dtype("<f4"),

@@ -14,7 +14,9 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <sstream>
+#include <unordered_map>
 
 namespace sam3d {
 namespace {
@@ -201,7 +203,77 @@ bool write_rgba_png(const std::string& path, const RgbaImage& image, std::string
     return true;
 }
 
+namespace {
+
+// Returns true when at least one (position, uv) byte pair backs more than
+// one vertex; `out` then receives the first-occurrence-wins deduplicated
+// copy with remapped indices. A legal xatlas seam vertex has distinct uv
+// coordinates on its two charts, so only exact (position, uv) duplicates
+// - chart corners that share one smooth vertex - are merged here; the
+// official to_glb writer keeps (position, uv) unique, and matching that
+// vertex table is what the controlled mesh/UV contract compares.
+bool chart_corner_duplicates(const NativeMesh& mesh, NativeMesh& out) {
+    const size_t vertex_count = mesh.positions.size() / 3;
+    if (mesh.texcoords.size() != vertex_count * 2 || vertex_count == 0) return false;
+    std::map<std::array<uint8_t, 20>, uint32_t> first;  // 12 position + 8 uv bytes
+    std::vector<uint32_t> remap(vertex_count);
+    bool duplicated = false;
+    for (uint32_t i = 0; i < vertex_count; ++i) {
+        std::array<uint8_t, 20> key{};
+        std::memcpy(key.data(), &mesh.positions[i * 3], 12);
+        std::memcpy(key.data() + 12, &mesh.texcoords[i * 2], 8);
+        auto result = first.emplace(key, i);
+        remap[i] = result.first->second;
+        duplicated = duplicated || !result.second;
+    }
+    if (!duplicated) return false;
+    std::unordered_map<uint32_t, uint32_t> compact;
+    out = NativeMesh{};
+    out.positions.reserve(first.size() * 3);
+    if (!mesh.normals.empty()) out.normals.reserve(first.size() * 3);
+    out.texcoords.reserve(first.size() * 2);
+    if (!mesh.colors.empty()) out.colors.reserve(first.size() * 3);
+    if (!mesh.vertex_attributes.empty()) {
+        const size_t stride = mesh.vertex_attributes.size() / vertex_count;
+        out.vertex_attributes.reserve(first.size() * stride);
+    }
+    for (uint32_t i = 0; i < vertex_count; ++i) {
+        if (remap[i] != i) continue;  // a later duplicate of an earlier corner
+        compact.emplace(i, static_cast<uint32_t>(out.positions.size() / 3));
+        out.positions.insert(out.positions.end(), mesh.positions.begin() + i * 3,
+                             mesh.positions.begin() + i * 3 + 3);
+        out.texcoords.insert(out.texcoords.end(), mesh.texcoords.begin() + i * 2,
+                             mesh.texcoords.begin() + i * 2 + 2);
+        if (!mesh.normals.empty()) {
+            out.normals.insert(out.normals.end(), mesh.normals.begin() + i * 3,
+                               mesh.normals.begin() + i * 3 + 3);
+        }
+        if (!mesh.colors.empty()) {
+            out.colors.insert(out.colors.end(), mesh.colors.begin() + i * 3,
+                              mesh.colors.begin() + i * 3 + 3);
+        }
+        if (!mesh.vertex_attributes.empty()) {
+            const size_t stride = mesh.vertex_attributes.size() / vertex_count;
+            out.vertex_attributes.insert(out.vertex_attributes.end(),
+                                         mesh.vertex_attributes.begin() + i * stride,
+                                         mesh.vertex_attributes.begin() + (i + 1) * stride);
+        }
+    }
+    out.indices.reserve(mesh.indices.size());
+    for (uint32_t index : mesh.indices) out.indices.push_back(compact.at(remap[index]));
+    out.material = mesh.material;
+    return true;
+}
+
+}  // namespace
+
 bool write_pbr_glb(const std::string& path, const NativeMesh& mesh, std::string& error) {
+    NativeMesh deduped;
+    if (chart_corner_duplicates(mesh, deduped)) {
+        // Recursing once is safe: the deduplicated mesh cannot trip the
+        // detector again.
+        return write_pbr_glb(path, deduped, error);
+    }
     const size_t vertex_count = mesh.positions.size() / 3;
     if (vertex_count == 0 || mesh.positions.size() % 3 != 0) {
         error = "GLB mesh requires non-empty xyz positions";

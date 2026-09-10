@@ -18,6 +18,7 @@ from pathlib import Path
 
 import imageio.v2 as imageio
 import numpy as np
+from samt_io import read_samt
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -28,26 +29,15 @@ if "CONDA_PREFIX" not in os.environ:
     os.environ["CONDA_PREFIX"] = str(Path(sys.executable).resolve().parent.parent)
 
 
-def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (ndim,) = struct.unpack("<i", stream.read(4))
-        ne = struct.unpack(f"<{ndim}q", stream.read(8 * ndim))
-        (ggml_type,) = struct.unpack("<i", stream.read(4))
-        if ggml_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {ggml_type}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    if values.size != math.prod(ne):
-        raise ValueError(f"{path}: tensor size does not match its header")
-    return ne, values.reshape(tuple(reversed(ne)))
 
 
 def load_pose(condition_dir: Path) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     values = []
     for name in ("pose_rotation", "pose_translation", "pose_scale"):
         _, value = read_samt(condition_dir / f"{name}.samt")
-        values.append(torch.from_numpy(value).float().cuda())
+        # The official pipeline's pose tensors are batched (1, 4)/(1, 3)/(1, 3);
+        # compose_transform/pytorch3d reject the unbatched dump shape.
+        values.append(torch.from_numpy(value).float().cuda().unsqueeze(0))
     return values[0], values[1], values[2]
 
 

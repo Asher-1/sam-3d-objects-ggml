@@ -16,6 +16,14 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from samt_io import read_samt
+
+
+def read_samt_values(path):
+    """samt_io.read_samt returns (ne, values); the checks below only need the
+    flat numpy values (numpy provides .size and .reshape)."""
+    _, values = read_samt(path)
+    return values
 import torch
 from PIL import Image
 import torch.nn.functional as F
@@ -23,19 +31,6 @@ import torch.nn.functional as F
 from moge.model.v1 import MoGeModel
 
 
-def read_samt(path: Path) -> np.ndarray:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (dtype,) = struct.unpack("<i", stream.read(4))
-        if dtype != 0:
-            raise ValueError(f"{path}: expected F32 SAMT")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    if values.size != int(np.prod(shape)):
-        raise ValueError(f"{path}: truncated tensor")
-    return values
 
 
 def deterministic_image(width: int, height: int) -> torch.Tensor:
@@ -219,11 +214,11 @@ def main() -> int:
                 reference_backbone_input is None or reference_attention_context is None or
                 reference_qkv0 is None):
             raise RuntimeError("official hooks did not capture DINO input and block 0 QKV")
-        native_backbone_image = read_samt(prefix.with_suffix(".backbone_image.samt"))
-        native_patch_tokens = read_samt(prefix.with_suffix(".backbone_patch_tokens.samt"))
-        native_position_tokens = read_samt(prefix.with_suffix(".backbone_position_tokens.samt"))
-        native_backbone_input = read_samt(prefix.with_suffix(".backbone_input.samt"))
-        native_attention_context = read_samt(prefix.with_suffix(".attention_context.samt"))
+        native_backbone_image = read_samt_values(prefix.with_suffix(".backbone_image.samt"))
+        native_patch_tokens = read_samt_values(prefix.with_suffix(".backbone_patch_tokens.samt"))
+        native_position_tokens = read_samt_values(prefix.with_suffix(".backbone_position_tokens.samt"))
+        native_backbone_input = read_samt_values(prefix.with_suffix(".backbone_input.samt"))
+        native_attention_context = read_samt_values(prefix.with_suffix(".attention_context.samt"))
         if native_backbone_image.size != reference_backbone_image.size:
             raise RuntimeError("native/reference DINO image shape mismatch")
         if native_patch_tokens.size != reference_patch_tokens.size:
@@ -255,7 +250,7 @@ def main() -> int:
         qkv0 = reference_qkv0.reshape(batch, tokens, 3, heads, head_dim).transpose(2, 0, 3, 1, 4)
         qkv_metrics = {}
         for name, reference in zip(("q", "k", "v"), qkv0):
-            native = read_samt(prefix.with_suffix(f".{name}.samt"))
+            native = read_samt_values(prefix.with_suffix(f".{name}.samt"))
             if native.size != reference.size:
                 raise RuntimeError(f"block 0 {name}: native/reference shape mismatch")
             qkv_metrics[name] = metrics(native.reshape(reference.shape), reference)
@@ -263,7 +258,7 @@ def main() -> int:
         for index, reference in enumerate(reference_blocks):
             if reference is None:
                 raise RuntimeError(f"official hook did not capture block {index}")
-            native = read_samt(prefix.with_suffix(f".block{index}.samt"))
+            native = read_samt_values(prefix.with_suffix(f".block{index}.samt"))
             if native.size != reference.size:
                 raise RuntimeError(
                     f"block {index}: native has {native.size} values; expected {reference.size}"
@@ -272,7 +267,7 @@ def main() -> int:
             attention_projection_reference = reference_attention_projection[index]
             if attention_projection_reference is None:
                 raise RuntimeError(f"official hook did not capture attention projection {index}")
-            attention_projection = read_samt(prefix.with_suffix(f".attention_projection{index}.samt"))
+            attention_projection = read_samt_values(prefix.with_suffix(f".attention_projection{index}.samt"))
             if attention_projection.size != attention_projection_reference.size:
                 raise RuntimeError(
                     f"attention projection {index}: native has {attention_projection.size} values; "
@@ -280,7 +275,7 @@ def main() -> int:
                 )
             if attention_reference is None:
                 raise RuntimeError(f"official hook did not capture attention {index}")
-            attention = read_samt(prefix.with_suffix(f".attention{index}.samt"))
+            attention = read_samt_values(prefix.with_suffix(f".attention{index}.samt"))
             if attention.size != attention_reference.size:
                 raise RuntimeError(
                     f"attention {index}: native has {attention.size} values; "
@@ -290,14 +285,14 @@ def main() -> int:
             gelu_reference = reference_mlp_gelu[index]
             if fc1_reference is None or gelu_reference is None:
                 raise RuntimeError(f"official hook did not capture MLP stages {index}")
-            fc1 = read_samt(prefix.with_suffix(f".mlp_fc1{index}.samt"))
-            gelu = read_samt(prefix.with_suffix(f".mlp_gelu{index}.samt"))
+            fc1 = read_samt_values(prefix.with_suffix(f".mlp_fc1{index}.samt"))
+            gelu = read_samt_values(prefix.with_suffix(f".mlp_gelu{index}.samt"))
             if fc1.size != fc1_reference.size or gelu.size != gelu_reference.size:
                 raise RuntimeError(f"MLP stage {index}: native/reference shape mismatch")
             mlp_reference = reference_mlp[index]
             if mlp_reference is None:
                 raise RuntimeError(f"official hook did not capture MLP {index}")
-            mlp = read_samt(prefix.with_suffix(f".mlp{index}.samt"))
+            mlp = read_samt_values(prefix.with_suffix(f".mlp{index}.samt"))
             if mlp.size != mlp_reference.size:
                 raise RuntimeError(
                     f"MLP {index}: native has {mlp.size} values; expected {mlp_reference.size}"

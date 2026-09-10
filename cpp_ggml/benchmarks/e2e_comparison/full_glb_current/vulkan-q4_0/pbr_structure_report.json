@@ -1,8 +1,0 @@
-{
-  "effective_metallic_factor": 1.0,
-  "native_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_q4_0/cuda_pbr.glb",
-  "official_material_contract": "PASS",
-  "structural_contract": "PASS",
-  "triangle_count": 26144,
-  "vertex_count": 16933
-}

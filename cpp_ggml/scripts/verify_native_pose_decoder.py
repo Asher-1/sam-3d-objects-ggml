@@ -122,16 +122,47 @@ def main() -> int:
     ]
     subprocess.run(command, check=True)
     native = json.loads(args.out.read_text(encoding="utf-8"))
-    if native.get("schema") != "sam3d.native-pose.v1" or \
-            native.get("convention") != "ScaleShiftInvariant":
+    schema = native.get("schema")
+    # v2 nests the raw decoder fields under "native" and promotes the official
+    # pipeline receipt (rotation/translation/scale) to the top level; v1 kept
+    # the raw fields at the top level.
+    if schema == "sam3d.native-pose.v2":
+        fields = native.get("native")
+    elif schema == "sam3d.native-pose.v1":
+        fields = native
+    else:
+        fields = None
+    if not isinstance(fields, dict) or fields.get("convention") != "ScaleShiftInvariant":
         raise RuntimeError("native pose output does not declare the expected contract")
     oracle = official_pose(**inputs)
     metrics: dict[str, float] = {}
     for name, expected in oracle.items():
-        actual = torch.tensor(native[name], dtype=torch.float32)
+        actual = torch.tensor(fields[name], dtype=torch.float32)
         if actual.shape != expected.shape:
             raise RuntimeError(f"{name}: shape mismatch {tuple(actual.shape)} != {tuple(expected.shape)}")
         metrics[name] = float((actual - expected).abs().max())
+    if schema == "sam3d.native-pose.v2":
+        # The v2 top level is the official receipt: batch-nested arrays with
+        # the per-axis scale collapsed to its uniform mean. Cross-check it
+        # against the same oracle instead of trusting the writer.
+        official_checks = {
+            "official.rotation": (native.get("rotation"), oracle["rotation_wxyz"]),
+            "official.translation": (native.get("translation"), oracle["translation"]),
+        }
+        uniform_scale = float(torch.tensor(fields["scale"], dtype=torch.float32).mean())
+        official_checks["official.scale_uniform"] = (
+            native.get("scale"),
+            torch.full((3,), uniform_scale, dtype=torch.float32),
+        )
+        for name, (actual_value, expected) in official_checks.items():
+            if actual_value is None:
+                raise RuntimeError(f"native pose v2 is missing the official field: {name}")
+            actual = torch.tensor(actual_value, dtype=torch.float32).reshape(-1)
+            expected_flat = expected.reshape(-1)
+            if actual.shape != expected_flat.shape:
+                raise RuntimeError(
+                    f"{name}: shape mismatch {tuple(actual.shape)} != {tuple(expected_flat.shape)}")
+            metrics[name] = float((actual - expected_flat).abs().max())
     result = {
         "schema": "sam3d.native-pose-verify.v1",
         "native": str(args.out.resolve()),

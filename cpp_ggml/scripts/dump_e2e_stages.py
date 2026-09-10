@@ -47,9 +47,11 @@ os.chdir(REPO_ROOT)
 os.environ.setdefault("LIDRA_SKIP_INIT", "true")
 
 import numpy as np  # noqa: E402
+from samt_io import write_samt_f32
+from samt_io import write_samt_i32
 import torch  # noqa: E402
 
-SAMT_MAGIC = b"SAMT"
+
 GGML_TYPE_F32 = 0
 
 
@@ -97,25 +99,8 @@ def cuda_provenance():
     }
 
 
-def write_samt_f32(path, ne, data):
-    """ne in ggml order (ne[0] fastest); data is the C-contiguous buffer."""
-    data = np.ascontiguousarray(data, dtype="<f4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))
-        f.write(struct.pack("<i", GGML_TYPE_F32))
-        f.write(data.tobytes())
 
 
-def write_samt_i32(path, ne, data):
-    data = np.ascontiguousarray(data, dtype="<i4")
-    with open(path, "wb") as f:
-        f.write(SAMT_MAGIC)
-        f.write(struct.pack("<i", len(ne)))
-        f.write(struct.pack(f"<{len(ne)}q", *ne))
-        f.write(struct.pack("<i", 26))  # GGML_TYPE_I32 (vendored ggml)
-        f.write(data.tobytes())
 
 
 class Dumper:

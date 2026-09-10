@@ -155,7 +155,7 @@ def capture_full_provenance(models_dir: Path, moge_model: Path, binaries: dict[s
         "ggml_patch_sha256": sha256_file(CPP_ROOT / "third_party/ggml-patches/0001-sam3d-ggml-combined.patch"),
         "variants": {dtype: runtime_provenance(binaries["native_pbr"], models_dir, dtype,
                      None, None, None, None, moge_model, mesh_dtype=dtype)
-                     for dtype in ("f16", "q8_0", "q4_0")},
+                     for dtype in ("f16", "q8_0", "q4_k")},
     }
 
 
@@ -183,13 +183,16 @@ def main() -> int:
     parser.add_argument("--threads", type=int, default=6)
     parser.add_argument("--render-frames", type=int, default=60)
     parser.add_argument("--render-resolution", type=int, default=512)
+    parser.add_argument("--ss-attention", choices=("normal", "strict"), default="normal",
+                        help=("SS attention path recorded into every raw row: normal is the "
+                              "delivery default (F16-KV flash); strict is the parity diagnostic"))
     parser.add_argument("--diagnostic-noise-replay", action="store_true",
                         help=("inject the fresh official stage noise into raw candidates for numerical "
                               "isolation only; the resulting report is not a production native-seed pass"))
     parser.add_argument("--operator-oracle", action="store_true",
                         help=("run SS/SLat block-boundary captures against one GGUF candidate; "
                               "without calibrated thresholds it remains diagnostic"))
-    parser.add_argument("--operator-oracle-dtype", choices=("f16", "q8_0", "q4_0"), default="f16")
+    parser.add_argument("--operator-oracle-dtype", choices=("f16", "q8_0", "q4_k"), default="f16")
     parser.add_argument("--operator-oracle-reference-weight-scope",
                         choices=("official-checkpoint", "same-gguf-dequantized"),
                         default="same-gguf-dequantized",
@@ -665,7 +668,7 @@ def main() -> int:
     raw_glb_render_results: dict[str, bool] = {}
     raw_dtype_contract_results: dict[str, bool] = {}
     if stage_ok and runtime_ok:
-        for dtype in ("f16", "q8_0", "q4_0"):
+        for dtype in ("f16", "q8_0", "q4_k"):
             case_dir = work_dir / f"raw_native_cuda_{dtype}"
             case_dir.mkdir(parents=True, exist_ok=True)
             raw_ply = case_dir / "output.ply"
@@ -695,7 +698,7 @@ def main() -> int:
                     "--seed", str(args.seed), "--threads", str(args.threads), "--out", str(raw_ply),
                     "--pbr-out", str(raw_glb), "--pose-out", str(raw_pose),
                     "--dtype-contract-out", str(raw_dtype_contract),
-                    "--ss-attention", "strict",
+                    "--ss-attention", args.ss_attention,
                 ]
                 if args.diagnostic_noise_replay:
                     raw_command.extend(("--noise-dir", str(stages)))
@@ -779,7 +782,7 @@ def main() -> int:
                 case_ok = False
             raw_pbr_results[dtype] = case_ok
     else:
-        for dtype in ("f16", "q8_0", "q4_0"):
+        for dtype in ("f16", "q8_0", "q4_k"):
             raw_pbr_results[dtype] = False
             raw_glb_structure_results[dtype] = False
             raw_glb_render_measurements[dtype] = False
@@ -796,7 +799,7 @@ def main() -> int:
     vulkan_cuda_pbr_render_results: dict[str, bool] = {}
     vulkan_cuda_pbr_dtype_contract_results: dict[str, bool] = {}
     if stage_ok and runtime_ok and pytorch_philox_distribution_blocks is not None:
-        for dtype in ("f16", "q8_0", "q4_0"):
+        for dtype in ("f16", "q8_0", "q4_k"):
             case_dir = work_dir / f"raw_vulkan_cuda_pbr_{dtype}"
             handoff_manifest = case_dir / "handoff_manifest.json"
             handoff_ply = case_dir / "vulkan_output.ply"
@@ -909,7 +912,7 @@ def main() -> int:
             vulkan_cuda_pbr_results[dtype] = case_ok
     else:
         reason = "native runtime, official oracle, or CUDA Philox distribution-block contract did not complete"
-        for dtype in ("f16", "q8_0", "q4_0"):
+        for dtype in ("f16", "q8_0", "q4_k"):
             vulkan_cuda_pbr_results[dtype] = False
             vulkan_cuda_pbr_structure_results[dtype] = False
             vulkan_cuda_pbr_render_measurements[dtype] = False
@@ -945,7 +948,7 @@ def main() -> int:
         steps.append({"name": "raw_native_cuda_vulkan_matrix", "status": "SKIPPED",
                       "reason": "native runtime, official oracle, or GPU compute exclusivity check failed"})
 
-    required_raw_dtypes = ("f16", "q8_0", "q4_0")
+    required_raw_dtypes = ("f16", "q8_0", "q4_k")
     coverage = {
         "controlled_pbr_texture_and_normals": controlled_ok and controlled_pbr_gate_configured,
         "cuda_rng_stream_matches_official": cuda_rng_stream_ok,

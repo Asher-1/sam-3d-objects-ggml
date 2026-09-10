@@ -39,17 +39,30 @@ That document is the source of truth for the native textured-GLB path and its
 license/build boundaries. The non-baked `mesh-export` command remains useful
 for inspecting decoder tensors, but it is not the production PBR entry point.
 
-The [E2E root-cause analysis and implementation plan](docs/E2E_ROOT_CAUSE_AND_IMPLEMENTATION_PLAN.md)
-(Chinese, updated 2026-09-10) records implemented learning-rate, normal,
-GLB-comparison, timing-contract and cross-backend Philox fixes, together with
-remaining dtype and native hot-timing gaps. It also defines the Vulkan
-inference-to-CUDA-PBR handoff contract; implementation alone is not a completed
-numerical parity gate.
+The 2026-09-10 root-cause audit plan has been fully executed and merged into
+the [native E2E parity contract](docs/NATIVE_E2E_PARITY_CONTRACT.md): every
+pipeline boundary is now either verified in-band against the official oracle
+or characterized as implementation-inherent, and the non-numerical
+acceptance boundaries (UV/material export, quantization entry point,
+performance authorization) live in its "Non-Numerical Acceptance Boundaries"
+section.
 
 The native CMake targets do not link cuDNN. CUDA builds use GGML CUDA,
 CUDA-runtime, cuBLAS and the explicitly enabled nvdiffrast-compatible raster
 core only. The official Python environment is used by reference-generation
 and comparison scripts, never by the native `image-to-3d` runtime.
+
+## Documentation map
+
+This guide covers deployment, models, build and the one-command inference
+paths. Deeper reference material lives in [`docs/`](docs/):
+
+| Document | Scope |
+| --- | --- |
+| [`NATIVE_E2E_PARITY_CONTRACT.md`](docs/NATIVE_E2E_PARITY_CONTRACT.md) | source of truth: acceptance definition, official anchors, numerical boundary status, gate history |
+| [`BACKEND_NUMERICS.md`](docs/BACKEND_NUMERICS.md) | attention precision policy (SS strict/normal, MoGe F32-K/V) and the cross-backend Philox sampling contract |
+| [`NATIVE_PBR_STAGE_REGRESSION.md`](docs/NATIVE_PBR_STAGE_REGRESSION.md) | per-stage regressions: mesh decode/export, visibility, MeshFix, camera contract, Gaussian observations |
+| [`../benchmarks/README.md`](benchmarks/README.md) | published evidence: single-object GLB matrix and full-scene reconstruction, with reproduce/publish commands |
 
 ## Clone and bootstrap
 
@@ -117,9 +130,10 @@ SAM3D_PYTHON=/absolute/path/to/sam3d-objects/bin/python \
 
 The conversion/model card is in [`models/MODEL_CARD.md`](models/MODEL_CARD.md).
 Do not place model files in `benchmarks/`; benchmark directories contain only
-reports and rendered evidence. The public SAM 3D repository does not contain
-MoGe: the second command downloads `Ruicheng/moge-vitl` through the selected
-Python environment and converts it offline. Native execution still uses no
+reports and rendered evidence. The published MoGe ViT-L file is the F16 GGUF
+and is part of the default f16 download set; `prepare_moge_gguf.sh` remains
+the offline reconversion path from the official `Ruicheng/moge-vitl`
+checkpoint when another dtype is needed. Native execution still uses no
 Python. Prepare F16/Q4 files separately when selecting those precisions.
 Public files can be an older conversion revision than the local benchmark;
 the downloader preserves different local files and checks download sizes and
@@ -142,6 +156,16 @@ bash run_ggml.sh --backend cuda --dtype q8_0 \
 # Vulkan inference followed by a separate native CUDA PBR process.
 bash run_ggml.sh --backend vulkan --dtype q8_0 \
   --accept-pbr-licenses --out-dir output/vulkan-q8
+
+# Multi-object scene mode (the official demo_multi_object flow), fully
+# native: every '<idx>.png' under --mask-dir is reconstructed once by the
+# native binary, then the pure-C++ scene-assemble command applies the
+# official make_scene pose semantics, normalizes, and renders the orbit with
+# the same CUDA Gaussian rasterizer as the 100-view bake (PNG frames;
+# scene.gif when ffmpeg is available). No PBR bake, no Python.
+bash run_ggml.sh --skip-build --backend cuda --dtype q8_0 \
+  --mask-dir notebook/images/shutterstock_stylish_kidsroom_1640806567 \
+  --mask-indices 14,17 --out-dir output/scene-ggml
 ```
 
 The license flag explicitly enables the existing nvdiffrast non-commercial
@@ -153,10 +177,32 @@ the scripts refuse to overwrite an earlier reconstruction. `--help` lists
 paths, seed, thread and precision options. Defaults are the kidsroom image,
 mask 14, seed 42 and strict SS attention.
 
-Python produces `official_pbr_00.glb`, `official_pbr_00.base_color.png` and
-`official_pbr_00.pose.json`. Native reconstruction produces `output.glb`,
-`output.base_color.png`, `output.ply`, `pose.json`, `dtype_contract.json` and
-`run.log`. The Vulkan launcher also saves raw mesh tensors and verifies that
+Python produces `official_pbr_00.glb`, `official_pbr_00.base_color.png`,
+`official_pbr_00.pose.json` and the `official_full_e2e.json` timing report.
+Native reconstruction produces `output.glb`, `output.base_color.png`,
+`output.ply`, `pose.json`, `dtype_contract.json`, `native_full_e2e.json` and
+`run.log`. `pose.json` carries the official pose receipt (`rotation`,
+`translation`, `scale`; the per-axis scale collapses to its uniform mean like
+the official decoder) with the raw native decoder fields preserved under a
+`native` block. The native timing report mirrors the official report's
+`latency_ms` structure under the documented cold-process timer contract, so
+the two launchers' artifacts stay directly comparable.
+
+Scene mode (`--mask-dir`) instead produces `scene_posed.ply` (the objects
+transformed into the scene frame), `frames/frame_*.png` (the 300-frame orbit
+rendered by the same CUDA rasterizer as the 100-view bake; `scene.gif` when
+`ffmpeg` is installed) and `scene_manifest.json`, with one
+`objects/obj_<idx>/{output.ply,pose.json}` per mask. The scene assembly lives
+in the native `sam3d-cli scene-assemble` command: it reproduces the official
+`make_scene` pose semantics (including the pytorch3d row-vector transform
+convention and quaternion standardization), the official `normalized_gaussian`
+rescale, and the official `render_video` orbit, verified field-by-field
+against the official Python chain to float32 rounding. The Python script
+`cpp_ggml/scripts/run_scene_pipeline.py` (`--runner python|ggml`) remains
+available as the official-notebook reference flow for comparisons.
+
+The Vulkan launcher
+also saves raw mesh tensors and verifies that
 CUDA post-processing does not change its inference outputs. A GLB embeds its
 base-color PNG and can be opened on its own. The separate PNG is the same
 atlas, not another neural output. Both paths perform 100-view observations and
@@ -247,27 +293,16 @@ cpp_ggml/build-cuda-pbr/bin/sam3d-cli image-to-3d \
   --dtype-contract-out /tmp/sam3d_native_dtype_contract.json
 ```
 
-### SS attention modes
+### Attention precision
 
-The condition encoders always use their scoped F32 attention path. The SS
-diffusion graph has an explicit, recorded policy:
-
-| Mode | Command | Graph | Intended use |
-| --- | --- | --- | --- |
-| `normal` | `--ss-attention normal` | ggml flash attention with F16 K/V | throughput measurement |
-| `strict` | `--ss-attention strict` | SS-only F32 `QK^T -> softmax -> V` | numerical-parity diagnosis and quality gate |
-
-`strict` materializes attention scores and therefore has a larger transient
-allocation and a lower throughput than `normal`; it changes neither DINO,
-MoGe, SLat nor native post-processing. `run_image_to_3d.py` defaults to
-`strict` so a raw E2E quality run cannot silently use the known less-accurate
-flash path. The release matrix records this choice in every JSON row. Use
-`SAM3D_MANUAL_ATTN=1` only for a process-wide diagnostic affecting every
-attention graph; it is not the SS quality-mode interface.
-
-For the direct CLI, append `--ss-attention strict` to `image-to-3d`. The
-conditioned `e2e` command accepts the same policy through
-`SAM3D_SS_STRICT_ATTN=1`; the Python runner sets it automatically.
+Attention formulation is selected per graph through explicit options, never
+by a process-wide environment switch. The SS diffusion graph defaults to the
+strict F32 `QK^T -> softmax -> V` path so a raw quality run cannot silently
+use the faster F16-KV flash path; the condition encoders always use their
+scoped F32 path; MoGe is pinned to the F32-K/V contract that matches the
+official depth model. The mode table, the MoGe repair rationale and the
+per-command flags are documented in
+[`docs/BACKEND_NUMERICS.md`](docs/BACKEND_NUMERICS.md).
 
 `--dtype-contract-out` writes a machine-readable inventory from the graphs that
 were actually constructed: stage, ggml op, source/output dtype, aggregated node
@@ -291,53 +326,13 @@ provenance and refuses to label shared-GPU timings as release evidence.
 
 ### Cross-backend sampling contract
 
-CUDA uses the verified PyTorch Philox distribution path directly. CPU and
-Vulkan use the same Philox4x32-10 counter/scatter sequence and require the
-CUDA reference device's `distribution_blocks` value, because that launch
-capacity affects the PyTorch draw ordering. `quickstart.sh` and the matrix
-runner record it automatically with the CUDA `rng-dump` command; direct
-CPU/Vulkan CLI use must provide it explicitly:
-
-```bash
-SAM3D_PYTORCH_PHILOX_DISTRIBUTION_BLOCKS=168 \
-  cpp_ggml/build-vulkan/bin/sam3d-cli image-to-3d ... --backend vulkan
-
-python3 cpp_ggml/scripts/verify_portable_philox_rng.py \
-  --cuda-binary cpp_ggml/build-cuda/bin/sam3d-cli \
-  --portable-binary cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42
-
-python3 cpp_ggml/scripts/verify_pytorch_cuda_randperm.py \
-  --cuda-binary cpp_ggml/build-cuda/bin/sam3d-cli \
-  --portable-binary cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42
-
-python3 cpp_ggml/scripts/verify_pytorch_coordinate_downsample.py \
-  --cuda-binary cpp_ggml/build-cuda/bin/sam3d-cli \
-  --portable-binary cpp_ggml/build-vulkan/bin/sam3d-cli --seed 42
-```
-
-`168` is an example from the verified RTX 3060 run, not a portable constant.
-The verifier compares the entire SS/SLat draw sequence. CUDA device math and
-host libm are not bitwise-identical: the current CUDA-to-Vulkan result covers
-243,029 F32 values with maximum absolute error `2.205e-6` and mean absolute
-error `1.674e-7`, within the verifier's `3e-6` and `4e-7` limits.
-
-The second verifier covers the other random operation in the native path. With
-`--reference-dir`, it reads the five SS normal draw sizes from a fresh official
-stage manifest, stops before SLat `x0`, then compares the exact
-`torch.randperm` output used to select the first 42,000 sparse coordinates. It
-runs both a 42,000-element case and a 100,000-element case (which exercises the
-64-bit-key branch), and requires byte-for-byte agreement with CUDA PyTorch for
-CUDA, Vulkan, and CPU.
-
-The third verifier exercises the complete production
-`downsample_sparse_coords_pytorch` path with negative and duplicated I32 sparse
-coordinates. It loads the repository's canonical
-`downsample_sparse_structure` CUDA function body as the oracle, then requires
-byte-for-byte equality for the F32 rescale, ties-to-even rounding, truncation,
-clamp, exact four-component coordinate identity, lexicographic
-`torch.unique(..., dim=0)` result, and subsequent `randperm` selection. Thus
-the release gate no longer has a host-library RNG, lossy coordinate key, or
-container-order dependency in this input path.
+CUDA, Vulkan and CPU share the verified PyTorch Philox draw sequence;
+portable backends additionally need the CUDA reference device's
+`distribution_blocks` value (`--philox-blocks`). Three verifiers pin the
+contract — the full SS/SLat draw sequence, the `torch.randperm` coordinate
+selection, and the production downsample path — and are documented with
+commands and measured tolerances in
+[`docs/BACKEND_NUMERICS.md`](docs/BACKEND_NUMERICS.md).
 
 The neural-only diagnostic matrix is generated with:
 
@@ -450,10 +445,24 @@ The command returns
 non-zero for any failed prerequisite, metric gate, or missing artifact and does
 not modify `benchmarks/`. The latest complete assets are retained at
 [`benchmarks/e2e_comparison/full_glb_current/`](benchmarks/e2e_comparison/full_glb_current/).
-The full-E2E gate remains non-passing: raw numerical error,
-missing calibrated budgets and repeated/hot-session timing
-are documented in the [audit](docs/E2E_ROOT_CAUSE_AND_IMPLEMENTATION_PLAN.md).
-Successful export is not numerical acceptance.
+The multi-object scene evidence (every kidsroom mask, orbit renders,
+per-frame metrics and per-object pose parity against the official PyTorch
+reference) is published at
+[`benchmarks/e2e_comparison/scene_current/`](benchmarks/e2e_comparison/scene_current/)
+and is regenerated idempotently with
+`run_scene_benchmark.py` + `publish_scene_benchmark.py`. After the full
+divergence repair (2026-09-14c: the native chain now feeds the condition
+embedders a fully finite point map exactly like the official receipt, see
+"REVISION 2" in the parity contract) all three native variants reconstruct
+**27/27 objects** in 47-51 min per variant with a median free-run pose
+drift of 1.0-1.2 deg and foreground IoU 0.80-0.82 (was 20/27 objects,
+IoU 0.48); the scene branch uses the faster F16-KV attention preset while
+the single-object pipeline keeps the strict F32-KV gate.
+The full-E2E gate remains non-passing until calibrated budgets and
+same-contract hot-session timing are configured; the numerical boundary
+status is tracked in the
+[parity contract](docs/NATIVE_E2E_PARITY_CONTRACT.md). Successful export is
+not numerical acceptance.
 
 Current checked-in evidence and regeneration commands are documented in
 [`benchmarks/README.md`](benchmarks/README.md). Run the standalone verifier with:
@@ -483,159 +492,14 @@ The command creates `vulkan_output.ply`, raw `vulkan_flexicubes_*.samt`,
 `cuda_pbr.glb`, and `handoff_manifest.json`. It is a functional handoff run;
 use `cuda full-e2e` for official render and accuracy gates.
 
-## Native mesh decode and asset export
+## Native mesh decode and PBR stage regression
 
-`mesh-decode` consumes a real SLat latent and sparse 64^3 support, then runs
-the native mesh transformer plus two official-order `SparseSubdivide` blocks.
-It writes raw 101-channel cube features and, optionally, their 256^3 sparse
-coordinates:
-
-```bash
-cpp_ggml/build-cuda/bin/sam3d-cli mesh-decode \
-  --model cpp_ggml/models/gguf/slat_decoder_mesh-f16.gguf \
-  --input cpp_ggml/benchmarks/data/e2e/slat_feats_final.samt \
-  --coords cpp_ggml/benchmarks/data/e2e/slat_coords.samt \
-  --coords-out /tmp/mesh_coords.samt --out /tmp/mesh_raw.samt --backend cuda
-```
-
-Create a source-of-truth reference by adding `--dump-mesh-decoder-reference`
-to the official dumper. The final raw feature fixture is large, so it is
-deliberately opt-in:
-
-```bash
-"$SAM3D_PYTHON" cpp_ggml/scripts/dump_e2e_stages.py \
-  --out-dir /tmp/sam3d_reference --dump-mesh-decoder-reference
-python3 cpp_ggml/scripts/verify_mesh_decoder_reference.py \
-  --reference-dir /tmp/sam3d_reference \
-  --native-features /tmp/mesh_raw.samt --native-coords /tmp/mesh_coords.samt
-```
-
-The verifier first requires exact sparse coordinates, then reports measured
-MAE, RMSE, maximum absolute error and its token/channel location. It assigns
-no numeric tolerance itself: a release gate must record one from repeated
-official runs as described in the parity contract. `--stage input_layer`,
-`--stage block11`, `--stage upsample0`, and `--stage upsample1` expose the
-same graph boundaries for fault isolation.
-
-For a transformer block whose QKV coordinates already agree, isolate the
-attention kernel from the linear projections with the same-QKV semantic gate:
-
-```bash
-"$SAM3D_PYTHON" cpp_ggml/scripts/verify_mesh_attention_semantics.py \
-  --reference-dir /tmp/sam3d_reference \
-  --native-qkv /tmp/block0_qkv.samt \
-  --native-qkv-coords /tmp/block0_qkv-coords.samt \
-  --native-attention /tmp/block0_attention.samt \
-  --native-attention-coords /tmp/block0_attention-coords.samt \
-  --block 0 --device cuda
-```
-
-It requires byte-identical sparse coordinates, replays the released PyTorch
-windowed-SDPA function on the native QKV tensor, and reports projection,
-same-QKV attention, and fixture errors separately. This is a diagnostic gate,
-not a substitute for the complete mesh or final-asset gate.
-
-`mesh-export` is the C++ boundary after mesh decoding. It consumes the official
-decoder's F32 SAMT tensors (`vertices`, `faces`, and optional six-channel
-vertex attributes), applies the same Z-up-to-Y-up transform as Python
-`to_glb`, and writes a non-baked GLB with `POSITION` and `COLOR_0`:
-
-```bash
-cpp_ggml/build-cpu/bin/sam3d-cli mesh-export \
-  --vertices cpp_ggml/benchmarks/data/e2e/decode_mesh_vertices.samt \
-  --faces cpp_ggml/benchmarks/data/e2e/decode_mesh_faces.samt \
-  --attrs cpp_ggml/benchmarks/data/e2e/decode_mesh_vertex_attrs.samt \
-  --out /tmp/sam3d_mesh.glb
-```
-
-This command is regression-tested against the real canonical decoder output.
-It is a diagnostic export; production textured output is emitted by
-`image-to-3d --pbr-out` after the native mesh and baking stages.
-
-## Native PBR Stage Regression
-
-Create a complete official reference bundle before testing native PBR stages.
-First dump the neural stages. The dumper records the source Gaussian, raw mesh,
-and inputs needed by the standalone official PBR reference generator:
-
-```bash
-"$SAM3D_PYTHON" cpp_ggml/scripts/dump_e2e_stages.py \
-  --image INPUT.png --mask-dir MASK_DIR --mask-index 0 --seed 42 \
-  --out-dir /tmp/sam3d_reference
-
-"$SAM3D_PYTHON" cpp_ggml/scripts/generate_official_pbr_reference.py \
-  --stage-dir /tmp/sam3d_reference \
-  --reference-dir /tmp/sam3d_reference/official_pbr_reference \
-  --seed 42 --save-observations --save-bake-raster
-
-python3 cpp_ggml/scripts/verify_official_pbr_reference.py \
-  --reference-dir /tmp/sam3d_reference/official_pbr_reference \
-  --stage-dir /tmp/sam3d_reference
-```
-
-`--save-bake-raster` writes the exact 100 per-view `uv`, `uv_dr`, and coverage
-maps that the official 2500-step differentiable baker consumes. It is a large,
-external debugging fixture and is deliberately excluded from `benchmarks/` and
-`models/`. The verifier checks every recorded array's shape and SHA-256 before
-a native baker may use it for a focused regression.
-
-The following runs the native visibility/mincut decision against the frozen
-official post-VTK mesh and compares the pre-MeshFix arrays exactly. It is a
-focused stage regression; the complete production path also invokes MeshFix,
-xatlas, Gaussian rendering and baking.
-
-```bash
-python3 cpp_ggml/scripts/verify_mesh_visibility_reference.py \
-  --binary cpp_ggml/build-cuda/bin/sam3d-cli \
-  --stage-dir /tmp/sam3d_reference --out-dir /tmp/native_visibility_check
-```
-
-The camera contract behind that gate can be checked independently. The
-official 1,000-view `_fill_holes` matrices are generated once from the pinned
-PyTorch environment into a read-only C++ table, so this command has no Python
-or PyTorch runtime dependency in the native renderer:
-
-```bash
-"$SAM3D_PYTHON" cpp_ggml/scripts/verify_mesh_camera_contract.py \
-  --binary cpp_ggml/build-cuda/bin/sam3d-cli --contract visibility --views 1000
-```
-
-The final official cleanup uses `pymeshfix.PyTMesh`, whose TMesh source is
-GPL-3.0-or-commercial. It is deliberately absent from the default runtime.
-After accepting a compatible license, enable the exact implementation and
-compare it with the captured official output:
-
-```bash
-cmake -S cpp_ggml -B cpp_ggml/build-cuda-meshfix \
-  -DSAM3D_GGML_CUDA=ON -DSAM3D_GGML_NATIVE_PBR=ON \
-  -DSAM3D_GGML_NVDIFFRAST_NONCOMMERCIAL=ON \
-  -DSAM3D_GGML_MESHFIX_GPL=ON
-cmake --build cpp_ggml/build-cuda-meshfix --parallel 6
-python3 cpp_ggml/scripts/verify_meshfix_reference.py \
-  --binary cpp_ggml/build-cuda-meshfix/bin/sam3d-cli \
-  --stage-dir /tmp/sam3d_reference --out-dir /tmp/native_meshfix_check
-```
-
-This gate requires exact vertices and faces at the pre-xatlas boundary. It
-does not cover texture baking or final GLB
-assembly.
-
-When only this boundary is being changed, avoid conflating it with the long
-texture bake by generating the same official cleanup reference alone:
-
-```bash
-"$SAM3D_PYTHON" cpp_ggml/scripts/generate_official_pbr_reference.py \
-  --stage-dir /tmp/sam3d_reference --reference-dir /tmp/mesh_cleanup_reference \
-  --mesh-cleanup-only
-```
-
-Use the recorded rather than regenerated Gaussian cameras when exercising 100
-native observations:
-
-```bash
-cpp_ggml/build-cuda/bin/sam3d-cli gaussian-render \
-  --ply /tmp/sam3d_reference/output_gs.ply --out-dir /tmp/native_observations \
-  --views 100 --resolution 1024 \
-  --extrinsics /tmp/sam3d_reference/bake_extrinsics.samt \
-  --intrinsics /tmp/sam3d_reference/bake_intrinsics.samt
-```
+Beyond the end-to-end commands above, every native post-processing stage has
+a focused official-reference regression: `mesh-decode` and the C++
+`mesh-export` boundary against the decoder fixtures, the visibility/mincut
+and MeshFix cleanup boundaries, the frozen 1,000-view camera contract, and
+the 100-view Gaussian observation comparison against the recorded official
+cameras. The per-stage commands, reference-bundle generation, the
+`--save-bake-raster` fixture policy and the MeshFix license gate are
+documented in
+[`docs/NATIVE_PBR_STAGE_REGRESSION.md`](docs/NATIVE_PBR_STAGE_REGRESSION.md).

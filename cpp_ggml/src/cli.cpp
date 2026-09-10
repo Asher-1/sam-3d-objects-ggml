@@ -8,6 +8,7 @@
 #include "common.hpp"
 #include "image_preprocess.hpp"
 #include "gguf_loader.hpp"
+#include "e2e_options.hpp"
 #include "backend.hpp"
 #include "ss_decoder_graph.hpp"
 #include "dino_graph.hpp"
@@ -41,6 +42,7 @@
 #endif
 #include "sparse_ops.hpp"
 #include "graph_builder.hpp"
+#include "scene_assemble.hpp"
 #include "ggml-cpu.h"
 
 #include <algorithm>
@@ -49,7 +51,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <memory>
+#include <set>
 #include <vector>
 
 using namespace sam3d;
@@ -60,6 +64,8 @@ static void print_usage() {
             "\n"
             "commands:\n"
             "  info    --model <path.gguf>            print GGUF metadata and tensors\n"
+            "  tensor-dump --model <model.gguf> --tensor <name> --out <tensor.samt>\n"
+            "              [--tensor-dtype f32|f16] [--backend cpu|cuda|vulkan]\n"
             "  decode-ss --model <ss_decoder.gguf> --input <latent.bin> [--out out.bin]\n"
             "            [--backend auto|cpu|cuda|vulkan] [--threads N]\n"
             "            [--warmup N] [--iters N] [--json out.jsonl]\n"
@@ -84,6 +90,12 @@ static void print_usage() {
             "  coords-downsample --input <coords.samt> --out <coords.samt> --seed N\n"
             "           --distribution-blocks N --normal-draws N,N,...\n"
             "           [--max-coords N --downsample-factor N]\n"
+#if defined(SAM3D_NATIVE_PBR_CUDA)
+            "  scene-assemble --objects-list <file> --out-dir <dir>\n"
+            "             [--num-frames 300] [--radius 1.0] [--fov 60]\n"
+            "             [--resolution 512] [--ply-out scene_posed.ply]\n"
+            "             [--frames-dir frames] [--manifest-out scene_manifest.json]\n"
+#endif
             "  moge-smoke --model <moge.gguf> [--backend cpu|cuda|vulkan]\n"
             "             [--input image.png] [--width N] [--height N] [--threads N]\n"
             "  moge-infer --model <moge.gguf> --input <image> --out <prefix>\n"
@@ -1712,7 +1724,27 @@ struct ImageTo3DOpts {
     std::string conditions_output;
     int threads = 8;
     int seed = 42;
+    // Default is the F16-KV flash throughput path (--ss-attention normal is
+    // the CLI default since 2026-09-18): accepted by the 27-scene validation
+    // (RGB MAE 9.6 / IoU 0.816 vs strict 9.9/0.804, 27/27 converged) and the
+    // single-object A/B (neural MAE 0.02081 vs strict 0.02115) at ~2.9x SS
+    // speed.  Strict F32 score materialization stays available as the parity
+    // diagnostic path (--ss-attention strict); diagnostic entry points pin it
+    // explicitly.
     bool strict_ss_attention = false;
+    bool gs_portable_attention = false;
+    uint32_t philox_blocks = 0;   // 0 = require the legacy env contract
+    // Flow trajectory lengths; see ImageTo3DOptions for the caliber notes.
+    int ss_steps = 25;
+    int slat_steps = 25;
+    // Batch mode: run every mask of `mask_list` in one session process.
+    // Mutually exclusive with --mask; outputs land under out_dir as
+    // objects/obj_<ID>/{output.ply,pose.json} plus a batch manifest.
+    std::string mask_list;
+    std::string out_dir;
+    // Hot-session timing: N serial complete requests with the MoGe cache
+    // disabled; writes hot_timing.json under out_dir.
+    int hot_timing = 0;
 };
 
 struct PoseDecodeOpts {
@@ -2228,6 +2260,344 @@ static int cmd_moge_infer(const MogeInferOpts& options) {
     return 0;
 }
 
+// ---- image-to-3d batch mode ---------------------------------------------
+
+// 64-bit FNV-1a content digest. Not a cryptographic hash: it exists so a
+// resume pass can prove that the referenced inputs and outputs are byte-ident
+// to the ones this manifest describes (stale artifacts cannot pass as fresh).
+static std::string file_digest_64(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return {};
+    uint64_t hash = 1469598103934665603ull;
+    std::vector<char> buffer(1 << 20);
+    size_t got;
+    while ((got = std::fread(buffer.data(), 1, buffer.size(), f)) > 0) {
+        for (size_t i = 0; i < got; ++i) {
+            hash ^= static_cast<unsigned char>(buffer[i]);
+            hash *= 1099511628211ull;
+        }
+    }
+    std::fclose(f);
+    char out[24];
+    std::snprintf(out, sizeof(out), "%016llx", static_cast<unsigned long long>(hash));
+    return out;
+}
+
+struct BatchObject { int id; std::string mask_path; };
+
+static bool parse_mask_list(const std::string& list_path,
+                            std::vector<BatchObject>& objects, std::string& error) {
+    std::ifstream in(list_path);
+    if (!in) {
+        error = "cannot open mask list '" + list_path + "'";
+        return false;
+    }
+    const std::string base = std::filesystem::path(list_path).parent_path().string();
+    std::string line;
+    size_t line_no = 0;
+    std::set<int> seen;
+    while (std::getline(in, line)) {
+        ++line_no;
+        const auto first = line.find_first_not_of(" \t");
+        if (first == std::string::npos) continue;  // blank line
+        if (line[first] == '#') continue;           // comment
+        const auto tab = line.find('\t', first);
+        if (tab == std::string::npos || tab == first) {
+            error = "mask list line " + std::to_string(line_no) +
+                    " must be 'non-negative-integer-ID<TAB>mask-path'";
+            return false;
+        }
+        const std::string id_text = line.substr(first, tab - first);
+        if (id_text.find_first_not_of("0123456789") != std::string::npos) {
+            error = "mask list line " + std::to_string(line_no) +
+                    " has a non-numeric or negative ID '" + id_text + "'";
+            return false;
+        }
+        const int id = std::atoi(id_text.c_str());
+        if (!seen.insert(id).second) {
+            error = "mask list line " + std::to_string(line_no) +
+                    " repeats object ID " + std::to_string(id);
+            return false;
+        }
+        std::string mask = line.substr(tab + 1);
+        const auto mask_first = mask.find_first_not_of(" \t");
+        const auto mask_last = mask.find_last_not_of(" \t\r");
+        if (mask_first == std::string::npos) {
+            error = "mask list line " + std::to_string(line_no) + " has an empty mask path";
+            return false;
+        }
+        mask = mask.substr(mask_first, mask_last - mask_first + 1);
+        if (!std::filesystem::path(mask).is_absolute() && !base.empty()) mask = base + "/" + mask;
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(mask, ec) || ec) {
+            error = "mask list line " + std::to_string(line_no) +
+                    " references a missing mask file '" + mask + "'";
+            return false;
+        }
+        objects.push_back({id, mask});
+    }
+    if (objects.empty()) {
+        error = "mask list '" + list_path + "' contains no entries";
+        return false;
+    }
+    return true;
+}
+
+static int run_image_to_3d_batch(const ImageTo3DOpts& options,
+                                 ImageTo3DOptions& native_options) {
+    std::vector<BatchObject> objects;
+    std::string error;
+    if (!parse_mask_list(options.mask_list, objects, error)) {
+        LOGE("image-to-3d: %s", error.c_str());
+        return 1;
+    }
+    if (options.output.empty() && options.out_dir.empty()) {
+        LOGE("image-to-3d: --mask-list requires --out-dir");
+        return 1;
+    }
+    const std::filesystem::path root =
+        options.out_dir.empty()
+            ? std::filesystem::path(options.output).parent_path()
+            : std::filesystem::path(options.out_dir);
+    std::error_code fs_error;
+    std::filesystem::create_directories(root / "objects", fs_error);
+    if (fs_error) {
+        LOGE("image-to-3d: cannot create batch output directory %s: %s",
+             root.string().c_str(), fs_error.message().c_str());
+        return 1;
+    }
+
+    // Resume: an object is only skipped when the previous run's manifest
+    // marks it ok AND the recorded image/mask/config digests all still match
+    // AND the recorded output digests match the files on disk. A stale
+    // artifact or a changed binary/config re-runs the object; a bare FAILED
+    // marker never permanently skips anything. Verified rows are carried
+    // into the fresh manifest so repeated resumes keep skipping them.
+    const std::string image_digest_now = file_digest_64(options.image);
+    const std::string moge_digest_now = file_digest_64(options.moge_model);
+    const std::filesystem::path manifest_path = root / "batch_manifest.json";
+    std::map<int, std::string> carried_rows;  // verified ok rows from the previous run
+    if (std::filesystem::is_regular_file(manifest_path, fs_error)) {
+        std::ifstream in(manifest_path);
+        std::string line;
+        while (std::getline(in, line)) {
+            const auto grab = [&](const char* key) -> std::string {
+                const std::string needle = std::string("\"") + key + "\": \"";
+                const auto at = line.find(needle);
+                if (at == std::string::npos) return {};
+                const auto end = line.find("\"", at + needle.size());
+                return end == std::string::npos
+                    ? std::string() : line.substr(at + needle.size(), end - at - needle.size());
+            };
+            const auto grab_number = [&](const char* key) -> std::string {
+                const std::string needle = std::string("\"") + key + "\": ";
+                const auto at = line.find(needle);
+                if (at == std::string::npos) return {};
+                const auto comma = line.find(',', at);
+                return comma == std::string::npos
+                    ? std::string() : line.substr(at + needle.size(), comma - at - needle.size());
+            };
+            if (grab("status") != "ok") continue;
+            const std::string id_text = grab_number("id");
+            if (id_text.empty()) continue;
+            carried_rows[std::atoi(id_text.c_str())] = line;
+        }
+    }
+    std::vector<BatchObject> pending;
+    for (const BatchObject& object : objects) {
+        auto carried = carried_rows.find(object.id);
+        if (carried == carried_rows.end() ||
+            carried_rows[object.id].find(sam3d::json_escape(object.mask_path)) == std::string::npos) {
+            pending.push_back(object);
+            continue;
+        }
+        const std::string case_dir = (root / "objects" /
+            ("obj_" + std::to_string(object.id))).string();
+        const std::string& row = carried->second;
+        const auto grab_digest = [&](const char* key) -> std::string {
+            const std::string needle = std::string("\"") + key + "\": \"";
+            const auto at = row.find(needle);
+            if (at == std::string::npos) return {};
+            const auto end = row.find("\"", at + needle.size());
+            return end == std::string::npos
+                ? std::string() : row.substr(at + needle.size(), end - at - needle.size());
+        };
+        const std::string stored_ply = grab_digest("ply_digest");
+        const std::string stored_pose = grab_digest("pose_digest");
+        if (!stored_ply.empty() && !stored_pose.empty() &&
+            file_digest_64(case_dir + "/output.ply") == stored_ply &&
+            file_digest_64(case_dir + "/pose.json") == stored_pose) {
+            LOGI("image-to-3d: resume: obj_%d outputs verified, skipping", object.id);
+            continue;
+        }
+        pending.push_back(object);
+    }
+    if (pending.empty()) {
+        LOGI("image-to-3d: batch resume: every object verified, nothing to run");
+        return 0;
+    }
+    // The manifest must describe every requested object, so the write loop
+    // walks the full list; resume-verified entries carry their previous row
+    // verbatim while the pending ones are re-run here.
+    const std::vector<BatchObject> all_objects = objects;
+    objects = pending;
+    std::vector<int> pending_ids;
+    for (const BatchObject& object : objects) pending_ids.push_back(object.id);
+
+    ImageTo3DSession session;
+    if (!session.init(native_options, error)) {
+        LOGE("image-to-3d: %s", error.c_str());
+        return 1;
+    }
+    LOGI("image-to-3d: batch session ready (%d masks, backend=%s dtype=%s)",
+         static_cast<int>(objects.size()), options.backend.c_str(), options.dtype.c_str());
+
+    const auto batch_started = std::chrono::steady_clock::now();
+    std::string manifest = "{\n";
+    manifest += "  \"format\": \"sam3d-batch-manifest/1\",\n";
+    manifest += "  \"image\": \"" + sam3d::json_escape(options.image) + "\",\n";
+    manifest += "  \"image_digest\": \"" + file_digest_64(options.image) + "\",\n";
+    manifest += "  \"moge_model_digest\": \"" + file_digest_64(options.moge_model) + "\",\n";
+    manifest += "  \"config\": {\"models_dir\": \"" + sam3d::json_escape(options.models_dir) +
+                "\", \"backend\": \"" + sam3d::json_escape(options.backend) +
+                "\", \"dtype\": \"" + sam3d::json_escape(options.dtype) +
+                "\", \"seed\": " + std::to_string(options.seed) +
+                ", \"threads\": " + std::to_string(options.threads) +
+                ", \"philox_blocks\": " + std::to_string(options.philox_blocks) + "},\n";
+    manifest += "  \"objects\": [\n";
+
+    bool all_ok = true;
+    for (size_t index = 0; index < all_objects.size(); ++index) {
+        const BatchObject& object = all_objects[index];
+        // A resume-verified object keeps its previous manifest row verbatim;
+        // it was neither re-run nor re-timed this round.
+        auto carried = carried_rows.find(object.id);
+        const bool skipped = carried != carried_rows.end() &&
+            std::none_of(pending_ids.begin(), pending_ids.end(),
+                         [&](int id) { return id == object.id; });
+        if (skipped) {
+            // The carried row is the verbatim previous manifest line; strip
+            // its trailing separator so the write loop owns the comma logic.
+            std::string carried_row = carried->second;
+            while (!carried_row.empty() &&
+                   (carried_row.back() == ',' || carried_row.back() == '\n' ||
+                    carried_row.back() == ' ' || carried_row.back() == '\r')) {
+                carried_row.pop_back();
+            }
+            manifest += "    " + carried_row;
+            manifest += index + 1 == all_objects.size() ? "\n" : ",\n";
+            continue;
+        }
+        const std::string case_dir = (root / "objects" /
+            ("obj_" + std::to_string(object.id))).string();
+        std::filesystem::create_directories(case_dir, fs_error);
+        ImageTo3DOptions request = native_options;
+        request.mask_path = object.mask_path;
+        request.out_ply = case_dir + "/output.ply";
+        request.out_pose = case_dir + "/pose.json";
+        const auto request_started = std::chrono::steady_clock::now();
+        RunResult result = session.run(request);
+        const double elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - request_started).count();
+        const bool ok = result.ok;
+        all_ok &= ok;
+        manifest += "    {\"id\": " + std::to_string(object.id) +
+                    ", \"mask\": \"" + sam3d::json_escape(object.mask_path) + "\"" +
+                    ", \"mask_digest\": \"" + file_digest_64(object.mask_path) + "\"";
+        if (ok) {
+            manifest += ", \"status\": \"ok\"";
+            manifest += ", \"ply_digest\": \"" + file_digest_64(request.out_ply) + "\"";
+            manifest += ", \"pose_digest\": \"" + file_digest_64(request.out_pose) + "\"";
+            manifest += ", \"moge_pointmap_reused\": " +
+                        std::string(result.output.stats.moge_pointmap_reused ? "true" : "false");
+            manifest += ", \"elapsed_s\": " + std::to_string(elapsed);
+            LOGI("image-to-3d: batch obj_%d ok (%.1fs) -> %s", object.id, elapsed,
+                 request.out_ply.c_str());
+        } else {
+            // A failed object is recorded and the batch continues; the final
+            // exit code stays non-zero so a partial scene is never a success.
+            manifest += ", \"status\": \"failed\"";
+            manifest += ", \"error\": \"" + sam3d::json_escape(result.error) + "\"";
+            manifest += ", \"elapsed_s\": " + std::to_string(elapsed);
+            LOGE("image-to-3d: batch obj_%d FAILED: %s", object.id, result.error.c_str());
+        }
+        manifest += "}";
+        manifest += index + 1 == all_objects.size() ? "\n" : ",\n";
+    }
+    const double total_elapsed =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - batch_started).count();
+    manifest += "  ],\n";
+    manifest += "  \"total_elapsed_s\": " + std::to_string(total_elapsed) + "\n";
+    manifest += "}\n";
+
+    const std::string manifest_out_path = (root / "batch_manifest.json").string();
+    std::ofstream out(manifest_out_path);
+    out << manifest;
+    LOGI("image-to-3d: batch manifest -> %s (%.1fs total, %s)", manifest_out_path.c_str(),
+         total_elapsed, all_ok ? "all objects ok" : "WITH FAILURES");
+    return all_ok ? 0 : 2;
+}
+
+// Hot-session timing: N serial complete requests in one session. The MoGe
+// point-map cache is disabled so every sample carries the real per-request
+// MoGe cost; session resources (backend, stage weight uploads) are shared,
+// matching the production batch's hot state. Emits a self-contained JSON
+// receipt with the per-sample wall time and the median.
+static int run_image_to_3d_hot_timing(const ImageTo3DOpts& options,
+                                      ImageTo3DOptions& native_options, int samples) {
+    std::string error;
+    ImageTo3DSession session;
+    if (!session.init(native_options, error)) {
+        LOGE("image-to-3d: %s", error.c_str());
+        return 1;
+    }
+    const std::filesystem::path root = options.out_dir;
+    std::error_code fs_error;
+    std::filesystem::create_directories(root, fs_error);
+    if (fs_error) {
+        LOGE("image-to-3d: cannot create hot-timing output directory %s: %s",
+             root.string().c_str(), fs_error.message().c_str());
+        return 1;
+    }
+    std::vector<double> sample_ms;
+    std::string manifest = "{\n  \"format\": \"sam3d-hot-timing/1\",\n";
+    manifest += "  \"timer_contract\": \"session-hot: serial complete requests in one "
+                "session; MoGe point-map cache disabled; covers MoGe through PLY/pose "
+                "file close, including per-stage weight uploads\",\n";
+    manifest += "  \"samples\": [\n";
+    for (int i = 0; i < samples; ++i) {
+        ImageTo3DOptions request = native_options;
+        request.disable_moge_pointmap_cache = true;
+        request.out_ply = (root / "hot_sample_output.ply").string();
+        request.out_pose = (root / "hot_sample_pose.json").string();
+        const auto started = std::chrono::steady_clock::now();
+        RunResult result = session.run(request);
+        const double ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        if (!result.ok) {
+            LOGE("image-to-3d: hot-timing sample %d failed: %s", i, result.error.c_str());
+            return 1;
+        }
+        sample_ms.push_back(ms);
+        manifest += "    {\"sample\": " + std::to_string(i) +
+                    ", \"elapsed_ms\": " + std::to_string(ms) + "}"
+                    + (i + 1 == samples ? "\n" : ",\n");
+        LOGI("image-to-3d: hot-timing sample %d/%d: %.3f s", i + 1, samples, ms / 1000.0);
+    }
+    std::sort(sample_ms.begin(), sample_ms.end());
+    const double median_ms = sample_ms.size() % 2
+        ? sample_ms[sample_ms.size() / 2]
+        : 0.5 * (sample_ms[sample_ms.size() / 2 - 1] + sample_ms[sample_ms.size() / 2]);
+    manifest += "  ],\n  \"median_ms\": " + std::to_string(median_ms) + ",\n";
+    manifest += "  \"sample_count\": " + std::to_string(samples) + "\n}\n";
+    const std::string out_path = (root / "hot_timing.json").string();
+    std::ofstream out(out_path);
+    out << manifest;
+    LOGI("image-to-3d: hot-timing receipt -> %s (median %.3f s over %d samples)",
+         out_path.c_str(), median_ms / 1000.0, samples);
+    return 0;
+}
+
 static int cmd_image_to_3d(const ImageTo3DOpts& options) {
     ImageTo3DOptions native_options;
     native_options.models_dir = options.models_dir;
@@ -2247,6 +2617,22 @@ static int cmd_image_to_3d(const ImageTo3DOpts& options) {
     native_options.n_threads = options.threads;
     native_options.seed = options.seed;
     native_options.strict_ss_attention = options.strict_ss_attention;
+    native_options.gs_portable_attention = options.gs_portable_attention;
+    native_options.philox_blocks = options.philox_blocks;
+    native_options.ss_steps = options.ss_steps;
+    native_options.slat_steps = options.slat_steps;
+
+    if (!options.mask_list.empty()) {
+        return run_image_to_3d_batch(options, native_options);
+    }
+    if (options.hot_timing > 0) {
+        if (options.out_dir.empty()) {
+            LOGE("image-to-3d: --hot-timing requires --out-dir");
+            return 1;
+        }
+        return run_image_to_3d_hot_timing(options, native_options, options.hot_timing);
+    }
+
     RunResult result = run_image_to_3d(native_options);
     if (!result.ok) {
         LOGE("image-to-3d: %s", result.error.c_str());
@@ -2850,11 +3236,26 @@ static int cmd_slat_step(const std::string& model_path,
     gb.m = &m;
     gb.tb = &tb;
     gb.n_cond_tokens = cond_t.ne[1];
+    gb.use_cuda_spconv = be != nullptr && std::strcmp(be, "cuda") == 0;
     if (const char* st = getenv("SAM3D_DEBUG_STAGE")) gb.debug_stage = st;
+    // Trace every input_blocks.1 boundary in one run: the debug-stage graph
+    // prunes nodes, which changes allocation layout and hides layout-dependent
+    // failures. Dumping all traced boundaries from the unpruned graph keeps
+    // every dump in the same allocation context.
+    gb.dump_block_outputs = getenv("SAM3D_DEBUG_DUMP_BLOCKS") != nullptr;
     std::vector<ggml_tensor*> outs = gb.build();
 
     ggml_cgraph* graph = ggml_new_graph_custom(gctx.ctx(), 32768, false);
     for (auto* o : outs) { ggml_set_output(o); ggml_build_forward_expand(graph, o); }
+    // The allocator may recycle non-output intermediate buffers before the
+    // post-run diagnostic readback below. Pin requested debug tensors as graph
+    // outputs so each SAMT file represents the value produced by this run.
+    if (getenv("SAM3D_DEBUG_DUMP_BLOCKS") != nullptr) {
+        for (auto* block : gb.debug_block_outputs) {
+            ggml_set_output(block);
+            ggml_build_forward_expand(graph, block);
+        }
+    }
     LOGI("slat-step: graph built (%lld nodes), alloc...",
          (long long)ggml_graph_n_nodes(graph));
     if (!backend->alloc(graph)) return 1;
@@ -2883,6 +3284,11 @@ static int cmd_slat_step(const std::string& model_path,
             ggml_tensor* t = gb.inputs[ti];
             if (!t->buffer || !gb.table_data[ti]) continue;
             const auto& host = gb.table_data[ti];
+            if (getenv("SAM3D_DEBUG_INPUT_TYPES") != nullptr) {
+                LOGI("slat-step input[%zu]: name=%s type=%s elements=%lld",
+                     ti, t->name, ggml_type_name(t->type),
+                     (long long)ggml_nelements(t));
+            }
             bool ok = t->type == GGML_TYPE_F32
                 ? backend->set_input_f32(t, (const float*)host->data(), host->size())
                 : backend->set_input_i32(t, host->data(), host->size());
@@ -2948,7 +3354,10 @@ static int cmd_ss_step(const std::string& model_path, const std::string& e2e_dir
     gb.g = &gctx;
     gb.m = &m;
     gb.n_cond_tokens = cond_t.ne[1];
-    gb.strict_attention = getenv("SAM3D_SS_STRICT_ATTN") != nullptr;
+    // The official SS backbone runs entirely in F32 (use_fp16=false), so its
+    // attention contract is F32 SDPA. Keep K/V in F32 by default; the F16-K/V
+    // throughput path is an explicit opt-out.
+    gb.strict_attention = getenv("SAM3D_SS_FAST_ATTN") == nullptr;
     if (const char* st = getenv("SAM3D_DEBUG_STAGE")) gb.debug_stage = st;
     std::vector<ggml_tensor*> outs = gb.build();
 
@@ -3081,14 +3490,279 @@ static int cmd_info(const std::string& model_path) {
     return 0;
 }
 
+// Materialize one GGUF tensor through the selected backend's cast path. This
+// is a numerical diagnostic: it makes the values consumed by a graph
+// independently comparable with the Python GGUF dequantization oracle.
+static int cmd_tensor_dump(const std::string& model_path, const std::string& tensor_name,
+                           const std::string& output_path, const std::string& output_dtype) {
+    const char* backend_name = getenv("SAM3D_BACKEND");
+    auto backend = Backend::create(backend_name ? backend_name : "cpu",
+                                   getenv("SAM3D_NTHREADS") ? atoi(getenv("SAM3D_NTHREADS")) : 8);
+    if (!backend) return 1;
+
+    GGUFModel model;
+    if (!model.load(model_path, backend->weights_buffer_type())) return 1;
+    ggml_tensor* source = model.get(tensor_name);
+    if (!source) {
+        LOGE("tensor-dump: tensor not found: %s", tensor_name.c_str());
+        return 1;
+    }
+    const ggml_type target_type = output_dtype == "f32" ? GGML_TYPE_F32 :
+                                  output_dtype == "f16" ? GGML_TYPE_F16 : GGML_TYPE_COUNT;
+    if (target_type == GGML_TYPE_COUNT) {
+        LOGE("tensor-dump: --tensor-dtype must be f32 or f16");
+        return 1;
+    }
+
+    GraphContext context;
+    // CUDA has no direct Q8_0/Q4_0-to-F16 copy kernel. Keep the diagnostic
+    // path identical to SlatFlowGraph::as_f16(): quantized -> F32 -> F16.
+    ggml_tensor* materialized = source;
+    if (materialized->type != target_type) {
+        if (target_type == GGML_TYPE_F16 && ggml_is_quantized(materialized->type)) {
+            materialized = ggml_cast(context.ctx(), materialized, GGML_TYPE_F32);
+        }
+        materialized = ggml_cast(context.ctx(), materialized, target_type);
+    }
+    ggml_cgraph* graph = ggml_new_graph_custom(context.ctx(), 64, false);
+    ggml_set_output(materialized);
+    ggml_build_forward_expand(graph, materialized);
+    if (!backend->alloc(graph) || !backend->run(graph)) return 1;
+
+    std::vector<float> values;
+    if (!backend->get_tensor_f32(materialized, values)) return 1;
+    std::vector<int64_t> shape(materialized->ne, materialized->ne + ggml_n_dims(materialized));
+    if (!save_raw_tensor_f32(output_path, shape, values.data())) return 1;
+    printf("tensor-dump: %s (%s -> %s, %lld elements) -> %s\n", tensor_name.c_str(),
+           ggml_type_name(source->type), ggml_type_name(target_type),
+           (long long)values.size(), output_path.c_str());
+    return 0;
+}
+
 namespace sam3d {
-int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
-            const std::string& noise_dir, const std::string& out_ply,
-            const std::string& dbg_dir, const std::string& out_pbr,
-            const std::string& out_mesh_vertices, const std::string& out_mesh_faces,
-            const std::string& out_pose, const std::string& out_dtype_contract,
-            unsigned seed, int nthreads);
+int cmd_e2e(const E2eOptions& opt);
 }  // namespace sam3d
+
+#if defined(SAM3D_NATIVE_PBR_CUDA)
+// Normalize with the reference variant's recorded contract when supplied so
+// every variant renders the identical scene frame; otherwise use the scene's
+// own opacity>0.9 bounds (official normalized_gaussian).
+static bool normalize_scene_with_reference(GaussianSplatSet& scene,
+                                           const std::string& normalization_json,
+                                           std::string& error) {
+    if (normalization_json.empty()) {
+        return normalize_scene(scene, error);
+    }
+    float inv_scale = 0.0f;
+    std::array<float, 3> center{};
+    if (!load_scene_normalization_json(normalization_json, inv_scale, center, error)) {
+        return false;
+    }
+    return normalize_scene_with(scene, inv_scale, center, error);
+}
+
+// Native multi-object scene assembly: per-object Gaussian PLYs plus the
+// official-schema pose receipts are composed, normalized, and rendered on the
+// orbit of the official render_video without any Python stage.
+static int cmd_scene_assemble(int argc, char** argv) {
+    std::string objects_list, out_dir, ply_out = "scene_posed.ply";
+    std::string frames_dir = "frames", manifest_out = "scene_manifest.json";
+    std::string normalization_json;
+    int num_frames = 300;
+    int resolution = 512;
+    float radius = 1.0f;
+    float fov = 60.0f;
+    for (int index = 0; index < argc; ++index) {
+        const char* flag = argv[index];
+        const auto needs_value = [&](std::string& target) -> bool {
+            if (index + 1 >= argc) {
+                LOGE("scene-assemble: missing value for %s", flag);
+                return false;
+            }
+            target = argv[++index];
+            return true;
+        };
+        if (!strcmp(flag, "--objects-list")) {
+            if (!needs_value(objects_list)) return 2;
+        } else if (!strcmp(flag, "--out-dir")) {
+            if (!needs_value(out_dir)) return 2;
+        } else if (!strcmp(flag, "--ply-out")) {
+            if (!needs_value(ply_out)) return 2;
+        } else if (!strcmp(flag, "--frames-dir")) {
+            if (!needs_value(frames_dir)) return 2;
+        } else if (!strcmp(flag, "--manifest-out")) {
+            if (!needs_value(manifest_out)) return 2;
+        } else if (!strcmp(flag, "--normalization-json")) {
+            if (!needs_value(normalization_json)) return 2;
+        } else if (!strcmp(flag, "--num-frames")) {
+            std::string value;
+            if (!needs_value(value)) return 2;
+            num_frames = std::atoi(value.c_str());
+        } else if (!strcmp(flag, "--resolution")) {
+            std::string value;
+            if (!needs_value(value)) return 2;
+            resolution = std::atoi(value.c_str());
+        } else if (!strcmp(flag, "--radius")) {
+            std::string value;
+            if (!needs_value(value)) return 2;
+            radius = std::atof(value.c_str());
+        } else if (!strcmp(flag, "--fov")) {
+            std::string value;
+            if (!needs_value(value)) return 2;
+            fov = std::atof(value.c_str());
+        } else {
+            LOGE("scene-assemble: unrecognized or incomplete argument %s", flag);
+            return 2;
+        }
+    }
+    if (objects_list.empty() || out_dir.empty()) {
+        LOGE("scene-assemble: --objects-list and --out-dir are required");
+        return 2;
+    }
+    if (num_frames <= 0 || resolution <= 0 || !(radius > 0.0f) || !(fov > 0.0f)) {
+        LOGE("scene-assemble: invalid render configuration");
+        return 2;
+    }
+    struct SceneObjectEntry {
+        std::string ply;
+        std::string pose;
+        size_t gaussians = 0;
+    };
+    std::vector<SceneObjectEntry> entries;
+    {
+        std::ifstream list_stream(objects_list);
+        if (!list_stream) {
+            LOGE("scene-assemble: cannot open object list: %s", objects_list.c_str());
+            return 1;
+        }
+        std::string line;
+        while (std::getline(list_stream, line)) {
+            if (line.empty()) continue;
+            const size_t split = line.find('\t');
+            if (split == std::string::npos) {
+                LOGE("scene-assemble: list line must be '<ply>\\t<pose>': %s", line.c_str());
+                return 1;
+            }
+            entries.push_back({line.substr(0, split), line.substr(split + 1), 0});
+        }
+    }
+    if (entries.empty()) {
+        LOGE("scene-assemble: object list is empty: %s", objects_list.c_str());
+        return 1;
+    }
+
+    std::string error;
+    GaussianSplatSet scene;
+    for (auto& entry : entries) {
+        GaussianSplatSet object;
+        if (!load_gaussian_splat_ply(entry.ply, object, error)) {
+            LOGE("scene-assemble: %s", error.c_str());
+            return 1;
+        }
+        ScenePose pose;
+        if (!load_scene_pose_json(entry.pose, pose, error)) {
+            LOGE("scene-assemble: %s", error.c_str());
+            return 1;
+        }
+        // The representation's 3d_filter_kernel_size (session.cpp GS_MIN_KERNEL).
+        if (!apply_scene_pose(object, pose, 0.0009f, error)) {
+            LOGE("scene-assemble: %s", error.c_str());
+            return 1;
+        }
+        entry.gaussians = object.size();
+        append_splat_set(scene, object);
+    }
+    if (!scene.valid()) {
+        LOGE("scene-assemble: composed scene is invalid");
+        return 1;
+    }
+
+    std::filesystem::create_directories(out_dir);
+    const std::filesystem::path out_path(out_dir);
+    const std::string ply_path = (out_path / ply_out).string();
+    if (!write_scene_ply(ply_path, scene, error)) {
+        LOGE("scene-assemble: %s", error.c_str());
+        return 1;
+    }
+
+    if (!normalize_scene_with_reference(scene, normalization_json, error)) {
+        LOGE("scene-assemble: %s", error.c_str());
+        return 1;
+    }
+    const std::vector<GaussianCamera> cameras =
+        make_orbit_cameras(num_frames, radius, fov, error);
+    if (cameras.empty()) {
+        LOGE("scene-assemble: %s", error.c_str());
+        return 1;
+    }
+    GaussianRenderConfig config;
+    config.width = resolution;
+    config.height = resolution;
+    config.radius = radius;
+    config.fov_degrees = fov;
+    // The orbit stays outside the 100-view bake's tight depth envelope:
+    // the normalized scene spans roughly [-0.9, 0.9] and the camera sits at
+    // radius, so a wide envelope covers every object without clipping.
+    config.near_plane = 0.05f;
+    config.far_plane = 20.0f;
+    // gsplat parity probe: the official scene render path goes through the
+    // gsplat backend (render_frames backend="gsplat"), where pipe.kernel_size
+    // is never consumed and the rasterizer applies its default eps2d=0.3
+    // screen-space low-pass. The inria-style fork reads kernel_size directly,
+    // so 0.3 reproduces the gsplat dilation instead of the inria 0.1.
+    config.kernel_size = 0.3f;
+    std::vector<RgbaImage> frames;
+    if (!render_gaussian_views_cuda(scene, cameras, config, frames, error)) {
+        LOGE("scene-assemble: %s", error.c_str());
+        return 1;
+    }
+    const std::string frames_path = (out_path / frames_dir).string();
+    std::filesystem::create_directories(frames_path);
+    for (size_t frame = 0; frame < frames.size(); ++frame) {
+        char name[32];
+        std::snprintf(name, sizeof(name), "frame_%04zu.png", frame);
+        if (!write_rgba_png((std::filesystem::path(frames_path) / name).string(),
+                            frames[frame], error)) {
+            LOGE("scene-assemble: %s", error.c_str());
+            return 1;
+        }
+    }
+
+    const std::string manifest_path = (out_path / manifest_out).string();
+    {
+        FILE* manifest = fopen(manifest_path.c_str(), "wb");
+        if (!manifest) {
+            LOGE("scene-assemble: cannot open manifest output: %s", manifest_path.c_str());
+            return 1;
+        }
+        fprintf(manifest,
+                "{\n  \"schema\": \"sam3d.scene-native.v1\",\n"
+                "  \"gaussians_total\": %zu,\n"
+                "  \"render\": {\"frames\": %zu, \"radius\": %.6f, \"fov\": %.6f,"
+                " \"resolution\": %d},\n"
+                "  \"objects\": [\n",
+                scene.size(), frames.size(), static_cast<double>(radius),
+                static_cast<double>(fov), resolution);
+        for (size_t index = 0; index < entries.size(); ++index) {
+            fprintf(manifest,
+                    "    {\"ply\": \"%s\", \"pose\": \"%s\", \"gaussians\": %zu}%s\n",
+                    entries[index].ply.c_str(), entries[index].pose.c_str(),
+                    entries[index].gaussians,
+                    index + 1 < entries.size() ? "," : "");
+        }
+        fprintf(manifest,
+                "  ],\n  \"outputs\": {\"posed_ply\": \"%s\", \"frames_dir\": \"%s\"}\n}\n",
+                ply_path.c_str(), frames_path.c_str());
+        if (fclose(manifest) != 0) {
+            LOGE("scene-assemble: failed while writing manifest: %s", manifest_path.c_str());
+            return 1;
+        }
+    }
+    LOGI("scene-assemble: wrote %s (%zu objects, %zu gaussians) and %zu frames under %s",
+         ply_path.c_str(), entries.size(), scene.size(), frames.size(), out_dir.c_str());
+    return 0;
+}
+#endif
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -3103,12 +3777,17 @@ int main(int argc, char** argv) {
     if (cmd == "rng-dump") return cmd_rng_dump(argc - 2, argv + 2);
     if (cmd == "coords-downsample") return cmd_coords_downsample(argc - 2, argv + 2);
     if (cmd == "pose-decode") return cmd_pose_decode(argc - 2, argv + 2);
-    std::string model, input, out;
+#if defined(SAM3D_NATIVE_PBR_CUDA)
+    if (cmd == "scene-assemble") return cmd_scene_assemble(argc - 2, argv + 2);
+#endif
+    std::string model, input, out, tensor_name, tensor_dtype = "f32";
     std::vector<std::string> pos;  // bare positional args
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--model") && i + 1 < argc) model = argv[++i];
         else if (!strcmp(argv[i], "--input") && i + 1 < argc) input = argv[++i];
         else if (!strcmp(argv[i], "--out") && i + 1 < argc) out = argv[++i];
+        else if (!strcmp(argv[i], "--tensor") && i + 1 < argc) tensor_name = argv[++i];
+        else if (!strcmp(argv[i], "--tensor-dtype") && i + 1 < argc) tensor_dtype = argv[++i];
         else pos.emplace_back(argv[i]);
     }
     if (cmd == "info") {
@@ -3117,6 +3796,13 @@ int main(int argc, char** argv) {
             return 1;
         }
         return cmd_info(model);
+    }
+    if (cmd == "tensor-dump") {
+        if (model.empty() || tensor_name.empty() || out.empty()) {
+            print_usage();
+            return 1;
+        }
+        return cmd_tensor_dump(model, tensor_name, out, tensor_dtype);
     }
     if (cmd == "decode-ss") {
         DecodeSsOpts o;
@@ -3442,7 +4128,17 @@ int main(int argc, char** argv) {
         for (int i = 2; i < argc; ++i) {
             if (!std::strcmp(argv[i], "--image") && i + 1 < argc) options.image = argv[++i];
             else if (!std::strcmp(argv[i], "--mask") && i + 1 < argc) options.mask = argv[++i];
-            else if (!std::strcmp(argv[i], "--out") && i + 1 < argc) options.output = argv[++i];
+            else if (!std::strcmp(argv[i], "--mask-list") && i + 1 < argc) {
+                options.mask_list = argv[++i];
+            } else if (!std::strcmp(argv[i], "--out-dir") && i + 1 < argc) {
+                options.out_dir = argv[++i];
+            } else if (!std::strcmp(argv[i], "--hot-timing") && i + 1 < argc) {
+                options.hot_timing = std::atoi(argv[++i]);
+                if (options.hot_timing < 1) {
+                    LOGE("image-to-3d: --hot-timing requires a positive sample count");
+                    return 1;
+                }
+            } else if (!std::strcmp(argv[i], "--out") && i + 1 < argc) options.output = argv[++i];
             else if (!std::strcmp(argv[i], "--pbr-out") && i + 1 < argc) {
                 options.pbr_output = argv[++i];
             } else if (!std::strcmp(argv[i], "--mesh-vertices-out") && i + 1 < argc) {
@@ -3469,7 +4165,9 @@ int main(int argc, char** argv) {
                 const std::string value = argv[++i];
                 if (value == "strict") {
                     options.strict_ss_attention = true;
-                } else if (value != "normal") {
+                } else if (value == "normal") {
+                    options.strict_ss_attention = false;
+                } else {
                     LOGE("image-to-3d: --ss-attention must be normal or strict");
                     return 1;
                 }
@@ -3477,8 +4175,33 @@ int main(int argc, char** argv) {
                 options.seed = std::atoi(argv[++i]);
             } else if (!std::strcmp(argv[i], "--threads") && i + 1 < argc) {
                 options.threads = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--philox-blocks") && i + 1 < argc) {
+                options.philox_blocks = (uint32_t)strtoul(argv[++i], nullptr, 10);
+            } else if (!std::strcmp(argv[i], "--ss-steps") && i + 1 < argc) {
+                options.ss_steps = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--slat-steps") && i + 1 < argc) {
+                options.slat_steps = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--gs-portable-attention")) {
+                options.gs_portable_attention = true;
             } else {
                 LOGE("image-to-3d: unrecognized or incomplete argument %s", argv[i]);
+                return 1;
+            }
+        }
+        if (!options.mask_list.empty()) {
+            // One object source per run: the list form writes obj_<ID> trees
+            // under --out-dir, while --mask is the single-object form.
+            if (!options.mask.empty()) {
+                LOGE("image-to-3d: --mask-list and --mask are mutually exclusive");
+                return 1;
+            }
+            if (!options.output.empty()) {
+                LOGE("image-to-3d: --mask-list requires --out-dir; --out is the "
+                     "single-object output path");
+                return 1;
+            }
+            if (options.image.empty()) {
+                LOGE("image-to-3d: --mask-list requires --image");
                 return 1;
             }
         }
@@ -3520,24 +4243,45 @@ int main(int argc, char** argv) {
         return cmd_gs_decode(model, pos[0], pos[1]);
     }
     if (cmd == "e2e" && pos.size() >= 1) {
-        std::string noise_dir, dbg_dir, pbr_out, pose_out, dtype_contract_out;
-        unsigned seed = 0;
-        int nthreads = getenv("SAM3D_NTHREADS") ? atoi(getenv("SAM3D_NTHREADS")) : 8;
+        E2eOptions e2e;
+        e2e.models_dir = model.empty() ? "cpp_ggml/models/gguf" : model;
+        e2e.cond_dir = pos[0];
+        e2e.out_ply = out.empty() ? "output.ply" : out;
         for (int i = 2; i < argc; i++) {
-            if (!strcmp(argv[i], "--noise-dir") && i + 1 < argc) noise_dir = argv[++i];
-            else if (!strcmp(argv[i], "--dbg-dir") && i + 1 < argc) dbg_dir = argv[++i];
-            else if (!strcmp(argv[i], "--pbr-out") && i + 1 < argc) pbr_out = argv[++i];
-            else if (!strcmp(argv[i], "--pose-out") && i + 1 < argc) pose_out = argv[++i];
-            else if (!strcmp(argv[i], "--dtype-contract-out") && i + 1 < argc) dtype_contract_out = argv[++i];
-            else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = (unsigned)atoi(argv[++i]);
-            else if (!strcmp(argv[i], "--threads") && i + 1 < argc) nthreads = atoi(argv[++i]);
+            if (!strcmp(argv[i], "--noise-dir") && i + 1 < argc) e2e.noise_dir = argv[++i];
+            else if (!strcmp(argv[i], "--dbg-dir") && i + 1 < argc) e2e.dbg_dir = argv[++i];
+            else if (!strcmp(argv[i], "--pbr-out") && i + 1 < argc) e2e.out_pbr = argv[++i];
+            else if (!strcmp(argv[i], "--pose-out") && i + 1 < argc) e2e.out_pose = argv[++i];
+            else if (!strcmp(argv[i], "--dtype-contract-out") && i + 1 < argc) e2e.out_dtype_contract = argv[++i];
+            else if (!strcmp(argv[i], "--seed") && i + 1 < argc) e2e.seed = (unsigned)atoi(argv[++i]);
+            else if (!strcmp(argv[i], "--threads") && i + 1 < argc) e2e.threads = atoi(argv[++i]);
+            else if (!strcmp(argv[i], "--backend") && i + 1 < argc) e2e.backend = argv[++i];
+            else if (!strcmp(argv[i], "--dtype") && i + 1 < argc) e2e.dtype = argv[++i];
+            else if (!strcmp(argv[i], "--ss-dtype") && i + 1 < argc) e2e.ss_dtype = argv[++i];
+            else if (!strcmp(argv[i], "--ss-decoder-dtype") && i + 1 < argc) e2e.ss_decoder_dtype = argv[++i];
+            else if (!strcmp(argv[i], "--slat-dtype") && i + 1 < argc) e2e.slat_dtype = argv[++i];
+            else if (!strcmp(argv[i], "--gs-dtype") && i + 1 < argc) e2e.gs_dtype = argv[++i];
+            else if (!strcmp(argv[i], "--mesh-dtype") && i + 1 < argc) e2e.mesh_dtype = argv[++i];
+            else if (!strcmp(argv[i], "--stage") && i + 1 < argc) e2e.stage = argv[++i];
+            else if (!strcmp(argv[i], "--ss-cond-path") && i + 1 < argc) e2e.ss_cond_path = argv[++i];
+            else if (!strcmp(argv[i], "--slat-cond-path") && i + 1 < argc) e2e.slat_cond_path = argv[++i];
+            else if (!strcmp(argv[i], "--coords-path") && i + 1 < argc) e2e.coords_path = argv[++i];
+            else if (!strcmp(argv[i], "--reference-coords")) e2e.reference_coords = true;
+            else if (!strcmp(argv[i], "--ss-steps") && i + 1 < argc) e2e.ss_steps = atoi(argv[++i]);
+            else if (!strcmp(argv[i], "--slat-steps") && i + 1 < argc) e2e.slat_steps = atoi(argv[++i]);
+            else if (!strcmp(argv[i], "--ss-flow-only")) e2e.ss_flow_only = true;
+            else if (!strcmp(argv[i], "--slat-flow-only")) e2e.slat_flow_only = true;
+            else if (!strcmp(argv[i], "--dump-slat-steps")) e2e.dump_slat_steps = true;
+            else if (!strcmp(argv[i], "--dino-dbg") && i + 1 < argc) { e2e.dino_dbg = true; e2e.dino_dbg_out = argv[++i]; }
+            else if (!strcmp(argv[i], "--debug-stage") && i + 1 < argc) e2e.debug_stage = argv[++i];
+            else if (!strcmp(argv[i], "--keep-quant-gemm")) e2e.keep_quant_gemm = true;
+            else if (!strcmp(argv[i], "--gs-portable-attention")) e2e.gs_portable_attention = true;
+            else if (!strcmp(argv[i], "--philox-blocks") && i + 1 < argc) e2e.philox_blocks = (uint32_t)strtoul(argv[++i], nullptr, 10);
+            else if (!strcmp(argv[i], "--ss-fast-attention")) e2e.ss_strict_attention = false;
+            else if (!strcmp(argv[i], "--cond-manual-attention")) e2e.cond_manual_attention = true;
+            else if (!strcmp(argv[i], "--verify")) e2e.verify = true;
         }
-        // pos[0] = condition dir (dump_e2e_stages output); out = PLY path
-        if (out.empty()) out = "output.ply";
-        return cmd_e2e(model.empty() ? "cpp_ggml/models/gguf" : model,
-                       pos[0], noise_dir, out, dbg_dir, pbr_out, "", "", pose_out,
-                       dtype_contract_out,
-                       seed, nthreads);
+        return cmd_e2e(e2e);
     }
     if (cmd == "run" && pos.size() >= 1) {
         const char* be = getenv("SAM3D_BACKEND");
@@ -3557,9 +4301,19 @@ int main(int argc, char** argv) {
         }
         if (model.empty()) model = "cpp_ggml/models/gguf";
         if (out.empty()) out = "output.ply";
-        if (backend != "auto") setenv("SAM3D_BACKEND", backend.c_str(), 1);
-        return cmd_e2e(model, pos[0], noise_dir, out, dbg_dir, pbr_out, "", "", pose_out,
-                       dtype_contract_out, seed, nthreads);
+        E2eOptions e2e;
+        e2e.models_dir = model;
+        e2e.cond_dir = pos[0];
+        e2e.noise_dir = noise_dir;
+        e2e.out_ply = out;
+        e2e.dbg_dir = dbg_dir;
+        e2e.out_pbr = pbr_out;
+        e2e.out_pose = pose_out;
+        e2e.out_dtype_contract = dtype_contract_out;
+        e2e.backend = backend;
+        e2e.seed = seed;
+        e2e.threads = nthreads;
+        return cmd_e2e(e2e);
     }
     // remaining commands are implemented in session.cpp via run_pipeline
     CliOptions opts;

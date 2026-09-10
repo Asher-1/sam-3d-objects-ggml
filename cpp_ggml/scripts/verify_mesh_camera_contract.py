@@ -14,35 +14,14 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from samt_io import load_samt
+from samt_io import save_samt
 import torch
 import utils3d
 
 
-def load_samt(path: Path) -> np.ndarray:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(rank * 8))
-        (ggml_type,) = struct.unpack("<i", stream.read(4))
-        if ggml_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got ggml type {ggml_type}")
-        values = np.frombuffer(stream.read(), dtype=np.dtype("<f4"))
-    expected_count = int(np.prod(shape, dtype=np.int64))
-    if values.size != expected_count:
-        raise ValueError(f"{path}: expected {expected_count} values, found {values.size}")
-    return values.reshape(tuple(reversed(shape))).copy()
 
 
-def save_samt(path: Path, values: np.ndarray) -> None:
-    values = np.ascontiguousarray(values, dtype=np.float32)
-    ggml_shape = tuple(reversed(values.shape))
-    with path.open("wb") as stream:
-        stream.write(b"SAMT")
-        stream.write(struct.pack("<i", len(ggml_shape)))
-        stream.write(struct.pack(f"<{len(ggml_shape)}q", *ggml_shape))
-        stream.write(struct.pack("<i", 0))
-        stream.write(values.tobytes())
 
 
 def radical_inverse_base_two(index: int) -> float:

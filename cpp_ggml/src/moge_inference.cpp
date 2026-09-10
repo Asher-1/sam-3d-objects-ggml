@@ -10,10 +10,38 @@
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <thread>
 #include <utility>
 
 namespace sam3d {
 namespace {
+
+// The full-resolution pointmap postprocess walks ~30 M pixels several times
+// (resample, exp, sigmoid, remap). These passes are per-pixel independent,
+// so run them on a thread pool; the per-pixel math is unchanged and the
+// result is bit-identical to the scalar version.
+unsigned postprocess_thread_count() {
+    const unsigned hardware = std::thread::hardware_concurrency();
+    return hardware == 0 ? 1u : std::min(hardware, 16u);
+}
+
+template <typename Body>
+void parallel_for(size_t begin, size_t end, const Body& body) {
+    const size_t count = end - begin;
+    const unsigned threads = postprocess_thread_count();
+    if (count == 0 || threads <= 1) {
+        body(begin, end);
+        return;
+    }
+    const size_t chunk = (count + threads - 1) / threads;
+    std::vector<std::thread> workers;
+    workers.reserve(threads);
+    for (size_t start = begin; start < end; start += chunk) {
+        const size_t stop = std::min(end, start + chunk);
+        workers.emplace_back([&body, start, stop] { body(start, stop); });
+    }
+    for (auto& worker : workers) worker.join();
+}
 
 struct HostImage {
     int channels = 0;
@@ -132,7 +160,8 @@ HostImage resize_bilinear(const HostImage& input, int width, int height) {
                      std::vector<float>(static_cast<size_t>(input.channels) * width * height)};
     const float scale_x = static_cast<float>(input.width) / static_cast<float>(width);
     const float scale_y = static_cast<float>(input.height) / static_cast<float>(height);
-    for (int y = 0; y < height; ++y) {
+    parallel_for(0, static_cast<size_t>(height), [&](size_t begin, size_t end) {
+    for (size_t y = begin; y < end; ++y) {
         const float source_y = std::max(0.0f, scale_y * (static_cast<float>(y) + 0.5f) - 0.5f);
         const int y0 = std::min(static_cast<int>(source_y), input.height - 1);
         const int y1 = std::min(y0 + 1, input.height - 1);
@@ -151,6 +180,7 @@ HostImage resize_bilinear(const HostImage& input, int width, int height) {
             }
         }
     }
+    });
     return output;
 }
 
@@ -500,12 +530,15 @@ bool run_moge_inference(const RgbaImage& image, const GGUFModel& model, Backend&
     output.depth.resize(pixels);
     output.mask.resize(pixels);
     const float threshold = model.f32("moge.mask_threshold", 0.5f);
-    for (size_t pixel = 0; pixel < pixels; ++pixel) {
+    parallel_for(0, pixels, [&](size_t begin, size_t end) {
+    for (size_t pixel = begin; pixel < end; ++pixel) {
         const float mask_logit = output.mask_logits[pixel];
         output.mask[pixel] = mask_logit > threshold ? 1 : 0;
         output.mask_probability[pixel] = 1.0f / (1.0f + std::exp(-mask_logit));
     }
-    for (int y = 0; y < image.height; ++y) {
+    });
+    parallel_for(0, static_cast<size_t>(image.height), [&](size_t begin, size_t end) {
+    for (size_t y = begin; y < end; ++y) {
         for (int x = 0; x < image.width; ++x) {
             const size_t pixel = static_cast<size_t>(y) * image.width + x;
             const float z = std::exp(points.at(2, x, y));
@@ -514,6 +547,7 @@ bool run_moge_inference(const RgbaImage& image, const GGUFModel& model, Backend&
             output.points_moge[pixel * 3 + 2] = z;
         }
     }
+    });
     if (options.capture_intermediates) output.forward_points = output.points_moge;
     HostImage remapped{3, image.width, image.height, output.points_moge};
     const FocalShift focal_shift = recover_focal_shift(remapped, output.mask);
@@ -521,7 +555,8 @@ bool run_moge_inference(const RgbaImage& image, const GGUFModel& model, Backend&
     output.shift = focal_shift.shift;
     fill_intrinsics(image.width, image.height, output.focal, output.intrinsics);
 
-    for (int y = 0; y < image.height; ++y) {
+    parallel_for(0, static_cast<size_t>(image.height), [&](size_t begin, size_t end) {
+    for (size_t y = begin; y < end; ++y) {
         for (int x = 0; x < image.width; ++x) {
             const size_t pixel = static_cast<size_t>(y) * image.width + x;
             float px = output.points_moge[pixel * 3];
@@ -547,6 +582,7 @@ bool run_moge_inference(const RgbaImage& image, const GGUFModel& model, Backend&
             output.pointmap_pytorch3d[(2 * image.height + y) * image.width + x] = pz;
         }
     }
+    });
     return true;
 }
 

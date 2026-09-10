@@ -330,7 +330,16 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
         ggml_tensor* k = nullptr;
         ggml_tensor* v = nullptr;
         gb_split_qkv(ctx, qkv, static_cast<int>(heads), &q, &k, &v);
-        ggml_tensor* attention = gb_attention(ctx, as_f32(ctx, q), k, v, attention_scale, true);
+        // The official MoGe runs F32 end to end. The default flash path casts
+        // K/V to F16, and on the DINOv2 outlier-carrying residual stream that
+        // rounding compounds through the blocks into a pointmap MAE of 0.09
+        // (block0 attention context already at 0.077). Keep K/V in F32 with
+        // the F32 flash precision contract - the same repair the SS condition
+        // chain needed - so the scene scale/shift and the SS conditioning
+        // match the official receipt. MoGe is a one-shot forward per object;
+        // the strict path's cost is negligible at 1370 tokens.
+        ggml_tensor* attention = gb_attention(ctx, as_f32(ctx, q), k, v, attention_scale,
+                                              true, AttentionOptions{/*.strict_kv=*/true});
         if (i == 0) {
             debug_q = ggml_cont(ctx, q);
             debug_k = ggml_cont(ctx, k);

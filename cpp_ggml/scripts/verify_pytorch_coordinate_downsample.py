@@ -13,11 +13,9 @@ from pathlib import Path
 
 from verify_pytorch_cuda_rng import reference_draws
 
+from samt_io import SAMT_MAGIC, GGML_I32 as GGML_TYPE_I32
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-
-
-SAMT_MAGIC = b"SAMT"
-GGML_TYPE_I32 = 26
 
 
 def official_downsample_function(torch):

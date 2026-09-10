@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import shutil
-import struct
 import sys
 from pathlib import Path
 
@@ -28,46 +27,16 @@ os.environ.setdefault("LIDRA_SKIP_INIT", "true")
 import numpy as np
 import torch
 
+from samt_io import GGML_F32, GGML_I32, read_samt_array, write_samt_array as write_samt
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SAMT_MAGIC = b"SAMT"
-GGML_F32 = 0
-# SAMT fixtures span ggml revisions. This build writes I32 as 26, while the
-# canonical E2E capture was written by newer upstream code that used 30. The
-# coordinates have the same signed 32-bit payload in both cases.
-GGML_I32 = 26
-GGML_I32_COMPAT = frozenset((GGML_I32, 30))
 
 
 def read_samt(path: Path, dtype: np.dtype) -> np.ndarray:
-    with path.open("rb") as stream:
-        if stream.read(4) != SAMT_MAGIC:
-            raise ValueError(f"{path}: missing SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        if rank < 1 or rank > 4:
-            raise ValueError(f"{path}: invalid rank {rank}")
-        dimensions = struct.unpack(f"<{rank}q", stream.read(rank * 8))
-        (ggml_type,) = struct.unpack("<i", stream.read(4))
-        accepted_types = (GGML_F32,) if dtype == np.dtype("<f4") else GGML_I32_COMPAT
-        if ggml_type not in accepted_types:
-            expected = "/".join(str(value) for value in sorted(accepted_types))
-            raise ValueError(f"{path}: expected GGML type {expected}, got {ggml_type}")
-        values = np.frombuffer(stream.read(), dtype=dtype)
-    expected_values = int(np.prod(dimensions, dtype=np.int64))
-    if values.size != expected_values:
-        raise ValueError(f"{path}: expected {expected_values} values, got {values.size}")
-    return values.reshape(tuple(reversed(dimensions))).copy()
+    return read_samt_array(path, dtype=dtype)
 
 
-def write_samt(path: Path, values: np.ndarray, ggml_type: int) -> None:
-    values = np.ascontiguousarray(values)
-    dimensions = tuple(reversed(values.shape))
-    with path.open("wb") as stream:
-        stream.write(SAMT_MAGIC)
-        stream.write(struct.pack("<i", len(dimensions)))
-        stream.write(struct.pack(f"<{len(dimensions)}q", *dimensions))
-        stream.write(struct.pack("<i", ggml_type))
-        stream.write(values.tobytes())
 
 
 class FixtureWriter:

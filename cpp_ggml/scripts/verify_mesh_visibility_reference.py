@@ -14,25 +14,9 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+from samt_io import load_samt
 
 
-def load_samt(path: Path) -> np.ndarray:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        if rank <= 0 or rank > 8:
-            raise ValueError(f"{path}: invalid rank {rank}")
-        ggml_shape = struct.unpack(f"<{rank}q", stream.read(rank * 8))
-        (ggml_type,) = struct.unpack("<i", stream.read(4))
-        dtype = {0: np.dtype("<f4"), 26: np.dtype("<i4"), 30: np.dtype("<i4")}.get(ggml_type)
-        if dtype is None:
-            raise ValueError(f"{path}: unsupported SAMT type {ggml_type}")
-        values = np.frombuffer(stream.read(), dtype=dtype)
-    expected = int(np.prod(ggml_shape, dtype=np.int64))
-    if values.size != expected:
-        raise ValueError(f"{path}: expected {expected} values, found {values.size}")
-    return values.reshape(tuple(reversed(ggml_shape))).copy()
 
 
 def require_file(path: Path) -> Path:

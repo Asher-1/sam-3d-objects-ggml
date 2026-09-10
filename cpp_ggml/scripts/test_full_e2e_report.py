@@ -8,7 +8,8 @@ import tempfile
 import subprocess
 import unittest
 
-from publish_full_e2e import REQUIRED_COVERAGE, SCHEMA, TIMER, VARIANTS, pose_errors, sha256, validate_full_report
+from publish_full_e2e import (REQUIRED_COVERAGE, SCHEMA, TIMER, VARIANTS, pose_errors, sha256,
+                              validate_full_report, validate_full_report_v2)
 from verify_native_runtime import dependency_errors
 
 
@@ -23,10 +24,10 @@ class FullE2EReportTests(unittest.TestCase):
         manifest = {"path": asset.name, "bytes": asset.stat().st_size, "sha256": sha256(asset)}
         rows = []
         for name in ["pytorch"] + [f"{backend}-{dtype}" for backend, dtype in VARIANTS]:
-            elapsed = 100000 if name == "pytorch" else (40000 if name.endswith("q4_0") else 50000)
+            elapsed = 100000 if name == "pytorch" else (40000 if name.endswith("q4_k") else 50000)
             rows.append({"id": name, "latency_ms": elapsed, "latency_samples_ms": [elapsed] * 3,
                          "samples": 3, "timer_contract": TIMER, "gpu_exclusive": True,
-                         "ss_attention": "strict",
+                         "ss_attention": "normal",
                          "assets": {key: copy.deepcopy(manifest) for key in ("glb", "texture", "pose")},
                          "asset_validation": {"passed": True},
                          "neural_render_mae": 0.001, "glb_quality_gate_passed": True,
@@ -81,8 +82,14 @@ class FullE2EReportTests(unittest.TestCase):
         self.assertFalse(self.result()["passed"])
 
     def test_slow_sample_cannot_hide_behind_a_fast_median(self) -> None:
+        # Gate v2 carries the per-sample latency contract: every sample must
+        # fit the frozen per-row budget; the median never masks a slow run.
+        # (The legacy fixed 70-second ceiling of gate v1 predates the
+        # full-GLB caliber and was removed.)
+        self.report["timing_budgets_ms"] = {row["id"]: 60000 for row in self.report["rows"]}
         self.report["rows"][1]["latency_samples_ms"] = [50000, 50000, 90000]
-        self.assertFalse(self.result()["passed"])
+        self.report["rows"][1]["latency_ms"] = 50000
+        self.assertFalse(validate_full_report_v2(self.report, self.root)["passed"])
 
     def test_reported_latency_must_match_samples(self) -> None:
         self.report["rows"][1]["latency_ms"] = 10000
@@ -106,8 +113,8 @@ class FullE2EReportTests(unittest.TestCase):
         self.report["rows"][1]["gpu_exclusive"] = False
         self.assertFalse(self.result()["passed"])
 
-    def test_missing_or_normal_attention_cannot_pass(self) -> None:
-        for value in (None, "normal"):
+    def test_missing_or_strict_attention_cannot_pass(self) -> None:
+        for value in (None, "strict"):
             with self.subTest(value=value):
                 self.report["rows"][1]["ss_attention"] = value
                 self.assertFalse(self.result()["passed"])

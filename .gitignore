@@ -8,3 +8,5 @@ output/
 cpp_ggml/benchmarks/e2e_comparison/*.ply
 *.samt
 *.bin
+/Testing/
+/output.ply

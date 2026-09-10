@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from samt_io import read_samt
 
 
 FIELDS = (
@@ -29,20 +30,6 @@ FIELDS = (
 )
 
 
-def read_samt(path: Path) -> np.ndarray:
-    with path.open("rb") as stream:
-        if stream.read(4) != b"SAMT":
-            raise ValueError(f"{path}: invalid SAMT magic")
-        (rank,) = struct.unpack("<i", stream.read(4))
-        shape = struct.unpack(f"<{rank}q", stream.read(8 * rank))
-        (value_type,) = struct.unpack("<i", stream.read(4))
-        if value_type != 0:
-            raise ValueError(f"{path}: expected F32 SAMT, got type {value_type}")
-        values = np.frombuffer(stream.read(), dtype="<f4").copy()
-    expected = int(np.prod(shape))
-    if values.size != expected:
-        raise ValueError(f"{path}: expected {expected} values, got {values.size}")
-    return values
 
 
 def error(reference: np.ndarray, actual: np.ndarray) -> dict[str, float | int]:
