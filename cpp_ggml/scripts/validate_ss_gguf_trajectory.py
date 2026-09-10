@@ -25,7 +25,7 @@ import numpy as np
 MODALITIES = ["6drotation_normalized", "scale", "shape", "translation", "translation_scale"]
 
 
-def read_samt(path: Path) -> np.ndarray:
+def read_samt(path: Path) -> tuple[tuple[int, ...], np.ndarray]:
     with path.open("rb") as stream:
         if stream.read(4) != b"SAMT":
             raise ValueError(f"{path}: invalid SAMT magic")
@@ -38,10 +38,17 @@ def read_samt(path: Path) -> np.ndarray:
     expected = int(np.prod(shape))
     if values.size != expected:
         raise ValueError(f"{path}: expected {expected} values, got {values.size}")
-    return values
+    return tuple(int(dimension) for dimension in shape), values
 
 
-def error(reference: np.ndarray, actual: np.ndarray) -> dict[str, float]:
+def error(reference: tuple[tuple[int, ...], np.ndarray],
+          actual: tuple[tuple[int, ...], np.ndarray]) -> dict[str, float]:
+    reference_shape, reference_values = reference
+    actual_shape, actual_values = actual
+    if reference_shape != actual_shape:
+        raise ValueError(f"tensor shape mismatch: {reference_shape} vs {actual_shape}")
+    reference = reference_values
+    actual = actual_values
     if reference.size != actual.size:
         raise ValueError(f"tensor size mismatch: {reference.size} vs {actual.size}")
     delta = actual.astype(np.float64) - reference.astype(np.float64)
@@ -64,9 +71,14 @@ def compare(torch_dir: Path, debug_dir: Path, steps: int) -> list[dict[str, Any]
                 ("vc", torch_dir / f"ss_torch_vc{step:03d}_{modality}.samt",
                  debug_dir / f"e2e_ss_vc{step - 1}_{index}.samt"),
             ]
-            if step <= 19:  # CFG is active only while the scaled timestep is <= 500.
-                comparisons.append(("vu", torch_dir / f"ss_torch_vu{step:03d}_{modality}.samt",
-                                    debug_dir / f"e2e_ss_vu{step - 1}_{index}.samt"))
+            torch_vu = torch_dir / f"ss_torch_vu{step:03d}_{modality}.samt"
+            native_vu = debug_dir / f"e2e_ss_vu{step - 1}_{index}.samt"
+            if torch_vu.is_file() != native_vu.is_file():
+                raise FileNotFoundError(
+                    f"CFG activation mismatch at step {step} for {modality}: "
+                    f"{torch_vu} vs {native_vu}")
+            if torch_vu.is_file():
+                comparisons.append(("vu", torch_vu, native_vu))
             for kind, reference_path, actual_path in comparisons:
                 if not reference_path.is_file() or not actual_path.is_file():
                     raise FileNotFoundError(f"missing trajectory pair: {reference_path}, {actual_path}")
@@ -111,8 +123,14 @@ def aggregate_mse(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def compare_baseline(rows: list[dict[str, Any]], baseline_path: Path) -> dict[str, Any]:
+def compare_baseline(rows: list[dict[str, Any]], baseline_path: Path,
+                     reference_weight_scope: str) -> dict[str, Any]:
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    if baseline.get("reference_weight_scope") != reference_weight_scope:
+        raise ValueError(
+            f"{baseline_path}: reference weight scope does not match this comparison")
+    if baseline.get("candidate_weight_scope") != "gguf":
+        raise ValueError(f"{baseline_path}: baseline is not a GGUF candidate comparison")
     baseline_rows = baseline.get("rows")
     if not isinstance(baseline_rows, list):
         raise ValueError(f"{baseline_path}: no rows array")
@@ -158,6 +176,22 @@ def compare_baseline(rows: list[dict[str, Any]], baseline_path: Path) -> dict[st
     }
 
 
+def verify_same_gguf_weight_scope(torch_dir: Path, model: Path) -> Path:
+    """Require the reference dump to prove its candidate-weight provenance."""
+    receipt_path = torch_dir / "reference_weight_scope.json"
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if payload.get("schema") != "sam3d.gguf_torch_backbone_loader.v1":
+        raise ValueError(f"{receipt_path}: unexpected GGUF loader report schema")
+    if payload.get("weight_scope") != "same-gguf-dequantized":
+        raise ValueError(f"{receipt_path}: unexpected GGUF loader weight scope")
+    if Path(payload.get("gguf", "")).resolve() != model.resolve():
+        raise ValueError(f"{receipt_path}: reference used a different SS GGUF")
+    if (not isinstance(payload.get("backbone_tensors_loaded"), int)
+            or payload["backbone_tensors_loaded"] < 1):
+        raise ValueError(f"{receipt_path}: no backbone tensors were loaded")
+    return receipt_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     root = Path(__file__).resolve().parents[1]
@@ -172,8 +206,14 @@ def main() -> int:
     parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--ss-attention", choices=("normal", "strict"), default="normal",
+                        help="strict selects the SS-only explicit F32 attention graph")
     parser.add_argument("--baseline", type=Path,
                         help="require every matching deployment trajectory MSE not to regress")
+    parser.add_argument("--reference-weight-scope",
+                        choices=("official-checkpoint", "same-gguf-dequantized"),
+                        default="official-checkpoint",
+                        help="provenance of --torch-dir; same-GGUF requires its loader receipt")
     parser.add_argument("--keep-debug", action="store_true")
     args = parser.parse_args()
 
@@ -188,6 +228,12 @@ def main() -> int:
     for modality in MODALITIES:
         if not (args.torch_dir / f"ss_torch_x{args.steps:03d}_{modality}.samt").is_file():
             parser.error(f"missing PyTorch terminal trajectory for {modality}")
+    receipt_path = None
+    if args.reference_weight_scope == "same-gguf-dequantized":
+        try:
+            receipt_path = verify_same_gguf_weight_scope(args.torch_dir, model)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            parser.error(str(error))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="sam3d-ss-gguf-") as temporary:
@@ -206,6 +252,10 @@ def main() -> int:
             "SAM3D_E2E_SS_STEPS": str(args.steps),
             "SAM3D_E2E_SS_COND_PATH": str(cond_tokens.resolve()),
         })
+        if args.ss_attention == "strict":
+            env["SAM3D_SS_STRICT_ATTN"] = "1"
+        else:
+            env.pop("SAM3D_SS_STRICT_ATTN", None)
         lib_dir = executable.parents[1] / "lib"
         if lib_dir.is_dir():
             env["LD_LIBRARY_PATH"] = str(lib_dir) + os.pathsep + env.get("LD_LIBRARY_PATH", "")
@@ -217,7 +267,10 @@ def main() -> int:
         subprocess.run(command, env=env, check=True)
         rows = compare(args.torch_dir, debug_dir, args.steps)
         payload: dict[str, Any] = {
-            "schema": "sam3d.ss_gguf_deployment_trajectory.v1",
+            "schema": "sam3d.ss_gguf_deployment_trajectory.v2",
+            "reference_weight_scope": args.reference_weight_scope,
+            "candidate_weight_scope": "gguf",
+            "reference_weight_receipt": (str(receipt_path.resolve()) if receipt_path else None),
             "backend": args.backend,
             "dtype": args.dtype,
             "models_dir": str(args.models_dir.resolve()),
@@ -226,13 +279,19 @@ def main() -> int:
             "e2e_dir": str(args.e2e_dir.resolve()),
             "seed": args.seed,
             "steps": args.steps,
+            "ss_attention": args.ss_attention,
             "terminal_latent": terminal_by_modality(rows, args.steps),
             "first_velocity": first_velocity_by_modality(rows),
             "aggregate_mse": aggregate_mse(rows),
             "rows": rows,
         }
         if args.baseline:
-            payload["selection"] = compare_baseline(rows, args.baseline)
+            payload["selection"] = compare_baseline(
+                rows, args.baseline, args.reference_weight_scope)
+        numeric_gate_configured = args.baseline is not None
+        payload["numeric_gate_configured"] = numeric_gate_configured
+        payload["passed"] = (bool(payload["selection"]["pareto_non_regressing"])
+                             if numeric_gate_configured else None)
         if args.keep_debug:
             retained = args.output.with_suffix("").with_name(args.output.stem + "_debug")
             if retained.exists():
@@ -241,8 +300,9 @@ def main() -> int:
             payload["debug_dir"] = str(retained.resolve())
     args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"terminal_latent": payload["terminal_latent"],
-                      "selection": payload.get("selection")}, indent=2))
-    return 0 if payload.get("selection", {}).get("pareto_non_regressing", True) else 2
+                      "selection": payload.get("selection"),
+                      "passed": payload["passed"]}, indent=2))
+    return 0 if payload["passed"] is not False else 2
 
 
 if __name__ == "__main__":

@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "runner": "python",
+      "command": [
+        "bash",
+        "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/run_python.sh",
+        "--image",
+        "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png",
+        "--mask",
+        "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png",
+        "--out-dir",
+        "/tmp/sam3d-release-20260910.DriMmt/launcher_python",
+        "--seed",
+        "42",
+        "--python",
+        "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python"
+      ],
+      "returncode": 1,
+      "wall_seconds": 217.81776419701055,
+      "scope": "public launcher validation; not a replacement for the raw benchmark row",
+      "passed": false
+    }
+  ]
+}

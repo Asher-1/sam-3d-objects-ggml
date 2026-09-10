@@ -1,0 +1,208 @@
+{
+  "scope": "current primary asset integrity, not numerical release acceptance",
+  "rows": [
+    {
+      "id": "pytorch",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 16134,
+        "triangle_count": 24702,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    },
+    {
+      "id": "cuda-f16",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 17148,
+        "triangle_count": 26066,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    },
+    {
+      "id": "cuda-q8_0",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 17236,
+        "triangle_count": 26370,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    },
+    {
+      "id": "cuda-q4_0",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 17074,
+        "triangle_count": 26010,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    },
+    {
+      "id": "vulkan-f16",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 15959,
+        "triangle_count": 25150,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    },
+    {
+      "id": "vulkan-q8_0",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 16399,
+        "triangle_count": 25856,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    },
+    {
+      "id": "vulkan-q4_0",
+      "hashes_match": true,
+      "glb_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 16933,
+        "triangle_count": 26144,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "passed": true
+    }
+  ],
+  "passed": true
+}

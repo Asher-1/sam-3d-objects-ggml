@@ -10,11 +10,14 @@ outputs (dict order: 6drotation_normalized, scale, shape, translation,
 translation_scale) plus the CFG uncond branch for the strength-7 blending.
 """
 import argparse
+import json
 import os
 import struct
 
 import numpy as np
 import torch
+
+from gguf_torch_loader import replace_backbone_from_gguf
 
 SAMT_MAGIC = b"SAMT"
 
@@ -51,6 +54,9 @@ def main():
     ap.add_argument("--out-dir", default="/tmp/ss_dbg")
     ap.add_argument("--t", type=float, default=0.0)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--gguf",
+                    help=("optional generator GGUF; replaces every reverse_fn.backbone weight "
+                          "with its exact GGUF dequantization before the Torch reference"))
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
@@ -66,6 +72,14 @@ def main():
     sd = sd.get("state_dict", sd)
     gen_sd = {k[len("_base_models.generator."):]: v for k, v in sd.items()
               if k.startswith("_base_models.generator.")}
+    del sd
+    if args.gguf:
+        weight_report = replace_backbone_from_gguf(gen_sd, args.gguf)
+        with open(os.path.join(args.out_dir, "reference_weight_scope.json"), "w", encoding="utf-8") as stream:
+            json.dump(weight_report, stream, indent=2)
+            stream.write("\n")
+        print("[ref] same-GGUF backbone loaded: "
+              f"{weight_report['backbone_tensors_loaded']} tensors from {weight_report['gguf']}")
     missing, unexpected = gen.load_state_dict(gen_sd, strict=False)
     print(f"[ref] generator loaded: missing={len(missing)} unexpected={len(unexpected)}")
     gen = gen.to(args.device).eval()
@@ -103,11 +117,14 @@ def main():
         print(f"[ref] proj_in dumped: {merged['shape'].shape} {merged['6drotation_normalized'].shape}")
         # hook block0 outputs + fine-grained internals (bisect the block)
         cap = {}
+        capture_enabled = True
         blk0 = gen.reverse_fn.backbone.blocks[0]
         orig_fwd = blk0.forward
 
         def cap_fwd(x, mod, context, _f=orig_fwd):
             out = _f(x, mod, context)
+            if not capture_enabled:
+                return out
             for k, v in out.items():
                 cap[k] = v.detach().float().cpu()
             return out
@@ -116,6 +133,8 @@ def main():
 
         def tok_hook(name):
             def hook(mod, inp, out):
+                if not capture_enabled:
+                    return
                 t = out[0] if isinstance(out, tuple) else out
                 if isinstance(t, dict):
                     for k, v in t.items():
@@ -134,18 +153,31 @@ def main():
             blk0.cross_attn[mn].to_q.register_forward_hook(tok_hook(f"b0_xq_{mn}"))
 
             def kv_hook(mod, inp, out, _mn=mn):
+                if not capture_enabled:
+                    return
+                cap[f"b0_xkv_input_{_mn}"] = inp[0].detach().float().cpu()
+                cap[f"b0_xkv_{_mn}"] = out.detach().float().cpu()
                 cap[f"b0_xk_{_mn}"] = out[..., :out.shape[-1] // 2].detach().float().cpu()
                 cap[f"b0_xv_{_mn}"] = out[..., out.shape[-1] // 2:].detach().float().cpu()
 
             blk0.cross_attn[mn].to_kv.register_forward_hook(kv_hook)
+
+            def qkv_hook(mod, inp, out, _mn=mn):
+                if not capture_enabled:
+                    return
+                channels = out.shape[-1] // 3
+                cap[f"b0_qpre_{_mn}"] = out[..., :channels].detach().float().cpu()
+
+            blk0.self_attn.to_qkv[mn].register_forward_hook(qkv_hook)
         # attention internals: wrap mm_scale_dot_product_attention to capture
         # post-rms q/k (torch (B, L, H, D) == C++ (Hd, N, H) memory)
         orig_mm = blk0.self_attn.mm_scale_dot_product_attention
 
         def mm_hook(q, k, v, _f=orig_mm):
-            cap["b0_q_shape"] = q["shape"].detach().float().cpu()
-            cap["b0_k_shape"] = k["shape"].detach().float().cpu()
-            cap["b0_q_pose"] = q["6drotation_normalized"].detach().float().cpu()
+            if capture_enabled:
+                cap["b0_q_shape"] = q["shape"].detach().float().cpu()
+                cap["b0_k_shape"] = k["shape"].detach().float().cpu()
+                cap["b0_q_pose"] = q["6drotation_normalized"].detach().float().cpu()
             return _f(q, k, v)
 
         blk0.self_attn.mm_scale_dot_product_attention = mm_hook
@@ -160,6 +192,7 @@ def main():
         y_uncond = wbb(x_t, t, cond_t, d=d, cfg=True)
         cap = cap_cond
         # verify the host-side CFG blend reproduces the wrapper's output
+        capture_enabled = False
         y_ref = gen.reverse_fn(x_t, t, cond_t, d=d, p_unconditional=0.0,
                                cfg=False)
         blend = {m: (1 + 7.0) * y_cond[m] - 7.0 * y_uncond[m] for m in MODS}
@@ -177,16 +210,29 @@ def main():
                   "b0_x_shape", "b0_x_6drotation_normalized",
                   "b0_mlp_shape", "b0_mlp_6drotation_normalized",
                   "b0_q_shape", "b0_k_shape", "b0_q_pose",
-                  "b0_xq_shape", "b0_xk_shape", "b0_xv_shape",
+                  "b0_qpre_shape", "b0_qpre_6drotation_normalized",
+                  "b0_xkv_input_shape", "b0_xkv_input_6drotation_normalized",
+                  "b0_xq_shape", "b0_xkv_shape", "b0_xk_shape", "b0_xv_shape",
                   "b0_xq_6drotation_normalized", "b0_xk_6drotation_normalized",
-                  "b0_xv_6drotation_normalized"]:
+                  "b0_xv_6drotation_normalized", "b0_xkv_6drotation_normalized"]:
             if k not in cap:
                 print(f"[ref] MISSING {k}")
                 continue
             v = cap[k]
-            # (B, L, C) token-major -> ggml (C, N); (B, L, H, D) -> ggml (D, H, L)
-            ne = list(v.shape[1:][::-1])
-            write_samt_f32(os.path.join(args.out_dir, f"ss_{k}.samt"), ne, v[0].cpu())
+            # Token-major (B, L, C) has the same physical order as ggml
+            # (C, N). Post-RMS self-attention tensors are logically ggml
+            # (D, N, H), so D must remain the fastest physical dimension.
+            # A PyTorch contiguous (D, N, H) tensor makes H fastest instead.
+            # Writing (H, N, D) gives the same byte order while preserving the
+            # logical SAMT contract (D, N, H) in its header.
+            if k in {"b0_q_shape", "b0_k_shape", "b0_q_pose"}:
+                native = v[0].permute(1, 0, 2).contiguous()
+                ne = [native.shape[2], native.shape[1], native.shape[0]]
+                data = native.cpu()
+            else:
+                ne = list(v.shape[1:][::-1])
+                data = v[0].cpu()
+            write_samt_f32(os.path.join(args.out_dir, f"ss_{k}.samt"), ne, data)
         print(f"[ref] block0 internals dumped")
 
     for m in MODS:

@@ -5,6 +5,11 @@
 * A linux 64-bits architecture (i.e. `linux-64` platform in `mamba info`).
 * A NVIDIA GPU with at least 32 Gb of VRAM.
 
+These are the upstream resident-pipeline prerequisites. The repository's
+[streamed Python and native launchers](../cpp_ggml/README.md) have separately
+recorded complete GLB runs on a 12 GiB RTX 3060; they use the documented
+mixed-precision/residency policy, not an unchanged resident run.
+
 ## 1. Setup Python Environment
 
 The following will install the default environment. If you use `conda` instead of `mamba`, replace its name in the first two lines. Note that you may have to build the environment on a compute node with GPU (e.g., you may get a `RuntimeError: Not compiled with GPU support` error when running certain parts of the code that use Pytorch3D).
@@ -60,11 +65,19 @@ rm -rf checkpoints/${TAG}-download
 The `cpp_ggml` C++ engine does not need the PyTorch checkpoints above; it loads
 pre-converted GGUF weights hosted at
 [Asher-1/SAM_3D_OBJECTS_GGUF](https://huggingface.co/Asher-1/SAM_3D_OBJECTS_GGUF)
-(6 pipeline models x f32/f16/q8_0, ~5.9 GiB for the recommended f16 set):
+(F32/F16/Q8_0/Q4 variants; full GLB generation uses five generative stages
+plus MoGe, about 6.32 GiB for F16 or 3.64 GiB for Q8_0 with MoGe F16):
 
 ```bash
-bash cpp_ggml/scripts/download_gguf.sh
+bash cpp_ggml/scripts/download_gguf.sh --dtype q8_0
+SAM3D_PYTHON=/path/to/sam3d-objects/bin/python \
+  bash cpp_ggml/scripts/prepare_moge_gguf.sh
 ```
 
 See [`cpp_ggml/models/MODEL_CARD.md`](../cpp_ggml/models/MODEL_CARD.md) for the
 file manifest and quantization notes.
+
+For image/mask-to-textured-GLB launchers, system prerequisites and licensed
+native PBR dependencies, follow [the C++ deployment guide](../cpp_ggml/README.md).
+From the repository root, `bash run_python.sh --help` and
+`bash run_ggml.sh --help` list the complete reconstruction options.

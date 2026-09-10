@@ -82,7 +82,10 @@ void gb_split_qkv(ggml_context* ctx, ggml_tensor* qkv, int n_heads, ggml_tensor*
     const int64_t D = C / n_heads;
     const int64_t N = qkv->ne[1];
     const int64_t B = qkv->ne[2];
-    const size_t cs = sizeof(float);
+    // qkv can be F16 in the MoGe autocast graph. Views operate in bytes, so
+    // the offset must follow the actual element representation rather than
+    // assuming the historical F32-only projection output.
+    const size_t cs = ggml_element_size(qkv);
     // per-slice view (C, N, B): token stride C*4, batch stride qkv->nb[2].
     // The views preserve a final batch dimension when present. The row slice
     // remains strided because a QKV row is 3C-wide, so each slice is made
@@ -113,19 +116,19 @@ void gb_split_kv(ggml_context* ctx, ggml_tensor* kv,
     const int64_t N = kv->ne[1];
     const int64_t B = kv->ne[2];
     GGML_ASSERT(kv->ne[0] == 2 * C && B == 1);
-    const size_t offset = (size_t)C * sizeof(float);
+    const size_t offset = (size_t)C * ggml_element_size(kv);
     *k = ggml_cont(ctx, ggml_view_3d(ctx, kv, C, N, B, kv->nb[1], kv->nb[2], 0));
     *v = ggml_cont(ctx, ggml_view_3d(ctx, kv, C, N, B, kv->nb[1], kv->nb[2], offset));
 }
 
 ggml_tensor* gb_attention(ggml_context* ctx, ggml_tensor* q, ggml_tensor* k, ggml_tensor* v,
-                          float scale, bool use_flash) {
+                          float scale, bool use_flash, bool force_manual) {
     // The optimized path stores K/V in F16 for flash attention.  Keep a
     // graph-level, all-F32 formulation for numerical diagnosis: it is the
     // direct QK^T -> softmax -> V expression used by the official model and
     // requires no backend-specific ggml source change.  It intentionally is
     // opt-in because materializing N x N scores is not the production path.
-    if (getenv("SAM3D_MANUAL_ATTN") != nullptr) {
+    if (force_manual || getenv("SAM3D_MANUAL_ATTN") != nullptr) {
         ggml_tensor* scores = ggml_mul_mat(ctx, k, q);       // [K, Q, heads, batch]
         ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
         scores = ggml_scale(ctx, scores, scale);

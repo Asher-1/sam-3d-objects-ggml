@@ -29,6 +29,12 @@ def main() -> int:
     args = parser.parse_args()
 
     report = json.loads(args.input.read_text(encoding="utf-8"))
+    if report.get("schema") == "sam3d.full-glb-matrix.v1":
+        from publish_full_e2e import plot_full_report
+        metrics_output = args.metrics_output or args.output.with_name(
+            args.output.stem.replace("latency", "metrics") + args.output.suffix)
+        plot_full_report(report, args.output, metrics_output)
+        return 0
     rows = report.get("rows", [])
     if not rows:
         parser.error("input contains no latency rows")

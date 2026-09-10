@@ -4,9 +4,11 @@
 // spconv's SubMConv3d (submanifold: output set == input set, missing
 // neighbours contribute zero).
 #include "sparse_ops.hpp"
+#include "mesh_ape_reference.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <tuple>
 
@@ -222,18 +224,41 @@ bool GsTables::build(const int32_t* coords, int64_t n_fine) {
         const int freq_dim = channels / 3 / 2;
         const int64_t nf = n_fine;
         ape.assign((size_t)channels * nf, 0.0f);
-        std::vector<float> freqs((size_t)freq_dim);
-        for (int i = 0; i < freq_dim; i++)
-            freqs[(size_t)i] = 1.0f / powf(10000.0f, (float)i / (float)freq_dim);
+        static_assert(mesh_ape_reference::kFrequencyCount == freq_dim,
+                      "official mesh APE frequency count changed");
+        bool has_official_coordinate_range = true;
+        for (int64_t n = 0; n < nf && has_official_coordinate_range; ++n) {
+            for (int ax = 0; ax < 3; ++ax) {
+                const int32_t coordinate = coords[n * 4 + 1 + ax];
+                has_official_coordinate_range =
+                    coordinate >= 0 && coordinate < mesh_ape_reference::kCoordinateCount;
+                if (!has_official_coordinate_range) break;
+            }
+        }
+        std::vector<float> freqs;
+        if (!has_official_coordinate_range) {
+            freqs.resize((size_t)freq_dim);
+            for (int i = 0; i < freq_dim; i++) {
+                freqs[(size_t)i] = 1.0f / powf(10000.0f, (float)i / (float)freq_dim);
+            }
+        }
         for (int64_t n = 0; n < nf; n++) {
             for (int ax = 0; ax < 3; ax++) {
-                const float v = (float)coords[n * 4 + 1 + ax];
                 float* sin_seg = &ape[(size_t)n * channels + ax * 2 * freq_dim];
                 float* cos_seg = sin_seg + freq_dim;
-                for (int i = 0; i < freq_dim; i++) {
-                    const float ph = v * freqs[(size_t)i];
-                    sin_seg[i] = sinf(ph);
-                    cos_seg[i] = cosf(ph);
+                if (has_official_coordinate_range) {
+                    const int32_t coordinate = coords[n * 4 + 1 + ax];
+                    std::memcpy(sin_seg, mesh_ape_reference::kSinCosBits[coordinate][0],
+                                sizeof(float) * freq_dim);
+                    std::memcpy(cos_seg, mesh_ape_reference::kSinCosBits[coordinate][1],
+                                sizeof(float) * freq_dim);
+                } else {
+                    const float value = static_cast<float>(coords[n * 4 + 1 + ax]);
+                    for (int i = 0; i < freq_dim; i++) {
+                        const float phase = value * freqs[(size_t)i];
+                        sin_seg[i] = sinf(phase);
+                        cos_seg[i] = cosf(phase);
+                    }
                 }
             }
         }

@@ -1,71 +1,1410 @@
 {
-  "schema": "sam3d.e2e.latency.v3",
-  "workload": "one canonical image + mask to Gaussian PLY, then official 60-view render",
-  "input": "notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png, mask 14, seed 42",
-  "device": "NVIDIA GeForce RTX 3060 (12 GiB)",
-  "latency_gate_ms": 70000,
-  "release_gate": {
-    "schema": "sam3d.e2e.release-contract.v2",
-    "reference_runner": "PyTorch official F16 streamed",
-    "require_reference_exclusive_gpu": true,
-    "max_render_mae": 0.01,
-    "max_latency_ms": 70000,
-    "required": [
-      {"id": "cuda-f16", "runner": "GGML CUDA f16 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
-      {"id": "vulkan-f16", "runner": "GGML Vulkan f16 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
-      {"id": "cuda-q8", "runner": "GGML CUDA q8_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
-      {"id": "vulkan-q8", "runner": "GGML Vulkan q8_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true},
-      {"id": "cuda-q4", "runner": "GGML CUDA q4_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true, "require_faster_than": "cuda-q8"},
-      {"id": "vulkan-q4", "runner": "GGML Vulkan q4_0 raw", "require_quality": true, "require_exclusive_gpu": true, "require_faster_than_reference": true, "require_faster_than": "vulkan-q8"}
-    ]
+  "schema": "sam3d.full-glb-matrix.v1",
+  "generated_at": "2026-09-10T07:20:52.602078+00:00",
+  "input": {
+    "image": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png",
+    "mask": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png",
+    "seed": 42
   },
-  "protocol": "Latency includes all GGML condition, SS, SLat and Gaussian stages after the canonical saved image/mask conditions are loaded. Each candidate must use the same official camera path and render comparison. GPU timing is accepted only with required=true, checked=true and an empty active_compute_processes list.",
+  "candidate_sampling_mode": "native-seed",
+  "source_summary_sha256": "12b02442f896f91d46b92b2f9103b31150c6cf3ccfaf59eb4ba03b6e3a0b00ce",
+  "timer_description": "Cold process launch through successful exit after GLB/PNG file close; includes imports, initialization, model loading, inference, full PBR and output I/O. External comparison rendering is excluded.",
+  "reference_weight_policy": {
+    "schema": "sam3d.reference-execution.v1",
+    "config": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml",
+    "config_sha256": "53c3d226b21df85c0bb3d16e6e4fa63abde0d6167525765eb929d02bfa9d358c",
+    "python_executable": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11",
+    "torch_version": "2.5.1+cu121",
+    "torch_cuda_version": "12.1",
+    "cuda_device": "NVIDIA GeForce RTX 3060",
+    "default_dtype": "torch.float32",
+    "float32_matmul_precision": "highest",
+    "allow_tf32_matmul": false,
+    "flash_sdp_enabled": true,
+    "mem_efficient_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "weight_residency": "streamed",
+    "weight_policy": "staged-mixed-bf16-f16-native",
+    "module_dtypes": {
+      "models.ss_generator": "torch.bfloat16",
+      "models.slat_generator": "torch.float16",
+      "models.ss_encoder": "unavailable",
+      "models.ss_decoder": "torch.float32",
+      "models.slat_decoder_gs": "torch.float32",
+      "models.slat_decoder_gs_4": "torch.float32",
+      "models.slat_decoder_mesh": "torch.float32",
+      "conditioners.ss_condition_embedder": "torch.bfloat16",
+      "conditioners.slat_condition_embedder": "torch.float16",
+      "depth_model": "torch.float32"
+    }
+  },
+  "quality_reference": "Fresh official stage-capture GLB; retained separately from the timed official request",
+  "full_acceptance_coverage": {
+    "controlled_pbr_texture_and_normals": false,
+    "cuda_rng_stream_matches_official": true,
+    "cuda_randperm_matches_pytorch": true,
+    "cuda_coordinate_downsample_matches_pytorch": true,
+    "raw_cuda_glb_structure": true,
+    "final_material_contract": true,
+    "raw_cuda_glb_multiview_render": false,
+    "official_full_glb_timing": true,
+    "native_full_glb_hot_timing": false,
+    "cross_backend_rng_contract": true,
+    "cross_backend_randperm_contract": true,
+    "cross_backend_coordinate_downsample_contract": true,
+    "official_operator_boundary_oracle": false,
+    "per_operator_dtype_contract": true,
+    "native_pose_contract": true,
+    "vulkan_inference_cuda_pbr_handoff": true
+  },
+  "glb_thresholds": {
+    "max_rgb_mae_linear": null,
+    "min_mask_iou": null,
+    "max_normal_angle_deg": null,
+    "max_depth_mae_ndc": null
+  },
   "rows": [
     {
-      "runner": "PyTorch official F16 streamed",
+      "id": "pytorch",
+      "runner": "PyTorch staged mixed",
       "backend": "cuda",
+      "dtype": "staged-mixed",
+      "latency_ms": 234302.96805605758,
+      "hot_session_ms": 188617.614984978,
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "gpu_exclusive": true,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/pytorch/output.glb",
+          "sha256": "45f66a13fb30ae9d750b2dd737d90811f0027ff2619d47cc5b0a9853b4d7074f",
+          "bytes": 1830400
+        },
+        "texture": {
+          "path": "full_glb_current/pytorch/base_color.png",
+          "sha256": "7de988f7f967ed7dcf77b622022b08f77fc2e9e3d53a68223d3b8c49ac9195dd",
+          "bytes": 1209970
+        },
+        "pose": {
+          "path": "full_glb_current/pytorch/pose.json",
+          "sha256": "f23e4607c25e589e8860b950f6ed194ec4fa3f0232006c9beff5ff3cf4c6ba73",
+          "bytes": 366
+        }
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 16134,
+        "triangle_count": 24702,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        234302.96805605758
+      ]
+    },
+    {
+      "id": "cuda-f16",
+      "runner": "CUDA F16",
+      "backend": "cuda",
+      "pbr_backend": "cuda",
       "dtype": "f16",
-      "latency_ms": 75994.2,
-      "warmup": 0,
-      "iters": 1,
-      "status": "measured latest exclusive reference",
-      "render_mae": 0.0,
-      "gpu_exclusivity": {"required": true, "checked": true, "active_compute_processes": []},
-      "weight_residency": "streamed"
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "ss_attention": "strict",
+      "latency_ms": 252136.1605869606,
+      "gpu_exclusive": true,
+      "glb_metrics": {
+        "frame_count": 60,
+        "resolution": 512,
+        "rgb_mae_linear": 0.02625939769980808,
+        "rgb_rmse_linear": 0.048524124827235934,
+        "rgb_max_abs_linear": 0.6851649880409241,
+        "mask_iou": 0.9771923503967141,
+        "mask_iou_min": 0.9698135613347584,
+        "depth_mae_ndc": 2.780631833350829e-05,
+        "normal_mean_angle_deg": 9.574233762423198,
+        "normal_max_angle_deg": 174.8589630126953
+      },
+      "neural_render_mae": 0.024845987558364868,
+      "glb_quality_gate_passed": false,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/cuda-f16/output.glb",
+          "sha256": "11c1a0c975e239541a23cb442e4fc03deaa6a5e0b4117a8c4a0941256c713f25",
+          "bytes": 3004332
+        },
+        "texture": {
+          "path": "full_glb_current/cuda-f16/base_color.png",
+          "sha256": "985b989e08b622a8aef94ac7fed97aa5cf7a879cb0cc18c933dad97758416cdf",
+          "bytes": 2141546
+        },
+        "pose": {
+          "path": "full_glb_current/cuda-f16/pose.json",
+          "sha256": "ce36d0130a948c2f5280141a75c41b5a4b6031daec03719987fc5f52e85c52a3",
+          "bytes": 402
+        }
+      },
+      "pose_errors_vs_official_stage": {
+        "rotation_angle_deg": 4.0726954037081065,
+        "translation_l2": 0.00816400712317755,
+        "scale_max_abs": 0.0032574984200058055
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 17148,
+        "triangle_count": 26066,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        252136.1605869606
+      ]
     },
     {
-      "runner": "GGML CUDA q8_0 raw",
+      "id": "cuda-q8_0",
+      "runner": "CUDA Q8_0",
       "backend": "cuda",
+      "pbr_backend": "cuda",
       "dtype": "q8_0",
-      "latency_ms": 72726.1057710275,
-      "warmup": 0,
-      "iters": 1,
-      "status": "measured latest exclusive; render-MAE and 70 s gates fail",
-      "phases_ms": {"condition": 2267.501150025055, "ss": 34165.62589799287, "slat_plus_gaussian": 36292.97872300958},
-      "render_mae": 0.01243360061198473,
-      "render_psnr_db": 25.75877290309083,
-      "render_report": "render_cuda_q8_current/render_metrics.json",
-      "gpu_exclusivity": {"required": true, "checked": true, "active_compute_processes": []},
-      "weight_residency": "GGML backend native"
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "ss_attention": "strict",
+      "latency_ms": 216164.23608502373,
+      "gpu_exclusive": true,
+      "glb_metrics": {
+        "frame_count": 60,
+        "resolution": 512,
+        "rgb_mae_linear": 0.028101786443342765,
+        "rgb_rmse_linear": 0.05289781801402569,
+        "rgb_max_abs_linear": 0.6701852679252625,
+        "mask_iou": 0.9738630486182349,
+        "mask_iou_min": 0.9640737993695532,
+        "depth_mae_ndc": 3.1715200839244063e-05,
+        "normal_mean_angle_deg": 9.968980312347412,
+        "normal_max_angle_deg": 178.60926818847656
+      },
+      "neural_render_mae": 0.02417605184018612,
+      "glb_quality_gate_passed": false,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/cuda-q8_0/output.glb",
+          "sha256": "20203435dc848835f5e5ac9ce261f08a2810f1c182ab01f4e66bda28f74184fb",
+          "bytes": 2991564
+        },
+        "texture": {
+          "path": "full_glb_current/cuda-q8_0/base_color.png",
+          "sha256": "b12f12421895d59f9015037e3399baf073542287b03664fd28b09abbe7d7c7bd",
+          "bytes": 2122314
+        },
+        "pose": {
+          "path": "full_glb_current/cuda-q8_0/pose.json",
+          "sha256": "8be41fee77588b2815cc9cc2cd0993ede63bb8b036d3e83d9bc3ad1610641132",
+          "bytes": 401
+        }
+      },
+      "pose_errors_vs_official_stage": {
+        "rotation_angle_deg": 3.6134862772386485,
+        "translation_l2": 0.011898873775365996,
+        "scale_max_abs": 0.0033441634200057913
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 17236,
+        "triangle_count": 26370,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        216164.23608502373
+      ]
     },
     {
-      "runner": "GGML Vulkan q8_0 raw",
-      "backend": "vulkan",
-      "dtype": "q8_0",
-      "latency_ms": null,
-      "status": "not freshly measured: shared GPU process observed; rerun with --require-exclusive-gpu",
-      "gpu_exclusivity": {"required": true, "checked": false, "active_compute_processes": ["shared GPU process present"]}
-    },
-    {
-      "runner": "GGML CUDA q4_0 raw",
+      "id": "cuda-q4_0",
+      "runner": "CUDA Q4_0",
       "backend": "cuda",
+      "pbr_backend": "cuda",
       "dtype": "q4_0",
-      "latency_ms": 111272.542,
-      "status": "historical retained Q4 milestone; current model hash and fresh render are required",
-      "render_mae": 0.04069218412041664,
-      "render_psnr_db": 18.506119247278484,
-      "gpu_exclusivity": {"required": true, "checked": false, "active_compute_processes": ["historical provenance unavailable"]}
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "ss_attention": "strict",
+      "latency_ms": 215338.26419804245,
+      "gpu_exclusive": true,
+      "glb_metrics": {
+        "frame_count": 60,
+        "resolution": 512,
+        "rgb_mae_linear": 0.04802726671720545,
+        "rgb_rmse_linear": 0.08297575488686562,
+        "rgb_max_abs_linear": 0.6864451766014099,
+        "mask_iou": 0.9241463810178718,
+        "mask_iou_min": 0.9014303744215397,
+        "depth_mae_ndc": 8.934686120483093e-05,
+        "normal_mean_angle_deg": 17.77866926193237,
+        "normal_max_angle_deg": 179.05227661132812
+      },
+      "neural_render_mae": 0.055790677666664124,
+      "glb_quality_gate_passed": false,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/cuda-q4_0/output.glb",
+          "sha256": "88ff2ae40f3845132e8680ffab9054bf18fefcb17ec532b9e59c493403ecb9eb",
+          "bytes": 3017440
+        },
+        "texture": {
+          "path": "full_glb_current/cuda-q4_0/base_color.png",
+          "sha256": "bd24072d702641e73dc5902ceff6dc489c437ccd3b4392da122b0419750d3732",
+          "bytes": 2157694
+        },
+        "pose": {
+          "path": "full_glb_current/cuda-q4_0/pose.json",
+          "sha256": "d5fd1077ceaadc77e9d19f9079e06eabeb8a16562d9a98583b9c975817d5180f",
+          "bytes": 399
+        }
+      },
+      "pose_errors_vs_official_stage": {
+        "rotation_angle_deg": 5.286281083201733,
+        "translation_l2": 0.044832193565032714,
+        "scale_max_abs": 0.010335311579994205
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 17074,
+        "triangle_count": 26010,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        215338.26419804245
+      ]
+    },
+    {
+      "id": "vulkan-f16",
+      "runner": "Vulkan + CUDA PBR F16",
+      "backend": "vulkan",
+      "pbr_backend": "cuda",
+      "dtype": "f16",
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "ss_attention": "strict",
+      "latency_ms": 236219.63068004698,
+      "gpu_exclusive": true,
+      "glb_metrics": {
+        "frame_count": 60,
+        "resolution": 512,
+        "rgb_mae_linear": 0.025664606286833685,
+        "rgb_rmse_linear": 0.04930183704321583,
+        "rgb_max_abs_linear": 0.6723995804786682,
+        "mask_iou": 0.9767597370711493,
+        "mask_iou_min": 0.968579496506174,
+        "depth_mae_ndc": 2.8983319771214157e-05,
+        "normal_mean_angle_deg": 9.608525840441386,
+        "normal_max_angle_deg": 171.35980224609375
+      },
+      "neural_render_mae": 0.023434054106473923,
+      "glb_quality_gate_passed": false,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/vulkan-f16/output.glb",
+          "sha256": "8aebd1a94fa54af65e3504f956a2ce20577267d39715c8f75a9fb029816d9122",
+          "bytes": 2910752
+        },
+        "texture": {
+          "path": "full_glb_current/vulkan-f16/base_color.png",
+          "sha256": "07674f83e7dfe38030964c2d820c25bb2824fcb2fa05b802e55c0c4c76613ddb",
+          "bytes": 2097005
+        },
+        "pose": {
+          "path": "full_glb_current/vulkan-f16/pose.json",
+          "sha256": "9d7dac7819de7dde4af41dd76c702508df61663329c1fa92561c252f99cac396",
+          "bytes": 405
+        }
+      },
+      "pose_errors_vs_official_stage": {
+        "rotation_angle_deg": 4.073041255946143,
+        "translation_l2": 0.0095192381433109,
+        "scale_max_abs": 0.0032044504200058055
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 15959,
+        "triangle_count": 25150,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        236219.63068004698
+      ]
+    },
+    {
+      "id": "vulkan-q8_0",
+      "runner": "Vulkan + CUDA PBR Q8_0",
+      "backend": "vulkan",
+      "pbr_backend": "cuda",
+      "dtype": "q8_0",
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "ss_attention": "strict",
+      "latency_ms": 223370.47247297596,
+      "gpu_exclusive": true,
+      "glb_metrics": {
+        "frame_count": 60,
+        "resolution": 512,
+        "rgb_mae_linear": 0.027324639183158677,
+        "rgb_rmse_linear": 0.05081587998817364,
+        "rgb_max_abs_linear": 0.6948849558830261,
+        "mask_iou": 0.975041775870374,
+        "mask_iou_min": 0.9694705840097694,
+        "depth_mae_ndc": 3.0325891687728777e-05,
+        "normal_mean_angle_deg": 9.682220085461934,
+        "normal_max_angle_deg": 177.07208251953125
+      },
+      "neural_render_mae": 0.024095943197607994,
+      "glb_quality_gate_passed": false,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/vulkan-q8_0/output.glb",
+          "sha256": "ce00c136108585140088ab717d5fae893816a24f2e45e22be9dffb05840211ea",
+          "bytes": 2955676
+        },
+        "texture": {
+          "path": "full_glb_current/vulkan-q8_0/base_color.png",
+          "sha256": "da0fb051ed62a0ce2b4039a044428e9148932b488754fba15ee3151e52dc573e",
+          "bytes": 2119377
+        },
+        "pose": {
+          "path": "full_glb_current/vulkan-q8_0/pose.json",
+          "sha256": "09854157deb51fc6c86fc94aef711490a833666f1410076c0d9a7da5e38a8f38",
+          "bytes": 402
+        }
+      },
+      "pose_errors_vs_official_stage": {
+        "rotation_angle_deg": 3.7408449235667813,
+        "translation_l2": 0.010802380175771313,
+        "scale_max_abs": 0.004029706420005802
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 16399,
+        "triangle_count": 25856,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        223370.47247297596
+      ]
+    },
+    {
+      "id": "vulkan-q4_0",
+      "runner": "Vulkan + CUDA PBR Q4_0",
+      "backend": "vulkan",
+      "pbr_backend": "cuda",
+      "dtype": "q4_0",
+      "samples": 1,
+      "timer_contract": "sam3d.cold-process.image-mask-to-textured-pbr-glb.v1",
+      "ss_attention": "strict",
+      "latency_ms": 224024.0531670861,
+      "gpu_exclusive": true,
+      "glb_metrics": {
+        "frame_count": 60,
+        "resolution": 512,
+        "rgb_mae_linear": 0.05114779155701399,
+        "rgb_rmse_linear": 0.08633692873020966,
+        "rgb_max_abs_linear": 0.6864451766014099,
+        "mask_iou": 0.917030359234244,
+        "mask_iou_min": 0.8959026988914568,
+        "depth_mae_ndc": 9.72766457683368e-05,
+        "normal_mean_angle_deg": 18.342463620503743,
+        "normal_max_angle_deg": 175.5029754638672
+      },
+      "neural_render_mae": 0.06092022731900215,
+      "glb_quality_gate_passed": false,
+      "assets": {
+        "glb": {
+          "path": "full_glb_current/vulkan-q4_0/output.glb",
+          "sha256": "78f26126118c0234eceb5b7ef2a68ab1af46d2a8a63b25c2894cf83deb311f0f",
+          "bytes": 2983268
+        },
+        "texture": {
+          "path": "full_glb_current/vulkan-q4_0/base_color.png",
+          "sha256": "288d774ed198071a7d095c5f97e7a6d2fce0936bacb23f68d0c38f952a654ba9",
+          "bytes": 2126427
+        },
+        "pose": {
+          "path": "full_glb_current/vulkan-q4_0/pose.json",
+          "sha256": "1a8dd946e6dafe490a178e34ef965baf8f0cbd8a22d867fcfdfd20e69d0d35c6",
+          "bytes": 405
+        }
+      },
+      "pose_errors_vs_official_stage": {
+        "rotation_angle_deg": 7.275144929072991,
+        "translation_l2": 0.04354409872875146,
+        "scale_max_abs": 0.010085359579994208
+      },
+      "asset_validation": {
+        "passed": true,
+        "embedded_texture_matches_png": true,
+        "texture_size": [
+          1024,
+          1024
+        ],
+        "attributes": [
+          "NORMAL",
+          "POSITION",
+          "TEXCOORD_0"
+        ],
+        "vertex_count": 16933,
+        "triangle_count": 26144,
+        "roughness_factor": 1.0,
+        "metallic_factor": 1.0,
+        "base_color_factor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false
+      },
+      "latency_samples_ms": [
+        224024.0531670861
+      ]
     }
   ],
-  "note": "This is a current end-to-end evidence snapshot, not a release pass. Missing F16, Vulkan and fresh Q4 rows intentionally remain visible as gate failures. No isolated operator timing is used as a substitute for image-to-PLY evidence."
+  "official_reference_refresh": {
+    "started_at": "2026-09-10T07:16:05.416368+00:00",
+    "completed_at": "2026-09-10T07:19:59.786759+00:00",
+    "reason": "Release unused SLat generator and conditioner weights before decoding; no dtype, sampling, or baking changes.",
+    "original_summary": "full_e2e_summary.json",
+    "original_summary_sha256": "3066e680fa4dc93ebc624dbd1125b85efeed0f813efecfc14267665d993319b2",
+    "output_subdirectory": "official_full_glb_timing_memory_fixed",
+    "agreement_subdirectory": "official_reference_agreement_memory_fixed",
+    "benchmark_script_sha256": "eafdc99ea309e30752fe9e0155b280038ac4dfaded3a32a940b99cacaf2700f4",
+    "benchmark_script_unchanged": true,
+    "native_measurements_unchanged": true,
+    "steps": [
+      {
+        "name": "gpu_exclusive_before_official_full_glb_timing",
+        "command": "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory",
+        "returncode": 0,
+        "elapsed_ms": 66.97274011094123,
+        "status": "PASS",
+        "gpu_exclusivity": {
+          "required": true,
+          "checked": true,
+          "active_compute_processes": []
+        }
+      },
+      {
+        "name": "official_full_image_to_textured_glb_timing",
+        "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11 /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py --image /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png --mask-dir /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567 --mask-index 14 --config /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed --seed 42 --warmup 0 --iters 1 --stream-weights --require-exclusive-gpu",
+        "returncode": 0,
+        "elapsed_ms": 234302.96805605758,
+        "status": "PASS"
+      },
+      {
+        "name": "official_timed_vs_stage_glb_comparison",
+        "command": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/render_glb_compare.py --reference-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb --native-glb /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed/official_pbr_00.glb --out-dir /tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_reference_agreement_memory_fixed --frames 60 --resolution 512",
+        "returncode": 0,
+        "elapsed_ms": 13587.844162946567,
+        "status": "PASS"
+      }
+    ]
+  },
+  "official_timed_vs_stage_agreement": {
+    "schema": "sam3d.glb-render-compare.v1",
+    "reference_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/official_pbr_reference/official_pbr.glb",
+    "native_glb": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_full_glb_timing_memory_fixed/official_pbr_00.glb",
+    "camera_contract": "reference-world-bounds fixed orbit, no pose or scale normalization",
+    "renderer_contract": "nvdiffrast CUDA, linear RGB, shared Lambertian light",
+    "thresholds": {},
+    "aggregate": {
+      "frame_count": 60,
+      "resolution": 512,
+      "rgb_mae_linear": 0.005726322050516804,
+      "rgb_rmse_linear": 0.013877342082560062,
+      "rgb_max_abs_linear": 0.6462675929069519,
+      "mask_iou": 0.9991253882268425,
+      "mask_iou_min": 0.9987283116159152,
+      "depth_mae_ndc": 1.0091686372485735e-06,
+      "normal_mean_angle_deg": 2.7828572909037272,
+      "normal_max_angle_deg": 168.68345642089844
+    },
+    "per_frame": [
+      {
+        "foreground_union_pixels": 42338,
+        "foreground_intersection_pixels": 42302,
+        "mask_iou": 0.9991497000330672,
+        "rgb_mae_linear": 0.006377751473337412,
+        "rgb_rmse_linear": 0.01379327941685915,
+        "rgb_max_abs_linear": 0.5574795007705688,
+        "depth_mae_ndc": 1.2677336371780257e-06,
+        "normal_mean_angle_deg": 2.822657346725464,
+        "normal_max_angle_deg": 149.34161376953125
+      },
+      {
+        "foreground_union_pixels": 43610,
+        "foreground_intersection_pixels": 43575,
+        "mask_iou": 0.9991974317817014,
+        "rgb_mae_linear": 0.006719314958900213,
+        "rgb_rmse_linear": 0.014724045060575008,
+        "rgb_max_abs_linear": 0.5782114267349243,
+        "depth_mae_ndc": 1.2150566135460394e-06,
+        "normal_mean_angle_deg": 2.827425718307495,
+        "normal_max_angle_deg": 134.3722381591797
+      },
+      {
+        "foreground_union_pixels": 44741,
+        "foreground_intersection_pixels": 44706,
+        "mask_iou": 0.999217719764869,
+        "rgb_mae_linear": 0.00709304166957736,
+        "rgb_rmse_linear": 0.015410046093165874,
+        "rgb_max_abs_linear": 0.5532901883125305,
+        "depth_mae_ndc": 1.1851133194795693e-06,
+        "normal_mean_angle_deg": 2.8306853771209717,
+        "normal_max_angle_deg": 135.3097381591797
+      },
+      {
+        "foreground_union_pixels": 45832,
+        "foreground_intersection_pixels": 45787,
+        "mask_iou": 0.9990181532553675,
+        "rgb_mae_linear": 0.007493825163692236,
+        "rgb_rmse_linear": 0.01623772457242012,
+        "rgb_max_abs_linear": 0.6190894246101379,
+        "depth_mae_ndc": 1.2379897498249193e-06,
+        "normal_mean_angle_deg": 2.8561105728149414,
+        "normal_max_angle_deg": 144.48672485351562
+      },
+      {
+        "foreground_union_pixels": 46974,
+        "foreground_intersection_pixels": 46927,
+        "mask_iou": 0.9989994465023204,
+        "rgb_mae_linear": 0.007814918644726276,
+        "rgb_rmse_linear": 0.016123417764902115,
+        "rgb_max_abs_linear": 0.43812501430511475,
+        "depth_mae_ndc": 1.0373420309406356e-06,
+        "normal_mean_angle_deg": 2.914064645767212,
+        "normal_max_angle_deg": 140.66224670410156
+      },
+      {
+        "foreground_union_pixels": 48515,
+        "foreground_intersection_pixels": 48465,
+        "mask_iou": 0.9989693909100278,
+        "rgb_mae_linear": 0.008120635524392128,
+        "rgb_rmse_linear": 0.016202053055167198,
+        "rgb_max_abs_linear": 0.5434989929199219,
+        "depth_mae_ndc": 1.018358261717367e-06,
+        "normal_mean_angle_deg": 3.017918825149536,
+        "normal_max_angle_deg": 133.8531494140625
+      },
+      {
+        "foreground_union_pixels": 50361,
+        "foreground_intersection_pixels": 50321,
+        "mask_iou": 0.9992057345962153,
+        "rgb_mae_linear": 0.008343186229467392,
+        "rgb_rmse_linear": 0.016599221155047417,
+        "rgb_max_abs_linear": 0.6169050335884094,
+        "depth_mae_ndc": 9.177381343761226e-07,
+        "normal_mean_angle_deg": 3.0813896656036377,
+        "normal_max_angle_deg": 145.42236328125
+      },
+      {
+        "foreground_union_pixels": 52056,
+        "foreground_intersection_pixels": 52013,
+        "mask_iou": 0.9991739664976179,
+        "rgb_mae_linear": 0.008535828441381454,
+        "rgb_rmse_linear": 0.016691388562321663,
+        "rgb_max_abs_linear": 0.4878880977630615,
+        "depth_mae_ndc": 8.43189184251969e-07,
+        "normal_mean_angle_deg": 3.143259286880493,
+        "normal_max_angle_deg": 144.0403594970703
+      },
+      {
+        "foreground_union_pixels": 53589,
+        "foreground_intersection_pixels": 53540,
+        "mask_iou": 0.9990856332456287,
+        "rgb_mae_linear": 0.00873078778386116,
+        "rgb_rmse_linear": 0.016624508425593376,
+        "rgb_max_abs_linear": 0.38883689045906067,
+        "depth_mae_ndc": 8.824582096167433e-07,
+        "normal_mean_angle_deg": 3.2049951553344727,
+        "normal_max_angle_deg": 139.473876953125
+      },
+      {
+        "foreground_union_pixels": 54918,
+        "foreground_intersection_pixels": 54856,
+        "mask_iou": 0.9988710441021159,
+        "rgb_mae_linear": 0.009021081030368805,
+        "rgb_rmse_linear": 0.017700649797916412,
+        "rgb_max_abs_linear": 0.5393612384796143,
+        "depth_mae_ndc": 8.709355938663066e-07,
+        "normal_mean_angle_deg": 3.2521371841430664,
+        "normal_max_angle_deg": 125.80589294433594
+      },
+      {
+        "foreground_union_pixels": 56075,
+        "foreground_intersection_pixels": 56013,
+        "mask_iou": 0.9988943379402586,
+        "rgb_mae_linear": 0.009165328927338123,
+        "rgb_rmse_linear": 0.018056055530905724,
+        "rgb_max_abs_linear": 0.43813610076904297,
+        "depth_mae_ndc": 9.29976351926598e-07,
+        "normal_mean_angle_deg": 3.2917425632476807,
+        "normal_max_angle_deg": 152.18154907226562
+      },
+      {
+        "foreground_union_pixels": 57014,
+        "foreground_intersection_pixels": 56967,
+        "mask_iou": 0.9991756410706142,
+        "rgb_mae_linear": 0.009234665893018246,
+        "rgb_rmse_linear": 0.01800396479666233,
+        "rgb_max_abs_linear": 0.47598353028297424,
+        "depth_mae_ndc": 8.498958550262614e-07,
+        "normal_mean_angle_deg": 3.305178642272949,
+        "normal_max_angle_deg": 144.9571533203125
+      },
+      {
+        "foreground_union_pixels": 57733,
+        "foreground_intersection_pixels": 57678,
+        "mask_iou": 0.9990473386105001,
+        "rgb_mae_linear": 0.009296941570937634,
+        "rgb_rmse_linear": 0.017921144142746925,
+        "rgb_max_abs_linear": 0.48212599754333496,
+        "depth_mae_ndc": 8.426371778114117e-07,
+        "normal_mean_angle_deg": 3.3048667907714844,
+        "normal_max_angle_deg": 139.9462432861328
+      },
+      {
+        "foreground_union_pixels": 58204,
+        "foreground_intersection_pixels": 58147,
+        "mask_iou": 0.9990206858635146,
+        "rgb_mae_linear": 0.009385887533426285,
+        "rgb_rmse_linear": 0.01814817637205124,
+        "rgb_max_abs_linear": 0.4100843071937561,
+        "depth_mae_ndc": 9.229827355738962e-07,
+        "normal_mean_angle_deg": 3.3288397789001465,
+        "normal_max_angle_deg": 151.0631103515625
+      },
+      {
+        "foreground_union_pixels": 58439,
+        "foreground_intersection_pixels": 58377,
+        "mask_iou": 0.9989390646657198,
+        "rgb_mae_linear": 0.0094680804759264,
+        "rgb_rmse_linear": 0.018946629017591476,
+        "rgb_max_abs_linear": 0.48622551560401917,
+        "depth_mae_ndc": 8.766468226895086e-07,
+        "normal_mean_angle_deg": 3.319762706756592,
+        "normal_max_angle_deg": 136.9567413330078
+      },
+      {
+        "foreground_union_pixels": 58517,
+        "foreground_intersection_pixels": 58471,
+        "mask_iou": 0.9992139036519302,
+        "rgb_mae_linear": 0.009323124773800373,
+        "rgb_rmse_linear": 0.017901739105582237,
+        "rgb_max_abs_linear": 0.4782968759536743,
+        "depth_mae_ndc": 9.642790246289223e-07,
+        "normal_mean_angle_deg": 3.288304567337036,
+        "normal_max_angle_deg": 164.5255584716797
+      },
+      {
+        "foreground_union_pixels": 58449,
+        "foreground_intersection_pixels": 58399,
+        "mask_iou": 0.9991445533713151,
+        "rgb_mae_linear": 0.009419742971658707,
+        "rgb_rmse_linear": 0.019074084237217903,
+        "rgb_max_abs_linear": 0.481415331363678,
+        "depth_mae_ndc": 9.981979474105174e-07,
+        "normal_mean_angle_deg": 3.3081021308898926,
+        "normal_max_angle_deg": 153.83030700683594
+      },
+      {
+        "foreground_union_pixels": 58049,
+        "foreground_intersection_pixels": 57987,
+        "mask_iou": 0.9989319368120037,
+        "rgb_mae_linear": 0.009298543445765972,
+        "rgb_rmse_linear": 0.018900541588664055,
+        "rgb_max_abs_linear": 0.4998748302459717,
+        "depth_mae_ndc": 9.170441899186699e-07,
+        "normal_mean_angle_deg": 3.2220168113708496,
+        "normal_max_angle_deg": 164.6616668701172
+      },
+      {
+        "foreground_union_pixels": 57404,
+        "foreground_intersection_pixels": 57331,
+        "mask_iou": 0.9987283116159152,
+        "rgb_mae_linear": 0.009262165054678917,
+        "rgb_rmse_linear": 0.01921301893889904,
+        "rgb_max_abs_linear": 0.5100878477096558,
+        "depth_mae_ndc": 9.096333428715297e-07,
+        "normal_mean_angle_deg": 3.171257495880127,
+        "normal_max_angle_deg": 125.58987426757812
+      },
+      {
+        "foreground_union_pixels": 56533,
+        "foreground_intersection_pixels": 56471,
+        "mask_iou": 0.9989032954203739,
+        "rgb_mae_linear": 0.009008564054965973,
+        "rgb_rmse_linear": 0.018656019121408463,
+        "rgb_max_abs_linear": 0.5201259255409241,
+        "depth_mae_ndc": 8.980467782748747e-07,
+        "normal_mean_angle_deg": 3.0761702060699463,
+        "normal_max_angle_deg": 168.0146026611328
+      },
+      {
+        "foreground_union_pixels": 55613,
+        "foreground_intersection_pixels": 55568,
+        "mask_iou": 0.9991908366748782,
+        "rgb_mae_linear": 0.00881821196526289,
+        "rgb_rmse_linear": 0.018277348950505257,
+        "rgb_max_abs_linear": 0.4817543029785156,
+        "depth_mae_ndc": 8.868067880030139e-07,
+        "normal_mean_angle_deg": 3.00878643989563,
+        "normal_max_angle_deg": 163.49139404296875
+      },
+      {
+        "foreground_union_pixels": 54665,
+        "foreground_intersection_pixels": 54609,
+        "mask_iou": 0.9989755785237355,
+        "rgb_mae_linear": 0.008687256835401058,
+        "rgb_rmse_linear": 0.018645647913217545,
+        "rgb_max_abs_linear": 0.5688038468360901,
+        "depth_mae_ndc": 8.676252605255286e-07,
+        "normal_mean_angle_deg": 2.9224607944488525,
+        "normal_max_angle_deg": 127.29956817626953
+      },
+      {
+        "foreground_union_pixels": 53520,
+        "foreground_intersection_pixels": 53479,
+        "mask_iou": 0.9992339312406577,
+        "rgb_mae_linear": 0.008392349816858768,
+        "rgb_rmse_linear": 0.018075352534651756,
+        "rgb_max_abs_linear": 0.5444831848144531,
+        "depth_mae_ndc": 8.883687883098901e-07,
+        "normal_mean_angle_deg": 2.827634811401367,
+        "normal_max_angle_deg": 110.62354278564453
+      },
+      {
+        "foreground_union_pixels": 52162,
+        "foreground_intersection_pixels": 52110,
+        "mask_iou": 0.999003105709137,
+        "rgb_mae_linear": 0.00811928790062666,
+        "rgb_rmse_linear": 0.018061934038996696,
+        "rgb_max_abs_linear": 0.519150972366333,
+        "depth_mae_ndc": 8.049772759477491e-07,
+        "normal_mean_angle_deg": 2.7188892364501953,
+        "normal_max_angle_deg": 130.4672088623047
+      },
+      {
+        "foreground_union_pixels": 50413,
+        "foreground_intersection_pixels": 50369,
+        "mask_iou": 0.9991272092515819,
+        "rgb_mae_linear": 0.0077368528582155704,
+        "rgb_rmse_linear": 0.01744244433939457,
+        "rgb_max_abs_linear": 0.5931118130683899,
+        "depth_mae_ndc": 8.400623414672737e-07,
+        "normal_mean_angle_deg": 2.585066318511963,
+        "normal_max_angle_deg": 133.74392700195312
+      },
+      {
+        "foreground_union_pixels": 48328,
+        "foreground_intersection_pixels": 48291,
+        "mask_iou": 0.9992343982784307,
+        "rgb_mae_linear": 0.007415215019136667,
+        "rgb_rmse_linear": 0.017450397834181786,
+        "rgb_max_abs_linear": 0.5234575271606445,
+        "depth_mae_ndc": 9.589261935616378e-07,
+        "normal_mean_angle_deg": 2.4867680072784424,
+        "normal_max_angle_deg": 133.71273803710938
+      },
+      {
+        "foreground_union_pixels": 45901,
+        "foreground_intersection_pixels": 45858,
+        "mask_iou": 0.9990632012374459,
+        "rgb_mae_linear": 0.006835876498371363,
+        "rgb_rmse_linear": 0.0164815541356802,
+        "rgb_max_abs_linear": 0.5544582605361938,
+        "depth_mae_ndc": 9.686046951173921e-07,
+        "normal_mean_angle_deg": 2.3363747596740723,
+        "normal_max_angle_deg": 152.6417236328125
+      },
+      {
+        "foreground_union_pixels": 43956,
+        "foreground_intersection_pixels": 43913,
+        "mask_iou": 0.999021749021749,
+        "rgb_mae_linear": 0.006274388171732426,
+        "rgb_rmse_linear": 0.01591789536178112,
+        "rgb_max_abs_linear": 0.5521711707115173,
+        "depth_mae_ndc": 1.106082663682173e-06,
+        "normal_mean_angle_deg": 2.2336513996124268,
+        "normal_max_angle_deg": 129.20765686035156
+      },
+      {
+        "foreground_union_pixels": 42881,
+        "foreground_intersection_pixels": 42843,
+        "mask_iou": 0.9991138266365057,
+        "rgb_mae_linear": 0.005605782847851515,
+        "rgb_rmse_linear": 0.014928063377737999,
+        "rgb_max_abs_linear": 0.561456561088562,
+        "depth_mae_ndc": 1.1187136124135577e-06,
+        "normal_mean_angle_deg": 2.1581766605377197,
+        "normal_max_angle_deg": 130.0343475341797
+      },
+      {
+        "foreground_union_pixels": 42209,
+        "foreground_intersection_pixels": 42168,
+        "mask_iou": 0.9990286431803643,
+        "rgb_mae_linear": 0.005012416746467352,
+        "rgb_rmse_linear": 0.014848281629383564,
+        "rgb_max_abs_linear": 0.569214403629303,
+        "depth_mae_ndc": 1.0396097422926687e-06,
+        "normal_mean_angle_deg": 2.1156578063964844,
+        "normal_max_angle_deg": 120.24140167236328
+      },
+      {
+        "foreground_union_pixels": 41874,
+        "foreground_intersection_pixels": 41839,
+        "mask_iou": 0.999164159144099,
+        "rgb_mae_linear": 0.004396836739033461,
+        "rgb_rmse_linear": 0.01267857477068901,
+        "rgb_max_abs_linear": 0.5304336547851562,
+        "depth_mae_ndc": 9.88708507065894e-07,
+        "normal_mean_angle_deg": 2.103487730026245,
+        "normal_max_angle_deg": 120.28650665283203
+      },
+      {
+        "foreground_union_pixels": 42130,
+        "foreground_intersection_pixels": 42090,
+        "mask_iou": 0.9990505577972941,
+        "rgb_mae_linear": 0.003911624662578106,
+        "rgb_rmse_linear": 0.012220241129398346,
+        "rgb_max_abs_linear": 0.5738271474838257,
+        "depth_mae_ndc": 1.0910298442468047e-06,
+        "normal_mean_angle_deg": 2.1148841381073,
+        "normal_max_angle_deg": 128.37367248535156
+      },
+      {
+        "foreground_union_pixels": 42788,
+        "foreground_intersection_pixels": 42769,
+        "mask_iou": 0.9995559502664298,
+        "rgb_mae_linear": 0.003406160743907094,
+        "rgb_rmse_linear": 0.010251020081341267,
+        "rgb_max_abs_linear": 0.5694108009338379,
+        "depth_mae_ndc": 9.741204394231318e-07,
+        "normal_mean_angle_deg": 2.1236066818237305,
+        "normal_max_angle_deg": 96.39043426513672
+      },
+      {
+        "foreground_union_pixels": 44042,
+        "foreground_intersection_pixels": 44003,
+        "mask_iou": 0.9991144816311702,
+        "rgb_mae_linear": 0.0031237397342920303,
+        "rgb_rmse_linear": 0.010378566570580006,
+        "rgb_max_abs_linear": 0.4401493966579437,
+        "depth_mae_ndc": 9.069731845556817e-07,
+        "normal_mean_angle_deg": 2.153615951538086,
+        "normal_max_angle_deg": 118.33428955078125
+      },
+      {
+        "foreground_union_pixels": 45613,
+        "foreground_intersection_pixels": 45584,
+        "mask_iou": 0.9993642163418324,
+        "rgb_mae_linear": 0.002899863524362445,
+        "rgb_rmse_linear": 0.010260457172989845,
+        "rgb_max_abs_linear": 0.5255258679389954,
+        "depth_mae_ndc": 1.0049889169749804e-06,
+        "normal_mean_angle_deg": 2.1960790157318115,
+        "normal_max_angle_deg": 144.30764770507812
+      },
+      {
+        "foreground_union_pixels": 46883,
+        "foreground_intersection_pixels": 46841,
+        "mask_iou": 0.9991041528912399,
+        "rgb_mae_linear": 0.0027572570834308863,
+        "rgb_rmse_linear": 0.010491583496332169,
+        "rgb_max_abs_linear": 0.5997077822685242,
+        "depth_mae_ndc": 9.047814728546655e-07,
+        "normal_mean_angle_deg": 2.260030508041382,
+        "normal_max_angle_deg": 150.917724609375
+      },
+      {
+        "foreground_union_pixels": 47754,
+        "foreground_intersection_pixels": 47716,
+        "mask_iou": 0.9992042551409306,
+        "rgb_mae_linear": 0.002592292847111821,
+        "rgb_rmse_linear": 0.010497753508388996,
+        "rgb_max_abs_linear": 0.5744317770004272,
+        "depth_mae_ndc": 9.376863658872026e-07,
+        "normal_mean_angle_deg": 2.3129382133483887,
+        "normal_max_angle_deg": 149.0050506591797
+      },
+      {
+        "foreground_union_pixels": 48309,
+        "foreground_intersection_pixels": 48282,
+        "mask_iou": 0.9994410979320624,
+        "rgb_mae_linear": 0.002399594523012638,
+        "rgb_rmse_linear": 0.008776583708822727,
+        "rgb_max_abs_linear": 0.46900731325149536,
+        "depth_mae_ndc": 9.300359238295641e-07,
+        "normal_mean_angle_deg": 2.3859446048736572,
+        "normal_max_angle_deg": 139.1658935546875
+      },
+      {
+        "foreground_union_pixels": 48910,
+        "foreground_intersection_pixels": 48871,
+        "mask_iou": 0.9992026170517276,
+        "rgb_mae_linear": 0.002274980302900076,
+        "rgb_rmse_linear": 0.009136813692748547,
+        "rgb_max_abs_linear": 0.6462675929069519,
+        "depth_mae_ndc": 1.0227543043583864e-06,
+        "normal_mean_angle_deg": 2.4490597248077393,
+        "normal_max_angle_deg": 149.12890625
+      },
+      {
+        "foreground_union_pixels": 49691,
+        "foreground_intersection_pixels": 49645,
+        "mask_iou": 0.999074279044495,
+        "rgb_mae_linear": 0.002185046672821045,
+        "rgb_rmse_linear": 0.008975941687822342,
+        "rgb_max_abs_linear": 0.6460165977478027,
+        "depth_mae_ndc": 1.051226831805252e-06,
+        "normal_mean_angle_deg": 2.4877400398254395,
+        "normal_max_angle_deg": 156.85211181640625
+      },
+      {
+        "foreground_union_pixels": 50474,
+        "foreground_intersection_pixels": 50438,
+        "mask_iou": 0.9992867615009708,
+        "rgb_mae_linear": 0.0020686956122517586,
+        "rgb_rmse_linear": 0.008397964760661125,
+        "rgb_max_abs_linear": 0.6328363418579102,
+        "depth_mae_ndc": 9.681754136181553e-07,
+        "normal_mean_angle_deg": 2.541368007659912,
+        "normal_max_angle_deg": 142.54647827148438
+      },
+      {
+        "foreground_union_pixels": 51145,
+        "foreground_intersection_pixels": 51104,
+        "mask_iou": 0.9991983576107146,
+        "rgb_mae_linear": 0.00203612819314003,
+        "rgb_rmse_linear": 0.0080738989636302,
+        "rgb_max_abs_linear": 0.4931991696357727,
+        "depth_mae_ndc": 1.0888239785344922e-06,
+        "normal_mean_angle_deg": 2.595524311065674,
+        "normal_max_angle_deg": 104.8116226196289
+      },
+      {
+        "foreground_union_pixels": 51686,
+        "foreground_intersection_pixels": 51663,
+        "mask_iou": 0.9995550052238518,
+        "rgb_mae_linear": 0.002052025869488716,
+        "rgb_rmse_linear": 0.008534413762390614,
+        "rgb_max_abs_linear": 0.551772952079773,
+        "depth_mae_ndc": 9.729980092743062e-07,
+        "normal_mean_angle_deg": 2.6276960372924805,
+        "normal_max_angle_deg": 128.8024444580078
+      },
+      {
+        "foreground_union_pixels": 52023,
+        "foreground_intersection_pixels": 51983,
+        "mask_iou": 0.9992311093170329,
+        "rgb_mae_linear": 0.002068509114906192,
+        "rgb_rmse_linear": 0.008214376866817474,
+        "rgb_max_abs_linear": 0.5319668054580688,
+        "depth_mae_ndc": 9.775411626833375e-07,
+        "normal_mean_angle_deg": 2.6722989082336426,
+        "normal_max_angle_deg": 106.92292022705078
+      },
+      {
+        "foreground_union_pixels": 52114,
+        "foreground_intersection_pixels": 52082,
+        "mask_iou": 0.9993859615458418,
+        "rgb_mae_linear": 0.0021073732059448957,
+        "rgb_rmse_linear": 0.007709168829023838,
+        "rgb_max_abs_linear": 0.49782755970954895,
+        "depth_mae_ndc": 9.986770237446763e-07,
+        "normal_mean_angle_deg": 2.71915340423584,
+        "normal_max_angle_deg": 139.50372314453125
+      },
+      {
+        "foreground_union_pixels": 51829,
+        "foreground_intersection_pixels": 51790,
+        "mask_iou": 0.9992475255166027,
+        "rgb_mae_linear": 0.002219095593318343,
+        "rgb_rmse_linear": 0.00855829007923603,
+        "rgb_max_abs_linear": 0.5540501475334167,
+        "depth_mae_ndc": 9.916352610161994e-07,
+        "normal_mean_angle_deg": 2.7618908882141113,
+        "normal_max_angle_deg": 151.3783721923828
+      },
+      {
+        "foreground_union_pixels": 51516,
+        "foreground_intersection_pixels": 51481,
+        "mask_iou": 0.9993205994254212,
+        "rgb_mae_linear": 0.002371368696913123,
+        "rgb_rmse_linear": 0.008483430370688438,
+        "rgb_max_abs_linear": 0.567544162273407,
+        "depth_mae_ndc": 1.0655153346306179e-06,
+        "normal_mean_angle_deg": 2.8243677616119385,
+        "normal_max_angle_deg": 168.68345642089844
+      },
+      {
+        "foreground_union_pixels": 51119,
+        "foreground_intersection_pixels": 51096,
+        "mask_iou": 0.9995500694458029,
+        "rgb_mae_linear": 0.0025207451544702053,
+        "rgb_rmse_linear": 0.00826516654342413,
+        "rgb_max_abs_linear": 0.496347576379776,
+        "depth_mae_ndc": 1.0989496104230057e-06,
+        "normal_mean_angle_deg": 2.8616628646850586,
+        "normal_max_angle_deg": 158.85340881347656
+      },
+      {
+        "foreground_union_pixels": 50606,
+        "foreground_intersection_pixels": 50565,
+        "mask_iou": 0.9991898193890053,
+        "rgb_mae_linear": 0.0028027233202010393,
+        "rgb_rmse_linear": 0.009977331385016441,
+        "rgb_max_abs_linear": 0.5070365071296692,
+        "depth_mae_ndc": 1.0390115221525775e-06,
+        "normal_mean_angle_deg": 2.8684918880462646,
+        "normal_max_angle_deg": 160.68247985839844
+      },
+      {
+        "foreground_union_pixels": 49985,
+        "foreground_intersection_pixels": 49946,
+        "mask_iou": 0.9992197659297789,
+        "rgb_mae_linear": 0.0030095784459263086,
+        "rgb_rmse_linear": 0.010219636373221874,
+        "rgb_max_abs_linear": 0.575033962726593,
+        "depth_mae_ndc": 9.85818019216822e-07,
+        "normal_mean_angle_deg": 2.8644256591796875,
+        "normal_max_angle_deg": 153.9020233154297
+      },
+      {
+        "foreground_union_pixels": 48918,
+        "foreground_intersection_pixels": 48879,
+        "mask_iou": 0.9992027474549245,
+        "rgb_mae_linear": 0.0033072042278945446,
+        "rgb_rmse_linear": 0.011418145149946213,
+        "rgb_max_abs_linear": 0.615519106388092,
+        "depth_mae_ndc": 1.040515030581446e-06,
+        "normal_mean_angle_deg": 2.907151699066162,
+        "normal_max_angle_deg": 134.47561645507812
+      },
+      {
+        "foreground_union_pixels": 47489,
+        "foreground_intersection_pixels": 47444,
+        "mask_iou": 0.9990524121375477,
+        "rgb_mae_linear": 0.003566642524674535,
+        "rgb_rmse_linear": 0.01169301476329565,
+        "rgb_max_abs_linear": 0.5902238488197327,
+        "depth_mae_ndc": 1.0247001682728296e-06,
+        "normal_mean_angle_deg": 2.938624620437622,
+        "normal_max_angle_deg": 121.36895751953125
+      },
+      {
+        "foreground_union_pixels": 45868,
+        "foreground_intersection_pixels": 45822,
+        "mask_iou": 0.9989971221766809,
+        "rgb_mae_linear": 0.003804199630394578,
+        "rgb_rmse_linear": 0.011858797632157803,
+        "rgb_max_abs_linear": 0.5615700483322144,
+        "depth_mae_ndc": 1.0841796438398887e-06,
+        "normal_mean_angle_deg": 2.9440529346466064,
+        "normal_max_angle_deg": 133.29562377929688
+      },
+      {
+        "foreground_union_pixels": 44155,
+        "foreground_intersection_pixels": 44099,
+        "mask_iou": 0.9987317404597441,
+        "rgb_mae_linear": 0.004081838298588991,
+        "rgb_rmse_linear": 0.012503182515501976,
+        "rgb_max_abs_linear": 0.5621470808982849,
+        "depth_mae_ndc": 1.010724417938036e-06,
+        "normal_mean_angle_deg": 2.9229531288146973,
+        "normal_max_angle_deg": 93.46770477294922
+      },
+      {
+        "foreground_union_pixels": 42655,
+        "foreground_intersection_pixels": 42614,
+        "mask_iou": 0.9990387996717852,
+        "rgb_mae_linear": 0.004420175217092037,
+        "rgb_rmse_linear": 0.013158936984837055,
+        "rgb_max_abs_linear": 0.5591439008712769,
+        "depth_mae_ndc": 1.069679115062172e-06,
+        "normal_mean_angle_deg": 2.9281206130981445,
+        "normal_max_angle_deg": 108.20868682861328
+      },
+      {
+        "foreground_union_pixels": 41721,
+        "foreground_intersection_pixels": 41675,
+        "mask_iou": 0.9988974377411854,
+        "rgb_mae_linear": 0.004807391669601202,
+        "rgb_rmse_linear": 0.01436652336269617,
+        "rgb_max_abs_linear": 0.5924612879753113,
+        "depth_mae_ndc": 1.2823587667298852e-06,
+        "normal_mean_angle_deg": 2.9202041625976562,
+        "normal_max_angle_deg": 117.6247329711914
+      },
+      {
+        "foreground_union_pixels": 41159,
+        "foreground_intersection_pixels": 41119,
+        "mask_iou": 0.9990281590903569,
+        "rgb_mae_linear": 0.005061118397861719,
+        "rgb_rmse_linear": 0.012221175245940685,
+        "rgb_max_abs_linear": 0.5614354610443115,
+        "depth_mae_ndc": 1.1508383295222302e-06,
+        "normal_mean_angle_deg": 2.8944759368896484,
+        "normal_max_angle_deg": 115.36642456054688
+      },
+      {
+        "foreground_union_pixels": 40829,
+        "foreground_intersection_pixels": 40791,
+        "mask_iou": 0.99906928898577,
+        "rgb_mae_linear": 0.005501679144799709,
+        "rgb_rmse_linear": 0.01413635816425085,
+        "rgb_max_abs_linear": 0.6090700030326843,
+        "depth_mae_ndc": 1.1919511280211736e-06,
+        "normal_mean_angle_deg": 2.902904510498047,
+        "normal_max_angle_deg": 104.2410888671875
+      },
+      {
+        "foreground_union_pixels": 40580,
+        "foreground_intersection_pixels": 40549,
+        "mask_iou": 0.9992360768851651,
+        "rgb_mae_linear": 0.005728428717702627,
+        "rgb_rmse_linear": 0.012396389618515968,
+        "rgb_max_abs_linear": 0.531133234500885,
+        "depth_mae_ndc": 1.2743008710458525e-06,
+        "normal_mean_angle_deg": 2.8897602558135986,
+        "normal_max_angle_deg": 145.87864685058594
+      },
+      {
+        "foreground_union_pixels": 41083,
+        "foreground_intersection_pixels": 41039,
+        "mask_iou": 0.9989289973955164,
+        "rgb_mae_linear": 0.006085950881242752,
+        "rgb_rmse_linear": 0.013730160892009735,
+        "rgb_max_abs_linear": 0.4838275611400604,
+        "depth_mae_ndc": 1.3563873153543682e-06,
+        "normal_mean_angle_deg": 2.838571548461914,
+        "normal_max_angle_deg": 154.8665008544922
+      }
+    ],
+    "passed": true,
+    "quality_gate_configured": false,
+    "quality_gate_passed": null
+  },
+  "provenance": {
+    "schema": "sam3d.full-e2e-provenance.v1",
+    "input_sha256": {
+      "image": "72785412200dcb9f5c6bc4eaa3018172293f67836627708e6bce78150109af15",
+      "mask": "7a79c2f537a20bfd70c001df42dd8d916d4c5f7fce4ea7ee99738aa178b29c13"
+    },
+    "model_directory": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf",
+    "binary_sha256": {
+      "cuda": "eae7cf830615fd11cdc3b66a0b7b8e1ea098e0608c831141781492eee2bafca0",
+      "vulkan": "068a080418958ba3f4647c5611b041097b45adcdc55a7f73897735ebbf6a403c",
+      "native_pbr": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021"
+    },
+    "ggml_patch_sha256": "3a1e9abca3df1c99728c6a2f21cb0158f6f38ae7f8c00dca3ed0ffa9f261b270",
+    "variants": {
+      "f16": {
+        "schema": "sam3d.e2e.provenance.v1",
+        "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+        "source_dirty": true,
+        "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+        "models": {
+          "ss_generator": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-f16.gguf",
+            "sha256": "8d04e6a0797fede96fac57cba4180e19b2154af2440f843109a596184e758627"
+          },
+          "ss_decoder": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-f16.gguf",
+            "sha256": "a003c036b5f8eb5038597a62259df4b2f17b99fd60e5ac0592422fa97c196393"
+          },
+          "slat_generator": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-f16.gguf",
+            "sha256": "6b3566359b0317a9987539ae43ff7f2245feac2ffe327da98313f50ab60b283b"
+          },
+          "slat_decoder_gs": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-f16.gguf",
+            "sha256": "3ee8583c47530a96d1826b526118f2fbd3d98d8f48cc66d22f053d39d46fbed1"
+          },
+          "slat_decoder_mesh": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-f16.gguf",
+            "sha256": "026b30cea50e7c4e0894e0a2b6c38534c62e99ab6e76e5248096c7e9b9a1c858"
+          },
+          "moge": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf",
+            "sha256": "0286470d5e2ee903d39e37efede072f553b72503bed958b2dd07cd48eed87048"
+          }
+        }
+      },
+      "q8_0": {
+        "schema": "sam3d.e2e.provenance.v1",
+        "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+        "source_dirty": true,
+        "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+        "models": {
+          "ss_generator": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q8_0.gguf",
+            "sha256": "02caa95014b18926926da8697a35cf83b633f023d5e9e6870e3b7aa14e21368e"
+          },
+          "ss_decoder": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q8_0.gguf",
+            "sha256": "4e4910056a399d55a832a759a11f06c7a3b9c2a543e2b8dc48df90919f7c8f40"
+          },
+          "slat_generator": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q8_0.gguf",
+            "sha256": "251274fb5c4db62b8759c598376d750db9120b04fd943cdee5c7425509a8fec4"
+          },
+          "slat_decoder_gs": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q8_0.gguf",
+            "sha256": "a54a04e18fbc3957f986f114da9f953cfbfdda280fac4e1a0b61a74e811679b0"
+          },
+          "slat_decoder_mesh": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-q8_0.gguf",
+            "sha256": "fded9cfcd90163b1c619c5c9b2c51455d8f0e09aa8b7183698ff275e4a2b336a"
+          },
+          "moge": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf",
+            "sha256": "0286470d5e2ee903d39e37efede072f553b72503bed958b2dd07cd48eed87048"
+          }
+        }
+      },
+      "q4_0": {
+        "schema": "sam3d.e2e.provenance.v1",
+        "source_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+        "source_dirty": true,
+        "sam3d_cli_sha256": "16d76a3cf2c2b8c861d478c8dfc6376edd33b96a67a7f505c922d9c93dc22021",
+        "models": {
+          "ss_generator": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_generator-q4_0.gguf",
+            "sha256": "8d477ef5c236f2cbf9066a1bb5279fea144fe14f44907f677a9ad120614c8fbe"
+          },
+          "ss_decoder": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/ss_decoder-q4_0.gguf",
+            "sha256": "640c98f49a7a3ce22d91bfe29664c689bc7fd8ea51a7bf96c887e7cd465dd5ca"
+          },
+          "slat_generator": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_generator-q4_0.gguf",
+            "sha256": "fc2b67284646665a7939669d43b8de1416ccf2d8408b2ccacb4c04bef4d6aee1"
+          },
+          "slat_decoder_gs": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_gs-q4_0.gguf",
+            "sha256": "a39d9669d3a9f71bb684d4550eff58e6beee099785e9153e52617bdbbc4da8d2"
+          },
+          "slat_decoder_mesh": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/slat_decoder_mesh-q4_0.gguf",
+            "sha256": "b619645df5d15fd0b0f871f71850a3866e6b73468ada4e3b2ab9cf3363e5da68"
+          },
+          "moge": {
+            "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/models/gguf/moge_vitl-f16.gguf",
+            "sha256": "0286470d5e2ee903d39e37efede072f553b72503bed958b2dd07cd48eed87048"
+          }
+        }
+      }
+    },
+    "capture_phase": "before any measured subprocess"
+  }
 }

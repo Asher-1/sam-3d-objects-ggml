@@ -1,0 +1,85 @@
+2026-09-10 14:58:45.391 | INFO     | sam3d_objects.pipeline.inference_pipeline:set_attention_backend:17 - GPU name is NVIDIA GeForce RTX 3060
+2026-09-10 14:58:46.150 | INFO     | sam3d_objects.model.backbone.tdfy_dit.modules.sparse:__from_env:39 - [SPARSE] Backend: spconv, Attention: sdpa
+2026-09-10 14:58:49.993 | INFO     | sam3d_objects.model.backbone.tdfy_dit.modules.attention:__from_env:30 - [ATTENTION] Using backend: sdpa
+2026-09-10 14:58:50.665 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+2026-09-10 14:58:50.665 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+2026-09-10 14:58:50.695 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+/home/ludahai/anaconda3/envs/sam3d-objects/lib/python3.11/site-packages/moge/model/v1.py:171: UserWarning: The following deprecated/invalid arguments are ignored: {'output_mask': True, 'split_head': True}
+  warnings.warn(f"The following deprecated/invalid arguments are ignored: {deprecated_kwargs}")
+2026-09-10 14:58:56.100 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+2026-09-10 14:58:56.101 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:100 - self.device: cuda
+2026-09-10 14:58:56.101 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:101 - CUDA_VISIBLE_DEVICES: None
+2026-09-10 14:58:56.101 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:102 - Actually using GPU: 0
+2026-09-10 14:58:56.101 | INFO     | sam3d_objects.pipeline.inference_pipeline:init_pose_decoder:297 - Using pose decoder: ScaleShiftInvariant
+2026-09-10 14:58:56.101 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:133 - Loading model weights...
+2026-09-10 14:58:56.256 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/ss_generator.ckpt
+2026-09-10 14:59:23.145 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_generator.ckpt
+2026-09-10 14:59:28.066 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/ss_decoder.ckpt
+2026-09-10 14:59:28.372 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_decoder_gs.ckpt
+2026-09-10 14:59:28.627 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_decoder_gs_4.ckpt
+2026-09-10 14:59:28.835 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_decoder_mesh.ckpt
+2026-09-10 14:59:29.236 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 14:59:31.148 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 14:59:31.152 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 14:59:32.039 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 14:59:32.056 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/ss_generator.ckpt
+2026-09-10 14:59:42.935 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 14:59:43.960 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 14:59:43.968 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 14:59:44.987 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 14:59:44.996 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_generator.ckpt
+2026-09-10 14:59:49.008 | INFO     | sam3d_objects.pipeline.inference_pipeline:override_ss_generator_cfg_config:438 - ss_generator parameters: inference_steps=25, cfg_strength=7, cfg_interval=[0, 500], rescale_t=3, cfg_strength_pm=0.0
+2026-09-10 14:59:49.008 | INFO     | sam3d_objects.pipeline.inference_pipeline:override_slat_generator_cfg_config:460 - slat_generator parameters: inference_steps=25, cfg_strength=1, cfg_interval=[0, 500], rescale_t=1
+2026-09-10 14:59:49.008 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:198 - Loading model weights completed!
+2026-09-10 14:59:54.096 | INFO     | sam3d_objects.pipeline.inference_pipeline:sample_sparse_structure:664 - Sampling sparse structure: inference_steps=25, strength=7, interval=[0, 500], rescale_t=3, cfg_strength_pm=0.0
+2026-09-10 14:59:54.096 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:633 - Running condition embedder ...
+2026-09-10 14:59:54.437 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:637 - Condition embedder finishes!
+2026-09-10 15:00:19.984 | INFO     | sam3d_objects.pipeline.inference_pipeline:sample_sparse_structure:714 - Downsampled coords from 26855 to 26281
+2026-09-10 15:00:21.186 | INFO     | sam3d_objects.pipeline.inference_pipeline:sample_slat:744 - Sampling sparse latent: inference_steps=25, strength=1, interval=[0, 500], rescale_t=1
+2026-09-10 15:00:21.186 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:633 - Running condition embedder ...
+2026-09-10 15:00:21.332 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:637 - Condition embedder finishes!
+2026-09-10 15:01:07.369 | INFO     | sam3d_objects.pipeline.inference_pipeline:decode_slat:606 - Decoding sparse latent...
+2026-09-10 15:01:11.093 | INFO     | sam3d_objects.pipeline.inference_pipeline:decode_slat:606 - Decoding sparse latent...
+Warp 1.16.0 initialized:
+   CUDA Toolkit 12.9, Driver 12.4
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 3060" (12 GiB, sm_86, mempool enabled)
+   Kernel cache:
+     /home/ludahai/.cache/warp/1.16.0
+[SPARSE][CONV] spconv algo: auto
+Traceback (most recent call last):
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py", line 317, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py", line 261, in main
+    output = run_streamed_pbr(pipeline, rgba_image, args.seed)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/bench_full_e2e_pipeline.py", line 158, in run_streamed_pbr
+    outputs.update(pipeline.decode_slat(slat, ["mesh"]))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/pipeline/inference_pipeline.py", line 610, in decode_slat
+    ret["mesh"] = self.models["slat_decoder_mesh"](slat)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/anaconda3/envs/sam3d-objects/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/anaconda3/envs/sam3d-objects/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/model/backbone/tdfy_dit/models/structured_latent_vae/decoder_mesh.py", line 189, in forward
+    return self.to_representation(h)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/model/backbone/tdfy_dit/models/structured_latent_vae/decoder_mesh.py", line 179, in to_representation
+    mesh = self.mesh_extractor(x[i], training=self.training)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/model/backbone/tdfy_dit/representations/mesh/cube2mesh.py", line 137, in __call__
+    vertices, faces, L_dev, colors = self.mesh_extractor(
+                                     ^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/model/backbone/tdfy_dit/representations/mesh/flexicubes/flexicubes.py", line 91, in __call__
+    beta, alpha, gamma_f = self._normalize_weights(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/model/backbone/tdfy_dit/representations/mesh/flexicubes/flexicubes.py", line 133, in _normalize_weights
+    alpha = (torch.tanh(alpha) * weight_scale + 1)
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. GPU 0 has a total capacity of 11.73 GiB of which 607.12 MiB is free. Including non-PyTorch memory, this process has 9.58 GiB memory in use. Of the allocated memory 9.32 GiB is allocated by PyTorch, and 90.38 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

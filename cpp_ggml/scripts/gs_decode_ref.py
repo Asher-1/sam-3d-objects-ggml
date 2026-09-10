@@ -6,7 +6,10 @@ Inputs from dump_e2e_stages.py:
   slat_coords.samt       (4, N) I32 active cells
 
 Dumps (out-dir, prefix gs_):
-  gs_input_layer   (768, N)   after SparseLinear + APE
+  gs_input_layer   (768, N)   after F32 SparseLinear
+  gs_ape           (768, N)   F32 absolute-position embedding
+  gs_after_ape     (768, N)   F32 input_layer + APE
+  gs_torso_input   (768, N)   after the official F16 torso boundary
   gs_b0            (768, N)   after block 0
   gs_b11           (768, N)   after block 11
   gs_raw           (448, N)   out_layer raw output
@@ -87,13 +90,30 @@ def main():
                 cap[name] = t.detach().float().cpu()
             return hook
 
+        def pre_tk(name):
+            def hook(mod, inp):
+                t = inp[0]
+                if isinstance(t, sp.SparseTensor):
+                    t = t.feats
+                cap[name] = t.detach().float().cpu()
+            return hook
+
         w.input_layer.register_forward_hook(tk("gs_input_layer_raw"))
         w.pos_embedder.register_forward_hook(tk("gs_ape"))
         # block hooks
         blk0 = w.blocks[0]
+        blk0.norm1.register_forward_hook(tk("gs_b0_norm1"))
         blk0.attn.to_qkv.register_forward_hook(tk("gs_b0_qkv"))
+        # Capture the attention result before ``to_out`` so the native
+        # attention kernel can be evaluated independently from its projection.
+        blk0.attn.to_out.register_forward_pre_hook(pre_tk("gs_b0_attn_values"))
         blk0.attn.register_forward_hook(tk("gs_b0_attn"))
+        blk0.norm2.register_forward_hook(tk("gs_b0_norm2"))
+        blk0.mlp.mlp[0].register_forward_hook(tk("gs_b0_mlp0"))
+        blk0.mlp.mlp[1].register_forward_hook(tk("gs_b0_gelu"))
+        blk0.mlp.mlp[2].register_forward_hook(tk("gs_b0_mlp2"))
         blk0.register_forward_hook(tk("gs_b0"))
+        blk0.register_forward_pre_hook(pre_tk("gs_torso_input"))
         w.blocks[-1].register_forward_hook(tk("gs_b11"))
         w.blocks[1].register_forward_hook(tk("gs_b1"))
 
@@ -111,7 +131,13 @@ def main():
                        [il.shape[-1], il.shape[0]], flat(il))
         write_samt_f32(os.path.join(args.out_dir, "gs_ape.samt"),
                        [ape.shape[-1], ape.shape[0]], flat(ape))
-        for k in ["gs_b0_qkv", "gs_b0_attn", "gs_b0", "gs_b1", "gs_b11"]:
+        write_samt_f32(os.path.join(args.out_dir, "gs_after_ape.samt"),
+                       [il.shape[-1], il.shape[0]], flat(il + ape))
+        torso_input = cap["gs_torso_input"]
+        write_samt_f32(os.path.join(args.out_dir, "gs_torso_input.samt"),
+                       [torso_input.shape[-1], torso_input.shape[0]], flat(torso_input))
+        for k in ["gs_b0_norm1", "gs_b0_qkv", "gs_b0_attn_values", "gs_b0_attn", "gs_b0_norm2",
+                  "gs_b0_mlp0", "gs_b0_gelu", "gs_b0_mlp2", "gs_b0", "gs_b1", "gs_b11"]:
             t = cap[k]
             write_samt_f32(os.path.join(args.out_dir, f"{k}.samt"),
                            [t.shape[-1], t.shape[0]], flat(t))

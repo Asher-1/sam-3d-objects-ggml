@@ -1,0 +1,67 @@
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = NVIDIA GeForce RTX 3060 (NVIDIA) | uma: 0 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 32 | shared memory: 49152 | int dot: 1 | matrix cores: KHR_coopmat
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: ss_generator loaded (q8_0)
+[I] e2e: condition inputs 518x518
+[I] e2e: dino tokens done (n=1370 each)
+[I] e2e: pointpatch tokens done (n=1024 each)
+[I] e2e: ss condition tokens 7528
+[I] e2e: reference noise unavailable, using seed 42
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: ss flow graph built (4412 nodes)
+[I] e2e: ss step 1/25 done
+[I] e2e: ss step 2/25 done
+[I] e2e: ss step 3/25 done
+[I] e2e: ss step 4/25 done
+[I] e2e: ss step 5/25 done
+[I] e2e: ss step 6/25 done
+[I] e2e: ss step 7/25 done
+[I] e2e: ss step 8/25 done
+[I] e2e: ss step 9/25 done
+[I] e2e: ss step 10/25 done
+[I] e2e: ss step 11/25 done
+[I] e2e: ss step 12/25 done
+[I] e2e: ss step 13/25 done
+[I] e2e: ss step 14/25 done
+[I] e2e: ss step 15/25 done
+[I] e2e: ss step 16/25 done
+[I] e2e: ss step 17/25 done
+[I] e2e: ss step 18/25 done
+[I] e2e: ss step 19/25 done
+[I] e2e: ss step 20/25 done
+[I] e2e: ss step 21/25 done
+[I] e2e: ss step 22/25 done
+[I] e2e: ss step 23/25 done
+[I] e2e: ss step 24/25 done
+[I] e2e: ss step 25/25 done
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: wrote official ScaleShiftInvariant pose to /tmp/sam3d-release-20260910.DriMmt/launcher_vulkan/pose.json
+[I] e2e: occupancy coords 27487 (of 262144)
+[I] e2e: surface-pruned sparse coords 27487 -> 26969
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: slat_generator loaded (q8_0)
+[I] e2e: slat dino tokens done (n=1374 each)
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: slat condition tokens 5496
+[I] e2e: sparse tables nf=26969 nc=5372
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: slat flow graph built (2225 nodes)
+[I] e2e: slat step 5/25
+[I] e2e: slat step 10/25
+[I] e2e: slat step 15/25
+[I] e2e: slat step 20/25
+[I] e2e: slat step 25/25
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] backend: Vulkan0 (NVIDIA GeForce RTX 3060)
+[I] e2e: wrote raw FlexiCubes mesh (496608 vertices, 993244 faces)
+[I] e2e: wrote /tmp/sam3d-release-20260910.DriMmt/launcher_vulkan/output.ply (863008 gaussians) in 182.1s for native generation stages
+[I] image-to-3d: wrote /tmp/sam3d-release-20260910.DriMmt/launcher_vulkan/output.ply and raw FlexiCubes mesh and official pose JSON
+[I] pbr-assemble: wrote /tmp/sam3d-release-20260910.DriMmt/launcher_vulkan/output.glb (100 rendered views, 25586 pre-MeshFix faces, 25856 final triangles)
+output.ply: OK
+vertices.samt: OK
+faces.samt: OK
+pose.json: OK
+dtype_contract.json: OK
+Textured model: /tmp/sam3d-release-20260910.DriMmt/launcher_vulkan/output.glb
+Base-color texture: /tmp/sam3d-release-20260910.DriMmt/launcher_vulkan/output.base_color.png

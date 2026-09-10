@@ -1,0 +1,151 @@
+2026-09-10 15:04:24.332 | INFO     | sam3d_objects.pipeline.inference_pipeline:set_attention_backend:17 - GPU name is NVIDIA GeForce RTX 3060
+2026-09-10 15:04:25.437 | INFO     | sam3d_objects.model.backbone.tdfy_dit.modules.sparse:__from_env:39 - [SPARSE] Backend: spconv, Attention: sdpa
+2026-09-10 15:04:29.171 | INFO     | sam3d_objects.model.backbone.tdfy_dit.modules.attention:__from_env:30 - [ATTENTION] Using backend: sdpa
+2026-09-10 15:04:30.120 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+2026-09-10 15:04:30.120 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+2026-09-10 15:04:30.163 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+/home/ludahai/anaconda3/envs/sam3d-objects/lib/python3.11/site-packages/moge/model/v1.py:171: UserWarning: The following deprecated/invalid arguments are ignored: {'output_mask': True, 'split_head': True}
+  warnings.warn(f"The following deprecated/invalid arguments are ignored: {deprecated_kwargs}")
+2026-09-10 15:04:35.734 | WARNING  | sam3d_objects.data.dataset.tdfy.preprocessor:__post_init__:51 - No rgb pointmap normalizer provided, using scale + shift 
+2026-09-10 15:04:35.735 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:100 - self.device: cuda
+2026-09-10 15:04:35.735 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:101 - CUDA_VISIBLE_DEVICES: None
+2026-09-10 15:04:35.735 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:102 - Actually using GPU: 0
+2026-09-10 15:04:35.735 | INFO     | sam3d_objects.pipeline.inference_pipeline:init_pose_decoder:297 - Using pose decoder: ScaleShiftInvariant
+2026-09-10 15:04:35.735 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:133 - Loading model weights...
+2026-09-10 15:04:35.933 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/ss_generator.ckpt
+2026-09-10 15:04:42.517 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_generator.ckpt
+2026-09-10 15:04:44.668 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/ss_decoder.ckpt
+2026-09-10 15:04:44.816 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_decoder_gs.ckpt
+2026-09-10 15:04:44.992 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_decoder_gs_4.ckpt
+2026-09-10 15:04:45.121 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_decoder_mesh.ckpt
+2026-09-10 15:04:45.316 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 15:04:46.605 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 15:04:46.608 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 15:04:47.363 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 15:04:47.375 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/ss_generator.ckpt
+2026-09-10 15:04:51.487 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 15:04:52.309 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 15:04:52.315 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:31 - Loading DINO model: dinov2_vitl14_reg from facebookresearch/dinov2 (source: github)
+2026-09-10 15:04:53.049 | INFO     | sam3d_objects.model.backbone.dit.embedder.dino:__init__:44 - Loaded DINO model - type: <class 'dinov2.models.vision_transformer.DinoVisionTransformer'>, embed_dim: 1024, patch_size: (14, 14)
+2026-09-10 15:04:53.053 | INFO     | sam3d_objects.model.io:load_model_from_checkpoint:158 - Loading checkpoint from /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/slat_generator.ckpt
+2026-09-10 15:04:56.581 | INFO     | sam3d_objects.pipeline.inference_pipeline:override_ss_generator_cfg_config:438 - ss_generator parameters: inference_steps=25, cfg_strength=7, cfg_interval=[0, 500], rescale_t=3, cfg_strength_pm=0.0
+2026-09-10 15:04:56.581 | INFO     | sam3d_objects.pipeline.inference_pipeline:override_slat_generator_cfg_config:460 - slat_generator parameters: inference_steps=25, cfg_strength=1, cfg_interval=[0, 500], rescale_t=1
+2026-09-10 15:04:56.581 | INFO     | sam3d_objects.pipeline.inference_pipeline:__init__:198 - Loading model weights completed!
+2026-09-10 15:05:05.239 | INFO     | sam3d_objects.pipeline.inference_pipeline:sample_sparse_structure:664 - Sampling sparse structure: inference_steps=25, strength=7, interval=[0, 500], rescale_t=3, cfg_strength_pm=0.0
+2026-09-10 15:05:05.240 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:633 - Running condition embedder ...
+2026-09-10 15:05:05.561 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:637 - Condition embedder finishes!
+2026-09-10 15:05:28.822 | INFO     | sam3d_objects.pipeline.inference_pipeline:sample_sparse_structure:714 - Downsampled coords from 26855 to 26281
+2026-09-10 15:05:30.292 | INFO     | sam3d_objects.pipeline.inference_pipeline:sample_slat:744 - Sampling sparse latent: inference_steps=25, strength=1, interval=[0, 500], rescale_t=1
+2026-09-10 15:05:30.292 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:633 - Running condition embedder ...
+2026-09-10 15:05:30.428 | INFO     | sam3d_objects.pipeline.inference_pipeline:get_condition_input:637 - Condition embedder finishes!
+2026-09-10 15:06:12.977 | INFO     | sam3d_objects.pipeline.inference_pipeline:decode_slat:606 - Decoding sparse latent...
+2026-09-10 15:06:16.418 | INFO     | sam3d_objects.pipeline.inference_pipeline:decode_slat:606 - Decoding sparse latent...
+2026-09-10 15:07:17.703 | INFO     | sam3d_objects.pipeline.inference_pipeline:postprocess_slat_output:540 - Postprocessing mesh with option with_mesh_postprocess True, with_texture_baking True...
+
+Loading ..0%Loading ..4%Loading ..8%Loading ..12%Loading ..16%Loading ..20%Loading ..24%Loading ..29%Loading ..33%Loading ..37%Loading ..41%Loading ..45%Loading ..49%Loading ..54%Loading ..58%Loading ..62%Loading ..66%Loading ..70%Loading ..74%Loading ..78%Loading ..83%Loading ..87%Loading ..91%Loading ..95%Loading ..99%
+
+0% done 3% done 6% done 10% done 13% done 16% done 20% done 23% done 26% done 30% done 33% done 36% done 40% done 43% done 46% done 50% done 53% done 56% done 60% done 63% done 66% done 70% done 73% done 76% done 80% done 83% done 86% done 90% done 93% done 96% done 100% done 2026-09-10 15:07:38.826 | INFO     | sam3d_objects.model.backbone.tdfy_dit.utils.postprocessing_utils:to_glb:635 - Baking texture ...
+Warp 1.16.0 initialized:
+   CUDA Toolkit 12.9, Driver 12.4
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 3060" (12 GiB, sm_86, mempool enabled)
+   Kernel cache:
+     /home/ludahai/.cache/warp/1.16.0
+[SPARSE][CONV] spconv algo: auto
+Rendering: 0it [00:00, ?it/s]Rendering: 1it [00:00,  9.35it/s]Rendering: 6it [00:00, 29.70it/s]Rendering: 11it [00:00, 37.51it/s]Rendering: 18it [00:00, 47.20it/s]Rendering: 25it [00:00, 53.40it/s]Rendering: 32it [00:00, 56.34it/s]Rendering: 39it [00:00, 57.70it/s]Rendering: 46it [00:00, 58.93it/s]Rendering: 52it [00:01, 51.38it/s]Rendering: 58it [00:01, 46.60it/s]Rendering: 63it [00:01, 44.64it/s]Rendering: 68it [00:01, 42.81it/s]Rendering: 73it [00:01, 43.64it/s]Rendering: 79it [00:01, 45.91it/s]Rendering: 85it [00:01, 48.61it/s]Rendering: 90it [00:01, 48.85it/s]Rendering: 95it [00:01, 49.05it/s]Rendering: 100it [00:02, 47.81it/s]
+{
+  "schema": "sam3d.official-full-e2e.v1",
+  "decode_residency_measurements": [
+    {
+      "before_offload_allocated_bytes": 4503961088,
+      "after_offload_allocated_bytes": 2050981888
+    }
+  ],
+  "timer_contract": {
+    "id": "sam3d.hot-session.image-mask-to-textured-pbr-glb.v1",
+    "kind": "hot-session",
+    "includes": [
+      "streamed model transfers",
+      "native official preprocessing",
+      "MoGe",
+      "SS",
+      "SLat",
+      "Gaussian and mesh decode",
+      "mesh cleanup",
+      "xatlas UV",
+      "100 Gaussian observations",
+      "2500-step Adam/TV bake",
+      "Telea",
+      "GLB export and file close",
+      "base-color PNG export"
+    ],
+    "excludes": [
+      "pipeline construction",
+      "input image/mask disk decode",
+      "external comparison rendering"
+    ]
+  },
+  "image": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png",
+  "mask": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png",
+  "seed": 42,
+  "reference_manifest": {
+    "schema": "sam3d.reference-execution.v1",
+    "config": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml",
+    "config_sha256": "53c3d226b21df85c0bb3d16e6e4fa63abde0d6167525765eb929d02bfa9d358c",
+    "python_executable": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python",
+    "torch_version": "2.5.1+cu121",
+    "torch_cuda_version": "12.1",
+    "cuda_device": "NVIDIA GeForce RTX 3060",
+    "default_dtype": "torch.float32",
+    "float32_matmul_precision": "highest",
+    "allow_tf32_matmul": false,
+    "flash_sdp_enabled": true,
+    "mem_efficient_sdp_enabled": true,
+    "math_sdp_enabled": true,
+    "weight_residency": "streamed",
+    "weight_policy": "staged-mixed-bf16-f16-native",
+    "module_dtypes": {
+      "models.ss_generator": "torch.bfloat16",
+      "models.slat_generator": "torch.float16",
+      "models.ss_encoder": "unavailable",
+      "models.ss_decoder": "torch.float32",
+      "models.slat_decoder_gs": "torch.float32",
+      "models.slat_decoder_gs_4": "torch.float32",
+      "models.slat_decoder_mesh": "torch.float32",
+      "conditioners.ss_condition_embedder": "torch.bfloat16",
+      "conditioners.slat_condition_embedder": "torch.float16",
+      "depth_model": "torch.float32"
+    }
+  },
+  "weight_residency": "streamed",
+  "module_dtypes": {
+    "models.ss_generator": "torch.bfloat16",
+    "models.slat_generator": "torch.float16",
+    "models.ss_encoder": "unavailable",
+    "models.ss_decoder": "torch.float32",
+    "models.slat_decoder_gs": "torch.float32",
+    "models.slat_decoder_gs_4": "torch.float32",
+    "models.slat_decoder_mesh": "torch.float32",
+    "conditioners.ss_condition_embedder": "torch.bfloat16",
+    "conditioners.slat_condition_embedder": "torch.float16",
+    "depth_model": "torch.float32"
+  },
+  "pipeline_initialization_ms_excluded": 26443.323281011544,
+  "warmup": 0,
+  "iters": 1,
+  "latency_ms": {
+    "mean": 198995.0140339788,
+    "p50": 198995.0140339788,
+    "max": 198995.0140339788
+  },
+  "outputs": [
+    "/tmp/sam3d-release-20260910.DriMmt/launcher_python/official_pbr_00.glb"
+  ],
+  "gpu_exclusivity": {
+    "required": false,
+    "checked": false,
+    "active_compute_processes": []
+  }
+}
+

@@ -188,8 +188,10 @@ ImageTensor resize_bilinear_antialias(const ImageTensor& input, int width, int h
     for (int channel = 0; channel < input.channels; ++channel) {
         for (int y = 0; y < input.height; ++y) {
             for (int x = 0; x < width; ++x) {
-                float value = 0.0f;
-                for (const ResizeTap& tap : x_taps[static_cast<size_t>(x)]) {
+                const std::vector<ResizeTap>& taps = x_taps[static_cast<size_t>(x)];
+                float value = taps.front().weight * input.at(channel, taps.front().index, y);
+                for (size_t tap_index = 1; tap_index < taps.size(); ++tap_index) {
+                    const ResizeTap& tap = taps[tap_index];
                     value += tap.weight * input.at(channel, tap.index, y);
                 }
                 horizontal.at(channel, x, y) = value;
@@ -200,8 +202,10 @@ ImageTensor resize_bilinear_antialias(const ImageTensor& input, int width, int h
     for (int channel = 0; channel < input.channels; ++channel) {
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
-                float value = 0.0f;
-                for (const ResizeTap& tap : y_taps[static_cast<size_t>(y)]) {
+                const std::vector<ResizeTap>& taps = y_taps[static_cast<size_t>(y)];
+                float value = taps.front().weight * horizontal.at(channel, x, taps.front().index);
+                for (size_t tap_index = 1; tap_index < taps.size(); ++tap_index) {
+                    const ResizeTap& tap = taps[tap_index];
                     value += tap.weight * horizontal.at(channel, x, tap.index);
                 }
                 output.at(channel, x, y) = value;
@@ -314,11 +318,24 @@ bool normalize_object_centric(const ImageTensor& raw_pointmap, const ImageTensor
     }
     scale = {scalar_scale, scalar_scale, scalar_scale};
     normalized = make_image(3, raw_pointmap.width, raw_pointmap.height, 0.0f);
+
+    // `_apply_metric_to_ssi` does not evaluate `(point - shift) / scale`
+    // directly. It builds `Transform3d().scale(scale).translate(shift)`,
+    // inverts the homogeneous matrix, then calls `transform_points`. For an
+    // affine scale/translation this yields these two matrix terms. Keep the
+    // same F32 operation order: it is mathematically equivalent to direct
+    // subtraction/division, but differs by one ULP for real MoGe pointmaps.
+    std::array<float, 3> inverse_scale{};
+    std::array<float, 3> inverse_translation{};
+    for (int channel = 0; channel < 3; ++channel) {
+        inverse_scale[channel] = 1.0f / scale[channel];
+        inverse_translation[channel] = -shift[channel] * inverse_scale[channel];
+    }
     for (int channel = 0; channel < 3; ++channel) {
         for (int y = 0; y < raw_pointmap.height; ++y) {
             for (int x = 0; x < raw_pointmap.width; ++x) {
-                normalized.at(channel, x, y) =
-                    (raw_pointmap.at(channel, x, y) - shift[channel]) / scale[channel];
+                normalized.at(channel, x, y) = raw_pointmap.at(channel, x, y) *
+                    inverse_scale[channel] + inverse_translation[channel];
             }
         }
     }

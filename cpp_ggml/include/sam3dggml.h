@@ -5,12 +5,14 @@
 //   DINOv2 + PointPatchEmbed conditioners -> SparseStructure DiT -> SS decoder
 //   -> SLat DiT -> Gaussian decoder -> PLY export.
 //
-// The input contract is a directory produced by scripts/dump_e2e_stages.py.
-// MoGe image-to-pointmap preprocessing, official rendering, and textured-GLB
-// postprocessing are intentionally outside this C++ API.
+// The conditioned entry point accepts a directory produced by
+// scripts/dump_e2e_stages.py. `run_image_to_3d` is the native raw-image
+// counterpart: it executes MoGe, preprocessing, GGML generation, and the
+// optional native PBR branch without invoking Python at runtime.
 #ifndef SAM3D_GGML_H
 #define SAM3D_GGML_H
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -76,9 +78,55 @@ struct RunResult {
     RunOutput output;
 };
 
+// Native raw-image entry point. The image is always required; a supplied mask
+// replaces its alpha channel with the official binary-mask semantics. A
+// textured PBR GLB additionally requires a CUDA build with the explicitly
+// licensed native PBR dependencies enabled. Vulkan callers can instead export
+// the raw FlexiCubes mesh and hand it, together with out_ply, to a separate
+// CUDA pbr-assemble process.
+struct ImageTo3DOptions {
+    std::string models_dir = "cpp_ggml/models/gguf";
+    std::string moge_model = "cpp_ggml/models/gguf/moge_vitl-f16.gguf";
+    std::string backend = "auto";
+    std::string dtype = "f16";
+    std::string image_path;
+    std::string mask_path;
+    std::string out_ply;
+    std::string out_pbr;
+    // Raw FlexiCubes mesh in SAMT layout ([3, V] F32 and [3, F] I32). These
+    // must be requested together. They are the stable Vulkan-to-CUDA PBR
+    // interchange boundary, before cleanup, UV generation and texture baking.
+    std::string out_mesh_vertices;
+    std::string out_mesh_faces;
+    // Optional JSON representation of the official ScaleShiftInvariant pose.
+    // The final GLB remains in decoder-local coordinates, matching the Python
+    // pipeline; this preserves pose as a separately reusable output.
+    std::string out_pose;
+    // Optional JSON summary of the dtypes and operations present in every
+    // native end-to-end graph constructed for this request.
+    std::string out_dtype_contract;
+    // Optional immutable official stage directory containing initial SS and
+    // SLat noise. This is an accuracy-diagnostic input, not a production
+    // sampling mode: a normal request must generate its own noise from seed.
+    std::string noise_dir;
+    // If empty, the implementation owns a unique temporary condition
+    // directory and removes it after the session finishes.
+    std::string conditions_out;
+    int n_threads = 8;
+    int seed = 42;
+    // Explicit F32 SS attention for an accuracy-first replay. This is slower
+    // and has a larger transient allocation than the normal flash path.
+    bool strict_ss_attention = false;
+};
+
 // Execute the full native conditioned generation graph and write Gaussian PLY.
 // opts.condition_dir and opts.out_ply are required.
 RunResult run_pipeline(const CliOptions& opts);
+
+// Execute image -> MoGe point map -> native condition preprocessing -> GGML
+// generation -> optional native PBR export. No Python or Torch process is
+// started by this API.
+RunResult run_image_to_3d(const ImageTo3DOptions& opts);
 
 // Version of the graph format emitted by the converter understood here.
 inline constexpr const char* kGraphFormatVersion = "1";

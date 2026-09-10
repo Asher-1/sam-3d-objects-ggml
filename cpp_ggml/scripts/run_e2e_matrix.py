@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Measure the official and ggml image-to-3D release matrix in one command.
+"""Measure the official and GGML raw image-to-3D release matrix.
 
-The matrix is intentionally raw: every ggml entry consumes one immutable,
-complete official condition dump, generates a Gaussian PLY, and compares its
-official-camera render with the PLY in that same dump.  A fresh official run
-provides the latency reference for the identical image, mask, and seed.
-Results are written even when an individual release gate fails, but a missing
-exclusive-GPU provenance or a failed quality/speed requirement keeps the
-command non-zero.
+Every GGML candidate calls the native C++ ``image-to-3d`` command with the
+same image, mask, seed, backend, and GGUF family as its row. An official stage
+dump is an oracle only: it supplies the reference PLY and official cameras for
+post-inference scoring, never condition tensors to the candidate. A fresh
+official run provides the latency reference for the identical input.
 """
 from __future__ import annotations
 
@@ -16,6 +14,7 @@ import json
 import shlex
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -63,16 +62,14 @@ def ggml_variants() -> list[dict[str, str]]:
     for backend in ("cuda", "vulkan"):
         variants.extend((
             {"id": f"{backend}-f16", "backend": backend, "dtype": "f16",
-             "runner": f"GGML {backend.upper()} f16 raw",
-             "quantization_policy": "F16 GGUF for every generative stage"},
+             "runner": f"GGML {backend.upper()} f16 native image input",
+             "quantization_policy": "F16 GGUF for every generative stage; fixed MoGe preprocessing model recorded separately"},
             {"id": f"{backend}-q8", "backend": backend, "dtype": "q8_0",
-             "runner": f"GGML {backend.upper()} q8_0 raw",
-             "quantization_policy": "Q8_0 GGUF for every generative stage"},
+             "runner": f"GGML {backend.upper()} q8_0 native image input",
+             "quantization_policy": "Q8_0 GGUF for every generative stage; fixed MoGe preprocessing model recorded separately"},
             {"id": f"{backend}-q4", "backend": backend, "dtype": "q4_0",
-             "ss_dtype": "q4_k", "ss_decoder_dtype": "f16",
-             "runner": f"GGML {backend.upper()} q4_k SS-sensitive-F16 + q4_0 SLat/Gaussian",
-             "quantization_policy": "Q4_K SS generator with retained sensitive F16 matrices and F16 "
-                                    "SS decoder; Q4_0 SLat and Gaussian decoder"},
+             "runner": f"GGML {backend.upper()} q4_0 native image input",
+             "quantization_policy": "Q4_0 GGUF for every generative stage; fixed MoGe preprocessing model recorded separately"},
         ))
     return variants
 
@@ -90,8 +87,11 @@ def release_contract(variants: list[dict[str, str]]) -> dict[str, Any]:
         required.append(requirement)
     return {
         "schema": "sam3d.e2e.release-contract.v2",
-        "reference_runner": "PyTorch official F16 streamed",
+        "reference_runner": "PyTorch official staged mixed cold request",
+        "require_candidate_execution_mode": "native-image-input",
+        "require_candidate_sampling_mode": "native-seed",
         "require_reference_exclusive_gpu": True,
+        "require_matching_timer_contract": True,
         "max_render_mae": 0.01,
         "max_latency_ms": RELEASE_MAX_E2E_MS,
         "required": required,
@@ -100,23 +100,45 @@ def release_contract(variants: list[dict[str, str]]) -> dict[str, Any]:
 
 def candidate_command(args: argparse.Namespace, variant: dict[str, str], output: Path,
                       conditions: Path) -> list[str]:
+    build_dir = args.cuda_build_dir if variant["backend"] == "cuda" else args.vulkan_build_dir
     command = [
         sys.executable, str(RUNNER), "--image", str(args.image.resolve()),
         "--mask-dir", str(args.mask_dir.resolve()), "--mask-index", str(args.mask_index),
         "--backend", variant["backend"], "--dtype", variant["dtype"],
-        "--models-dir", str(args.models_dir.resolve()), "--conditions-dir", str(conditions),
+        "--build-dir", str(build_dir.resolve()), "--models-dir", str(args.models_dir.resolve()),
+        "--moge-model", str(args.moge_model.resolve()),
+        "--conditions-dir", str(conditions),
         "--python", str(args.official_python.resolve()), "--seed", str(args.seed),
-        "--threads", str(args.threads), "--replay-noise",
+        "--threads", str(args.threads), "--native-image-input",
+        "--ss-attention", "strict",
         "--render-frames", str(args.render_frames),
         "--render-resolution", str(args.render_resolution),
         "--max-render-mae", "0.01", "--max-e2e-ms", str(RELEASE_MAX_E2E_MS),
         "--require-exclusive-gpu", "--out-dir", str(output),
     ]
-    if "ss_dtype" in variant:
-        command.extend(("--ss-dtype", variant["ss_dtype"]))
-    if "ss_decoder_dtype" in variant:
-        command.extend(("--ss-decoder-dtype", variant["ss_decoder_dtype"]))
+    if args.rng_distribution_blocks is not None:
+        command.extend(("--rng-distribution-blocks", str(args.rng_distribution_blocks)))
+    if args.diagnostic_noise_replay:
+        command.extend(("--noise-dir", str(conditions)))
     return command
+
+
+def discover_pytorch_philox_distribution_blocks(cuda_binary: Path, seed: int) -> int:
+    """Read the actual CUDA launch-capacity contract without retaining noise."""
+    with tempfile.TemporaryDirectory(prefix="sam3d-philox-contract-") as directory:
+        output = Path(directory)
+        command = [
+            str(cuda_binary), "rng-dump", "--implementation", "cuda", "--seed", str(seed),
+            "--sizes", "1", "--out-dir", str(output),
+        ]
+        result = run(command)
+        if result.returncode != 0:
+            raise RuntimeError("CUDA rng-dump failed while discovering the PyTorch Philox contract")
+        contract = load_summary(output / "rng_contract.json")
+        blocks = contract.get("distribution_blocks") if contract is not None else None
+        if not isinstance(blocks, int) or blocks <= 0:
+            raise RuntimeError("CUDA rng-dump did not write a valid distribution_blocks contract")
+        return blocks
 
 
 def candidate_row(variant: dict[str, str], output: Path, command: list[str],
@@ -138,13 +160,17 @@ def candidate_row(variant: dict[str, str], output: Path, command: list[str],
             "condition": summary.get("ggml_condition_ms"),
             "ss": summary.get("ggml_ss_ms"),
             "slat_plus_gaussian": summary.get("ggml_slat_ms"),
+            "native_image_to_ply": summary.get("ggml_e2e_ms"),
         },
         "render_mae": summary.get("render_mae"),
         "render_report": summary.get("render_report"),
         "output": summary.get("ggml_ply"),
         "gpu_exclusivity": summary.get("gpu_exclusivity"),
         "provenance": summary.get("provenance"),
+        "timer_contract": summary.get("timer_contract"),
         "strict_reference_coords": summary.get("strict_reference_coords"),
+        "execution_mode": summary.get("execution_mode"),
+        "sampling_mode": summary.get("sampling_mode"),
         "status": "measured" if returncode == 0 else "measured; one or more release gates failed",
         "returncode": returncode,
     })
@@ -164,26 +190,44 @@ def main() -> int:
     parser.add_argument("--official-python", type=Path, required=True,
                         help="Python interpreter with the official SAM 3D Objects dependencies")
     parser.add_argument("--models-dir", type=Path, default=CPP_ROOT / "models/gguf")
+    parser.add_argument("--moge-model", type=Path,
+                        help="native MoGe preprocessing GGUF; defaults to models-dir/moge_vitl-f16.gguf")
+    parser.add_argument("--cuda-build-dir", type=Path, default=CPP_ROOT / "build-cuda")
+    parser.add_argument("--vulkan-build-dir", type=Path, default=CPP_ROOT / "build-vulkan")
     parser.add_argument("--conditions-dir", type=Path,
                         default=CPP_ROOT / "benchmarks/data/e2e",
-                        help="immutable complete official stage dump used by every GGML row")
+                        help="official oracle dump for rendering/scoring; never candidate input")
+    parser.add_argument("--diagnostic-noise-replay", action="store_true",
+                        help=("inject oracle initial noise to isolate numerical error; marks the "
+                              "result diagnostic and forces the production release gate to fail"))
     parser.add_argument("--work-dir", type=Path, required=True,
                         help="new directory for conditions, PLY files, renders, and summaries")
     parser.add_argument("--output-report", type=Path, required=True,
                         help="new E2E JSON matrix report")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--rng-distribution-blocks", type=int,
+                        help="optional pre-recorded PyTorch CUDA Philox distribution-block capacity")
+    parser.add_argument("--threads", type=int, default=6)
     parser.add_argument("--pytorch-warmup", type=int, default=0)
     parser.add_argument("--pytorch-iters", type=int, default=1)
     parser.add_argument("--render-frames", type=int, default=60)
     parser.add_argument("--render-resolution", type=int, default=512)
     args = parser.parse_args()
+    if args.rng_distribution_blocks is not None and args.rng_distribution_blocks <= 0:
+        parser.error("--rng-distribution-blocks must be positive")
 
+    args.moge_model = (args.moge_model or args.models_dir / "moge_vitl-f16.gguf").resolve()
     for label, path in (("image", args.image), ("mask directory", args.mask_dir),
                         ("official Python", args.official_python), ("models directory", args.models_dir),
-                        ("conditions directory", args.conditions_dir)):
+                        ("MoGe preprocessing model", args.moge_model),
+                        ("conditions directory", args.conditions_dir),
+                        ("CUDA build directory", args.cuda_build_dir),
+                        ("Vulkan build directory", args.vulkan_build_dir)):
         if not path.exists():
             parser.error(f"missing {label}: {path}")
+    for label, build_dir in (("CUDA", args.cuda_build_dir), ("Vulkan", args.vulkan_build_dir)):
+        if not (build_dir / "bin/sam3d-cli").is_file():
+            parser.error(f"missing {label} sam3d-cli: {build_dir / 'bin/sam3d-cli'}")
     if not (args.conditions_dir / "manifest.json").is_file():
         parser.error(f"conditions directory has no manifest: {args.conditions_dir}")
     if not (args.conditions_dir / "output_gs.ply").is_file():
@@ -194,6 +238,11 @@ def main() -> int:
         parser.error(f"work directory must be new or empty: {args.work_dir}")
     args.work_dir.mkdir(parents=True, exist_ok=True)
 
+    cuda_binary = args.cuda_build_dir / "bin/sam3d-cli"
+    if args.rng_distribution_blocks is None:
+        args.rng_distribution_blocks = discover_pytorch_philox_distribution_blocks(
+            cuda_binary, args.seed)
+
     variants = ggml_variants()
     conditions = args.conditions_dir.resolve()
     pytorch_output = args.work_dir / "pytorch_reference"
@@ -203,24 +252,27 @@ def main() -> int:
         "--image", str(args.image.resolve()), "--mask-dir", str(args.mask_dir.resolve()),
         "--mask-index", str(args.mask_index), "--out-dir", str(pytorch_output),
         "--json", str(pytorch_jsonl), "--warmup", str(args.pytorch_warmup),
-        "--iters", str(args.pytorch_iters), "--require-exclusive-gpu",
+        "--iters", str(args.pytorch_iters), "--timer-mode", "cold-request",
+        "--require-exclusive-gpu",
     ]
     pytorch_result = run(pytorch_command)
     pytorch = read_last_jsonl(pytorch_jsonl)
     rows: list[dict[str, Any]] = []
     if pytorch is None:
         rows.append({
-            "runner": "PyTorch official F16 streamed", "status": "failed before recording reference",
+            "runner": "PyTorch official staged mixed cold request", "status": "failed before recording reference",
             "returncode": pytorch_result.returncode, "command": command_text(pytorch_command),
         })
     else:
         rows.append({
-            "runner": "PyTorch official F16 streamed", "backend": "cuda", "dtype": "f16",
+            "runner": "PyTorch official staged mixed cold request", "backend": "cuda",
+            "dtype": pytorch.get("dtype"),
             "latency_ms": pytorch.get("e2e_ms_mean"), "warmup": pytorch.get("warmup"),
             "iters": pytorch.get("iters"), "gpu_exclusivity": pytorch.get("gpu_exclusivity"),
-            "output": str(conditions / "output_gs.ply"),
+            "output": str(pytorch_output / "output_gs.ply"),
             "timed_output": str(pytorch_output / "output_gs.ply"), "status": "measured",
             "command": command_text(pytorch_command), "provenance": pytorch,
+            "timer_contract": pytorch.get("timer_contract"),
         })
 
     reference_ready = pytorch is not None
@@ -239,15 +291,31 @@ def main() -> int:
         rows.append(candidate_row(variant, output, command, result.returncode))
 
     report = {
-        "schema": "sam3d.e2e.matrix.v1",
-        "workload": "one image + mask to one Gaussian PLY, then 60-view official-camera render",
+        "schema": "sam3d.e2e.matrix.v2",
+        "workload": "one cold image + mask request to one Gaussian PLY, then 60-view official-camera render",
         "input": f"{args.image.resolve()}, mask {args.mask_index}, seed {args.seed}",
+        "candidate_execution_mode": "native-image-input",
+        "candidate_sampling_mode": (
+            "official-noise-replay-diagnostic" if args.diagnostic_noise_replay else "native-seed"
+        ),
+        "ss_attention": "strict",
+        "pytorch_philox_distribution_blocks": args.rng_distribution_blocks,
+        "build_dirs": {"cuda": str(args.cuda_build_dir.resolve()),
+                       "vulkan": str(args.vulkan_build_dir.resolve())},
+        "preprocessing_model": str(args.moge_model),
+        "quantization_scope": "dtype selects every generative GGUF stage; the same explicitly recorded MoGe preprocessing GGUF is used by every row",
         "latency_gate_ms": RELEASE_MAX_E2E_MS,
+        "timer_comparability": "required; mismatched timer-contract IDs fail the release gate",
         "release_gate": release_contract(variants),
         "rows": rows,
-        "note": "Every timing row requires an empty NVIDIA compute-client list before model load. "
-                "All GGML render comparisons use the immutable complete official condition dump. "
-                "A missing value is a failed measurement, never a zero-latency placeholder.",
+        "note": (
+            "Every timing row requires an empty NVIDIA compute-client list before model load. "
+            "Each GGML row uses native image-and-mask inference; the official dump is read only "
+            "afterward for render scoring. With --diagnostic-noise-replay, it additionally supplies "
+            "initial noise solely for error isolation; that result is deliberately ineligible for the "
+            "native-seed production gate. A missing value is a failed measurement, never a "
+            "zero-latency placeholder."
+        ),
     }
     args.output_report.parent.mkdir(parents=True, exist_ok=True)
     args.output_report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

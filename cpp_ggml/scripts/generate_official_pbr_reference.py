@@ -143,6 +143,19 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--save-observations", action="store_true")
     parser.add_argument(
+        "--save-raw-texture",
+        action="store_true",
+        help=("save the official optimized texture immediately before Telea repair; "
+              "the diagnostic file is written only below --reference-dir"),
+    )
+    parser.add_argument(
+        "--capture-bake-step",
+        type=int,
+        default=0,
+        help=("stop the unmodified official optimizer after this positive Adam step and save "
+              "the pre-Telea atlas; intended for native optimizer bisection"),
+    )
+    parser.add_argument(
         "--save-bake-raster",
         action="store_true",
         help=("save the 100 official per-view UV, UV-derivative, and coverage maps used "
@@ -156,6 +169,8 @@ def main() -> int:
               "skip Gaussian observations and the 2500-step texture bake"),
     )
     args = parser.parse_args()
+    if args.capture_bake_step < 0 or args.capture_bake_step > 2500:
+        parser.error("--capture-bake-step must be in [1, 2500] when supplied")
 
     stage_dir = args.stage_dir.resolve()
     reference_dir = args.reference_dir.resolve()
@@ -380,33 +395,93 @@ def main() -> int:
     np.random.seed(args.seed)
     np.random.randint = capture_randint
     postprocessing_utils.utils3d.torch.rasterize_triangle_faces = capture_bake_rasterize
+    official_inpaint = postprocessing_utils.cv2.inpaint
+    captured_inpaint: dict[str, np.ndarray] = {}
+    original_adam_step = postprocessing_utils.torch.optim.Adam.step
+    captured_optimizer: dict[str, np.ndarray] = {}
+    optimizer_steps = 0
+
+    class OptimizerCaptureComplete(RuntimeError):
+        pass
+
+    def capture_inpaint(image, mask, radius, method):
+        captured_inpaint["texture"] = np.ascontiguousarray(image).copy()
+        captured_inpaint["mask"] = np.ascontiguousarray(mask).copy()
+        return official_inpaint(image, mask, radius, method)
+
+    if args.save_raw_texture:
+        postprocessing_utils.cv2.inpaint = capture_inpaint
+    if args.capture_bake_step:
+        def capture_adam_step(optimizer, *step_args, **step_kwargs):
+            nonlocal optimizer_steps
+            result = original_adam_step(optimizer, *step_args, **step_kwargs)
+            optimizer_steps += 1
+            if optimizer_steps == args.capture_bake_step:
+                parameter = optimizer.param_groups[0]["params"][0]
+                captured_optimizer["texture"] = np.clip(
+                    parameter.detach()[0].flip(0).cpu().numpy() * 255, 0, 255
+                ).astype(np.uint8)
+                captured_optimizer["texture_f32"] = np.ascontiguousarray(
+                    parameter.detach()[0].flip(0).cpu().numpy()
+                )
+                raise OptimizerCaptureComplete
+            return result
+
+        postprocessing_utils.torch.optim.Adam.step = capture_adam_step
+    stopped_at_optimizer_step = False
     try:
-        texture = postprocessing_utils.bake_texture(
-            vertices,
-            faces,
-            uvs,
-            observations,
-            [np.any(observation > 0, axis=-1) for observation in observations],
-            [item.detach().cpu().numpy() for item in extrinsics],
-            [item.detach().cpu().numpy() for item in intrinsics],
-            texture_size=1024,
-            mode="opt",
-            lambda_tv=0.01,
-            verbose=True,
-            rendering_engine="nvdiffrast",
-        )
+        try:
+            texture = postprocessing_utils.bake_texture(
+                vertices,
+                faces,
+                uvs,
+                observations,
+                [np.any(observation > 0, axis=-1) for observation in observations],
+                [item.detach().cpu().numpy() for item in extrinsics],
+                [item.detach().cpu().numpy() for item in intrinsics],
+                texture_size=1024,
+                mode="opt",
+                lambda_tv=0.01,
+                verbose=True,
+                rendering_engine="nvdiffrast",
+            )
+        except OptimizerCaptureComplete:
+            stopped_at_optimizer_step = True
+            texture = captured_optimizer["texture"]
     finally:
         np.random.randint = original_randint
         postprocessing_utils.utils3d.torch.rasterize_triangle_faces = official_bake_rasterize
-    if len(selected_views) != 2500:
-        raise RuntimeError(f"official bake selected {len(selected_views)} views, expected 2500")
+        if args.save_raw_texture:
+            postprocessing_utils.cv2.inpaint = official_inpaint
+        if args.capture_bake_step:
+            postprocessing_utils.torch.optim.Adam.step = original_adam_step
+    expected_steps = args.capture_bake_step if stopped_at_optimizer_step else 2500
+    if len(selected_views) != expected_steps:
+        raise RuntimeError(f"official bake selected {len(selected_views)} views, expected {expected_steps}")
     if len(captured_bake_rasters) != 100:
         raise RuntimeError(
             f"official optimized bake rasterized {len(captured_bake_rasters)} UV observation views, expected 100"
         )
 
+    if stopped_at_optimizer_step:
+        output = reference_dir / f"base_color_step_{args.capture_bake_step:04d}_pre_telea.png"
+        Image.fromarray(texture).convert("RGBA").save(output)
+        np.save(reference_dir / f"base_color_step_{args.capture_bake_step:04d}_pre_telea.npy",
+                captured_optimizer["texture_f32"])
+        print(f"PASS: wrote official optimizer checkpoint {output}")
+        return 0
+
     texture_path = reference_dir / "base_color.png"
     Image.fromarray(texture).convert("RGBA").save(texture_path)
+    if args.save_raw_texture:
+        if set(captured_inpaint) != {"mask", "texture"}:
+            raise RuntimeError("official optimized bake did not reach its Telea repair boundary")
+        Image.fromarray(captured_inpaint["texture"]).convert("RGBA").save(
+            reference_dir / "base_color_pre_telea.png"
+        )
+        Image.fromarray(captured_inpaint["mask"]).convert("L").save(
+            reference_dir / "base_color_holes.png"
+        )
     material = trimesh.visual.material.PBRMaterial(
         roughnessFactor=1.0,
         baseColorTexture=Image.fromarray(texture),
@@ -457,6 +532,7 @@ def main() -> int:
             "selected_views": selected_views,
             "observation_sha256": sha256_arrays(observations),
             "observations_saved": args.save_observations,
+            "raw_texture_saved": args.save_raw_texture,
             "raster_contract": {
                 "saved": args.save_bake_raster,
                 "views": len(captured_bake_rasters),
@@ -472,6 +548,8 @@ def main() -> int:
         "outputs": {
             "glb": "official_pbr.glb",
             "base_color": "base_color.png",
+            "base_color_pre_telea": "base_color_pre_telea.png" if args.save_raw_texture else None,
+            "base_color_holes": "base_color_holes.png" if args.save_raw_texture else None,
             "cameras": "bake_cameras.npz",
             "extrinsics_samt": "../bake_extrinsics.samt",
             "intrinsics_samt": "../bake_intrinsics.samt",

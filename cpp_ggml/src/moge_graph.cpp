@@ -92,6 +92,7 @@ ggml_tensor* linear(ggml_context* ctx, ggml_tensor* weight, ggml_tensor* bias, g
     return gb_linear(ctx, as_f32(ctx, weight), as_f32(ctx, bias), x);
 }
 
+
 // PyTorch Conv2d(..., padding_mode="replicate") represented with standard
 // ggml operations.  No custom backend operation is needed, so CUDA/Vulkan
 // execute the same source graph and no ggml source patch is introduced.
@@ -217,7 +218,6 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
     const int64_t token_count = 1 + n_patches;
     const int64_t patch_values = 3 * patch * patch;
     const float attention_scale = 1.0f / std::sqrt(static_cast<float>(hidden / heads));
-
     auto add_f32_input = [&](const char* name, std::initializer_list<int64_t> shape,
                              std::shared_ptr<std::vector<float>> values) {
         ggml_tensor* tensor = g->input_f32(name, shape);
@@ -249,6 +249,7 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
     dino_img = ggml_interpolate(ctx, dino_img, dino_width, dino_height, 3, 1,
                                 GGML_SCALE_MODE_BILINEAR | GGML_SCALE_FLAG_ANTIALIAS);
     img = ggml_cont(ctx, ggml_permute(ctx, dino_img, 1, 2, 0, 3));
+    ggml_tensor* backbone_image = img;
 
     auto patch_table = std::make_shared<std::vector<int32_t>>(
         make_patch_table(static_cast<int>(dino_height), static_cast<int>(dino_width), static_cast<int>(patch)));
@@ -261,6 +262,7 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
     ggml_tensor* x = linear(ctx,
         ggml_view_2d(ctx, patch_weight, patch_values, hidden, patch_values * sizeof(float), 0),
         patch_bias, patches);
+    ggml_tensor* backbone_patch_tokens = x;
 
     // This MoGe checkpoint uses DINOv2 bicubic position interpolation with
     // align_corners=false and its historical 0.1 scale-factor offset. Build
@@ -289,12 +291,16 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
     patch_pos = ggml_reshape_2d(ctx, patch_pos, hidden, n_patches);
     patch_pos = ggml_reshape_2d(ctx, patch_pos, hidden, n_patches);
     ggml_tensor* cls = as_f32(ctx, m->get(prefix + ".backbone.cls_token"));
+    x = as_f32(ctx, x);
     x = ggml_concat(ctx, ggml_reshape_2d(ctx, cls, hidden, 1), x, 1);
-    x = ggml_add(ctx, x, ggml_concat(ctx, cls_pos, patch_pos, 1));
+    ggml_tensor* backbone_position_tokens = ggml_concat(ctx, cls_pos, patch_pos, 1);
+    x = ggml_add(ctx, x, backbone_position_tokens);
     ggml_tensor* backbone_input = x;
 
     std::vector<ggml_tensor*> features;
     features.reserve(static_cast<size_t>(intermediate));
+    std::vector<ggml_tensor*> attention_projection_outputs;
+    attention_projection_outputs.reserve(static_cast<size_t>(blocks));
     std::vector<ggml_tensor*> attention_outputs;
     attention_outputs.reserve(static_cast<size_t>(blocks));
     std::vector<ggml_tensor*> mlp_fc1_outputs;
@@ -324,7 +330,7 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
         ggml_tensor* k = nullptr;
         ggml_tensor* v = nullptr;
         gb_split_qkv(ctx, qkv, static_cast<int>(heads), &q, &k, &v);
-        ggml_tensor* attention = gb_attention(ctx, q, k, v, attention_scale, true);
+        ggml_tensor* attention = gb_attention(ctx, as_f32(ctx, q), k, v, attention_scale, true);
         if (i == 0) {
             debug_q = ggml_cont(ctx, q);
             debug_k = ggml_cont(ctx, k);
@@ -334,7 +340,8 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
         attention = ggml_reshape_2d(ctx, attention, hidden, token_count);
         attention = linear(ctx, m->get(block + ".attn.proj.weight"),
                            m->get(block + ".attn.proj.bias"), attention);
-        attention = ggml_mul(ctx, attention, m->get(block + ".ls1.gamma"));
+        attention_projection_outputs.push_back(attention);
+        attention = ggml_mul(ctx, as_f32(ctx, attention), m->get(block + ".ls1.gamma"));
         attention_outputs.push_back(attention);
         x = ggml_add(ctx, x, attention);
         h = gb_layer_norm(ctx, x, m->get(block + ".norm2.weight"),
@@ -347,7 +354,7 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
         ggml_tensor* mlp_gelu = ggml_gelu_erf(ctx, mlp_fc1);
         h = linear(ctx, m->get(block + ".mlp.fc2.weight"),
                    m->get(block + ".mlp.fc2.bias"), mlp_gelu);
-        h = ggml_mul(ctx, h, m->get(block + ".ls2.gamma"));
+        h = ggml_mul(ctx, as_f32(ctx, h), m->get(block + ".ls2.gamma"));
         mlp_fc1_outputs.push_back(mlp_fc1);
         mlp_gelu_outputs.push_back(mlp_gelu);
         mlp_outputs.push_back(h);
@@ -410,14 +417,18 @@ MogeOutputs MogeGraph::build(ggml_tensor* img) {
                       m->get(output_prefix + "1.2.bias"), mask);
 
     GGML_ASSERT(points->ne[2] == 3 && mask->ne[2] == 1);
-    ggml_tensor* xy = ggml_view_4d(ctx, points, points->ne[0], points->ne[1], 2, 1,
-                                    points->nb[1], points->nb[2], points->nb[3], 0);
-    ggml_tensor* z = ggml_view_4d(ctx, points, points->ne[0], points->ne[1], 1, 1,
-                                   points->nb[1], points->nb[2], points->nb[3], 2 * points->nb[2]);
+    ggml_tensor* raw_points = points;
+    ggml_tensor* xy = ggml_view_4d(ctx, raw_points, raw_points->ne[0], raw_points->ne[1], 2, 1,
+                                    raw_points->nb[1], raw_points->nb[2], raw_points->nb[3], 0);
+    ggml_tensor* z = ggml_view_4d(ctx, raw_points, raw_points->ne[0], raw_points->ne[1], 1, 1,
+                                   raw_points->nb[1], raw_points->nb[2], raw_points->nb[3],
+                                   2 * raw_points->nb[2]);
     z = ggml_exp(ctx, z);
     xy = ggml_mul(ctx, xy, ggml_repeat(ctx, z, xy));
-    return {ggml_concat(ctx, xy, z, 2), mask, backbone_input, debug_q, debug_k, debug_v,
-            debug_attention_context, attention_outputs, mlp_fc1_outputs, mlp_gelu_outputs,
+    return {raw_points, ggml_concat(ctx, xy, z, 2), mask, backbone_image,
+            backbone_patch_tokens, backbone_position_tokens, backbone_input, debug_q, debug_k, debug_v,
+            debug_attention_context, attention_projection_outputs, attention_outputs,
+            mlp_fc1_outputs, mlp_gelu_outputs,
             mlp_outputs, block_outputs, features};
 }
 

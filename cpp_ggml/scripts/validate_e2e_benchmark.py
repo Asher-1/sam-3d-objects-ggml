@@ -60,6 +60,16 @@ def find_row(rows: list[dict[str, Any]], requirement: dict[str, Any]) -> dict[st
                  if row.get("backend") == backend and row.get("dtype") == dtype), None)
 
 
+def timer_contract_id(row: dict[str, Any]) -> str | None:
+    contract = row.get("timer_contract")
+    if not isinstance(contract, dict):
+        provenance = row.get("provenance")
+        if isinstance(provenance, dict):
+            contract = provenance.get("timer_contract")
+    value = contract.get("id") if isinstance(contract, dict) else None
+    return value if isinstance(value, str) else None
+
+
 def legacy_contract(rows: list[dict[str, Any]], max_mae: float, max_latency_ms: float | None,
                     require_q8_speed: bool) -> dict[str, Any]:
     """Keep older reports evaluable without reintroducing label-specific checks."""
@@ -89,6 +99,16 @@ def main() -> int:
 
     report_path = args.input.resolve()
     report = json.loads(report_path.read_text(encoding="utf-8"))
+    if report.get("schema") == "sam3d.full-glb-matrix.v1":
+        from publish_full_e2e import validate_full_report
+        if args.max_render_mae is not None or args.max_e2e_ms is not None:
+            parser.error("full-GLB reports use the recorded contract; overrides are not supported")
+        result = validate_full_report(report, report_path.parent)
+        payload = json.dumps(result, indent=2) + "\n"
+        if args.output:
+            args.output.write_text(payload, encoding="utf-8")
+        print(payload)
+        return 0 if result["passed"] else 1
     rows = report.get("rows")
     if not isinstance(rows, list):
         parser.error("report has no rows array")
@@ -98,12 +118,30 @@ def main() -> int:
         contract = legacy_contract(rows, args.max_render_mae or 0.01,
                                    args.max_e2e_ms, args.require_q8_speed)
 
+    required_execution_mode = contract.get("require_candidate_execution_mode")
+    candidate_execution_mode = report.get("candidate_execution_mode")
+    required_sampling_mode = contract.get("require_candidate_sampling_mode")
+    candidate_sampling_mode = report.get("candidate_sampling_mode")
     reference_runner = contract.get("reference_runner")
     reference = next((row for row in rows if row.get("runner") == reference_runner), None)
     reference_latency = finite_number(reference.get("latency_ms")) if reference else None
+    reference_timer_contract = timer_contract_id(reference) if reference else None
     failures: list[str] = []
+    if required_execution_mode is not None and candidate_execution_mode != required_execution_mode:
+        failures.append(
+            "candidate execution mode must be "
+            f"{required_execution_mode!r}, got {candidate_execution_mode!r}"
+        )
+    if required_sampling_mode is not None and candidate_sampling_mode != required_sampling_mode:
+        failures.append(
+            "candidate sampling mode must be "
+            f"{required_sampling_mode!r}, got {candidate_sampling_mode!r}"
+        )
     if reference_latency is None:
         failures.append(f"missing measured reference runner: {reference_runner!r}")
+    matching_timer_contract_required = bool(contract.get("require_matching_timer_contract", False))
+    if matching_timer_contract_required and reference_timer_contract is None:
+        failures.append(f"{reference_runner}: missing timer-contract ID")
     reference_exclusive_required = bool(contract.get("require_reference_exclusive_gpu", False))
     reference_exclusive_ok = (not reference_exclusive_required or
                               (reference is not None and exclusive_gpu_ok(reference, report_path.parent)))
@@ -144,6 +182,10 @@ def main() -> int:
                                             latency < reference_latency)
         exclusive_required = bool(requirement.get("require_exclusive_gpu", False))
         exclusive_ok = not exclusive_required or exclusive_gpu_ok(row, report_path.parent)
+        candidate_timer_contract = timer_contract_id(row)
+        timer_contract_ok = (not matching_timer_contract_required or
+                             (candidate_timer_contract is not None and
+                              candidate_timer_contract == reference_timer_contract))
         check = {
             "candidate": label, "present": True, "latency_ms": latency,
             "render_mae": mae, "max_render_mae": max_mae,
@@ -153,6 +195,10 @@ def main() -> int:
             "speed_gate_required": faster_required,
             "exclusive_gpu": exclusive_ok,
             "exclusive_gpu_required": exclusive_required,
+            "timer_contract": candidate_timer_contract,
+            "reference_timer_contract": reference_timer_contract,
+            "timer_contract_match": timer_contract_ok,
+            "timer_contract_match_required": matching_timer_contract_required,
         }
         checks.append(check)
         if not measured:
@@ -166,6 +212,10 @@ def main() -> int:
             failures.append(f"{label}: E2E latency {latency} ms does not beat PyTorch {reference_latency} ms")
         if not exclusive_ok:
             failures.append(f"{label}: missing an exclusive-GPU timing provenance record")
+        if not timer_contract_ok:
+            failures.append(
+                f"{label}: timer contract {candidate_timer_contract!r} does not match "
+                f"reference {reference_timer_contract!r}")
 
         faster_than = requirement.get("require_faster_than")
         if faster_than:
@@ -183,7 +233,13 @@ def main() -> int:
 
     result = {
         "schema": "sam3d.e2e.gate.v2", "input": str(report_path),
+        "candidate_execution_mode": candidate_execution_mode,
+        "required_candidate_execution_mode": required_execution_mode,
+        "candidate_sampling_mode": candidate_sampling_mode,
+        "required_candidate_sampling_mode": required_sampling_mode,
         "reference_runner": reference_runner, "pytorch_latency_ms": reference_latency,
+        "reference_timer_contract": reference_timer_contract,
+        "timer_contract_match_required": matching_timer_contract_required,
         "reference_exclusive_gpu": reference_exclusive_ok,
         "reference_exclusive_gpu_required": reference_exclusive_required,
         "checks": checks, "passed": not failures, "failures": failures,

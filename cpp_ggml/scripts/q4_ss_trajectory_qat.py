@@ -236,9 +236,12 @@ def save_teacher_trajectory(generator: torch.nn.Module, e2e_dir: Path, out_dir: 
             cond_velocity = backbone(x, t, cond, d=torch.zeros_like(t), cfg=False)
             uncond_velocity = backbone(x, t, cond, d=torch.zeros_like(t), cfg=True)
             for modality in MODS:
-                velocity = cond_velocity[modality]
-                if modality == "shape" and cfg_start <= float(t) <= cfg_end:
-                    velocity = velocity + cfg_strength * (velocity - uncond_velocity[modality])
+                # Match inference-time ClassifierFreeGuidance, whose scalar
+                # strength is mapped over every output modality.
+                velocity = (cond_velocity[modality] + cfg_strength *
+                            (cond_velocity[modality] - uncond_velocity[modality])
+                            if cfg_start <= float(t) <= cfg_end
+                            else cond_velocity[modality])
                 x[modality] = x[modality] + (t1 - t0) * velocity
                 write_samt_f32(out_dir / f"ss_state{step}_{modality}.samt",
                                 [x[modality].shape[-1], x[modality].shape[-2]],
@@ -418,9 +421,10 @@ def trajectory_loss(generator: torch.nn.Module, states: dict[int, dict[str, torc
         cond_velocity = backbone(x, t, condition, d=torch.zeros_like(t), cfg=False)
         uncond_velocity = backbone(x, t, condition, d=torch.zeros_like(t), cfg=True)
         for modality in MODS:
-            velocity = cond_velocity[modality]
-            if modality == "shape" and cfg_start <= float(t) <= cfg_end:
-                velocity = velocity + cfg_strength * (velocity - uncond_velocity[modality])
+            velocity = (cond_velocity[modality] + cfg_strength *
+                        (cond_velocity[modality] - uncond_velocity[modality])
+                        if cfg_start <= float(t) <= cfg_end
+                        else cond_velocity[modality])
             x[modality] = x[modality] + (t1 - t0) * velocity
             # SAMT stores one sample without the batch dimension; backbone output retains it.
             reference = states[start + offset + 1][modality].unsqueeze(0).to(
@@ -515,9 +519,10 @@ def sample_terminal_state(generator: torch.nn.Module, initial: dict[str, torch.T
             cond_velocity = backbone(x, t, condition, d=torch.zeros_like(t), cfg=False)
             uncond_velocity = backbone(x, t, condition, d=torch.zeros_like(t), cfg=True)
             for modality in MODS:
-                velocity = cond_velocity[modality]
-                if modality == "shape" and cfg_start <= float(t) <= cfg_end:
-                    velocity = velocity + cfg_strength * (velocity - uncond_velocity[modality])
+                velocity = (cond_velocity[modality] + cfg_strength *
+                            (cond_velocity[modality] - uncond_velocity[modality])
+                            if cfg_start <= float(t) <= cfg_end
+                            else cond_velocity[modality])
                 x[modality] = x[modality] + (t1 - t0) * velocity
             x = {name: value.to(dtype=model_dtype) for name, value in x.items()}
     return {name: value.detach().float().cpu() for name, value in x.items()}
@@ -801,7 +806,8 @@ def main() -> int:
     if args.validate_only and any(start < 0 or start + args.validation_rollout_steps > 25
                                   for start in validation_starts):
         parser.error("every --validation-starts value must permit the requested window within 25 Euler steps")
-    generator = load_generator(args.checkpoint, args.config, str(device), 25, 3.0, 7.0, 0.0, 500.0)
+    generator = load_generator(args.checkpoint, args.config, str(device), 25, 3.0,
+                               7.0, 0.0, 500.0)
     if diagnostic_only:
         generator = prepare_fp16_student(generator)
         q4_sensitivity_report(generator, args.e2e_dir, device, args.sensitivity_report)

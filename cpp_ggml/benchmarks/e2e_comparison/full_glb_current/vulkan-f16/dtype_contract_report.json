@@ -1,0 +1,34 @@
+{
+  "schema": "sam3d.e2e.dtype-contract-validation.v1",
+  "contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_vulkan_cuda_pbr_f16/vulkan_dtype_contract.json",
+  "backend": "vulkan",
+  "model_dtypes": {
+    "base": "f16",
+    "ss": "f16",
+    "ss_decoder": "f16",
+    "slat": "f16",
+    "gs": "f16",
+    "mesh": "f16"
+  },
+  "stage_count": 10,
+  "stages": [
+    "gaussian_decoder",
+    "mesh_decoder",
+    "slat_condition_dino",
+    "slat_condition_fuser",
+    "slat_flow",
+    "ss_condition_dino",
+    "ss_condition_fuser",
+    "ss_condition_pointpatch",
+    "ss_decoder",
+    "ss_flow"
+  ],
+  "entry_count": 153,
+  "aggregated_graph_nodes": 99481,
+  "mul_mat_source_types": [
+    "f16",
+    "f32"
+  ],
+  "expected_weight_type": "f16",
+  "passed": true
+}

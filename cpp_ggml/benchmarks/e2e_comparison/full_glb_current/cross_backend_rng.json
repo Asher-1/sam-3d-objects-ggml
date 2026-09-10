@@ -1,0 +1,61 @@
+{
+  "schema": "sam3d.portable-philox-regression.v1",
+  "seed": 42,
+  "distribution_blocks": 168,
+  "source": "verified CUDA Philox sampler",
+  "portable_binary": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli",
+  "cuda_binary": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda/bin/sam3d-cli",
+  "draws": [
+    {
+      "count": 6,
+      "different_float_bits": 6,
+      "max_abs": 3.8743019104003906e-07,
+      "mean_abs": 1.564621925354004e-07,
+      "draw_index": 0
+    },
+    {
+      "count": 3,
+      "different_float_bits": 2,
+      "max_abs": 7.897615432739258e-07,
+      "mean_abs": 3.427267074584961e-07,
+      "draw_index": 1
+    },
+    {
+      "count": 32768,
+      "different_float_bits": 26028,
+      "max_abs": 2.205371856689453e-06,
+      "mean_abs": 1.6099862509832974e-07,
+      "draw_index": 2
+    },
+    {
+      "count": 3,
+      "different_float_bits": 3,
+      "max_abs": 6.556510925292969e-07,
+      "mean_abs": 3.973642985026042e-07,
+      "draw_index": 3
+    },
+    {
+      "count": 1,
+      "different_float_bits": 1,
+      "max_abs": 3.5762786865234375e-07,
+      "mean_abs": 3.5762786865234375e-07,
+      "draw_index": 4
+    },
+    {
+      "count": 210248,
+      "different_float_bits": 169015,
+      "max_abs": 2.175569534301758e-06,
+      "mean_abs": 1.6848333416211698e-07,
+      "draw_index": 5
+    }
+  ],
+  "total_count": 243029,
+  "different_float_bits": 195055,
+  "max_abs": 2.205371856689453e-06,
+  "mean_abs": 1.6747961626876046e-07,
+  "thresholds": {
+    "max_abs": 3e-06,
+    "max_mean_abs": 4e-07
+  },
+  "passed": true
+}

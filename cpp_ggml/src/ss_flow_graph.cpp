@@ -99,6 +99,10 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
     x_trans = g->input_f32("x_trans", {3, 1});
     x_ts = g->input_f32("x_ts", {1, 1});
 
+    // Terminal probe used by the parity harness.  This keeps the test focused
+    // on the host-to-backend transfer before any model operation is involved.
+    if (debug_stage == "cond") return {cond};
+
     // ---------------- timestep embedding ----------------
     // freqs = exp(-ln(10000) * i / 128), i = 0..127; emb = [cos(t f), sin(t f)]
     const int64_t half = 128;
@@ -169,9 +173,19 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
 
         auto qkv_heads = [&](ggml_tensor* h, const std::string& mn,
                              ggml_tensor** q, ggml_tensor** k, ggml_tensor** v) {
+            const bool debug_qpre = i == 0 && debug_stage == "b0_qpre_" + mn;
             const std::string qkv_name = b + ".self_attn.to_qkv." + mn + ".weight";
             ggml_tensor* wqkv = matmul_weight(ctx, m->get(qkv_name));
             ggml_tensor* bqkv = as_f32(ctx, m->get(b + ".self_attn.to_qkv." + mn + ".bias"));
+            // The PyTorch probe exposes the raw Q projection as (C, N),
+            // before its QKV head reshape.  Keep the native terminal probe in
+            // that same contract; it is diagnostic-only and never used by
+            // the production fused QKV path.
+            if (debug_qpre) {
+                *q = linear_rows(qkv_name, 0, C,
+                                 ggml_view_1d(ctx, bqkv, C, 0), h);
+                return;
+            }
             if (ggml_is_quantized(wqkv->type)) {
                 if (fuse_quant_qkv) {
                     // One 3C-wide GEMM cuts two quantized launches per QKV
@@ -207,16 +221,18 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
         ggml_tensor *qs, *ks, *vs, *qp, *kp, *vp;
         qkv_heads(h_s, "shape", &qs, &ks, &vs);
         qkv_heads(h_p, pose_name, &qp, &kp, &vp);
+        if (i == 0 && debug_stage.rfind("b0_qpre_", 0) == 0)
+            return {debug_stage.substr(8) == "shape" ? qs : qp};
         if (i == 0 && debug_stage == "b0_q_shape") return {qs};
         if (i == 0 && debug_stage == "b0_q_6drotation_normalized") return {qp};
 
         const float attn_scale = 1.0f / sqrtf((float)Hd);
         // shape: self-attention within 4096 tokens
-        ggml_tensor* out_s = gb_attention(ctx, qs, ks, vs, attn_scale, true);
+        ggml_tensor* out_s = gb_attention(ctx, qs, ks, vs, attn_scale, true, strict_attention);
         // pose group: attends pose + shape keys (inference: no detach needed)
         ggml_tensor* kc = ggml_concat(ctx, kp, ks, 1);  // (Hd, 4+n_shape, heads)
         ggml_tensor* vc = ggml_concat(ctx, vp, vs, 1);
-        ggml_tensor* out_p = gb_attention(ctx, qp, kc, vc, attn_scale, true);
+        ggml_tensor* out_p = gb_attention(ctx, qp, kc, vc, attn_scale, true, strict_attention);
         // flash output memory is token-major (N, H, Hd) -> straight reshape
         out_s = ggml_reshape_2d(ctx, out_s, C, n_shape);
         out_p = ggml_reshape_2d(ctx, out_p, C, n_pose);
@@ -237,6 +253,9 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
         ggml_tensor* d_n2[2] = {nullptr, nullptr};
         ggml_tensor* d_xo[2] = {nullptr, nullptr};
         ggml_tensor* d_xq[2] = {nullptr, nullptr};
+        ggml_tensor* d_xkv[2] = {nullptr, nullptr};
+        ggml_tensor* d_xkv_weight[2] = {nullptr, nullptr};
+        ggml_tensor* d_xkv_bias[2] = {nullptr, nullptr};
         ggml_tensor* d_xk[2] = {nullptr, nullptr};
         ggml_tensor* d_xv[2] = {nullptr, nullptr};
         auto xidx = [](const std::string& mn2) { return mn2 == "shape" ? 0 : 1; };
@@ -255,13 +274,18 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
             const std::string kv_name = b + ".cross_attn." + mn + ".to_kv.weight";
             ggml_tensor* wkv = matmul_weight(ctx, m->get(kv_name));
             ggml_tensor* bkv = as_f32(ctx, m->get(b + ".cross_attn." + mn + ".to_kv.bias"));
+            d_xkv_weight[di] = wkv;
+            d_xkv_bias[di] = bkv;
+            ggml_tensor* kv = nullptr;
             ggml_tensor *k, *v;
             if (ggml_is_quantized(wkv->type)) {
                 k = linear_rows(kv_name, 0, C, ggml_view_1d(ctx, bkv, C, 0), cond);
                 v = linear_rows(kv_name, C, C, ggml_view_1d(ctx, bkv, C, C * sizeof(float)), cond);
             } else {
-                gb_split_kv(ctx, linear(kv_name, bkv, cond), &k, &v);
+                kv = linear(kv_name, bkv, cond);
+                gb_split_kv(ctx, kv, &k, &v);
             }
+            d_xkv[di] = kv;
             d_xk[di] = k;
             d_xv[di] = v;
             const int64_t n_q = q->ne[1];
@@ -273,7 +297,7 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
             q = heads(q, n_q);
             k = heads(k, n_kv);
             v = heads(v, n_kv);
-            ggml_tensor* o = gb_attention(ctx, q, k, v, attn_scale, true);
+            ggml_tensor* o = gb_attention(ctx, q, k, v, attn_scale, true, strict_attention);
             o = ggml_reshape_2d(ctx, o, C, q->ne[1]);  // flash out ne=(Hd,H,N)
             o = linear(b + ".cross_attn." + mn + ".to_out.weight",
                        as_f32(ctx, m->get(b + ".cross_attn." + mn + ".to_out.bias")), o);
@@ -282,9 +306,20 @@ std::vector<ggml_tensor*> SsFlowGraph::build() {
         };
         hs = cross(hs, "shape");
         hp = cross(hp, pose_name);
+        if (i == 0 && debug_stage.rfind("b0_xkv_weight_", 0) == 0)
+            return {d_xkv_weight[xidx(debug_stage.substr(14))]};
+        if (i == 0 && debug_stage.rfind("b0_xkv_bias_", 0) == 0)
+            return {d_xkv_bias[xidx(debug_stage.substr(12))]};
+        if (i == 0 && debug_stage.rfind("b0_xkv_", 0) == 0)
+            return {d_xkv[xidx(debug_stage.substr(7))]};
         if (i == 0 && debug_stage.rfind("b0_xq_", 0) == 0) return {d_xq[xidx(debug_stage.substr(6))]};
-        if (i == 0 && debug_stage.rfind("b0_xk_", 0) == 0) return {d_xk[xidx(debug_stage.substr(6))]};
-        if (i == 0 && debug_stage.rfind("b0_xv_", 0) == 0) return {d_xv[xidx(debug_stage.substr(6))]};
+        // K/V are slices of a fused (2C, N) projection. A terminal debug
+        // output must be materialized: reading a strided view directly would
+        // serialize interleaved K and V rows, not either logical tensor.
+        if (i == 0 && debug_stage.rfind("b0_xk_", 0) == 0)
+            return {ggml_cont(ctx, d_xk[xidx(debug_stage.substr(6))])};
+        if (i == 0 && debug_stage.rfind("b0_xv_", 0) == 0)
+            return {ggml_cont(ctx, d_xv[xidx(debug_stage.substr(6))])};
         if (i == 0 && debug_stage == "b0_cross_in_s") return {d_n2[0]};
         if (i == 0 && debug_stage == "b0_cross_in_p") return {d_n2[1]};
         if (i == 0 && debug_stage == "b0_cross_out_s") return {d_xo[0]};

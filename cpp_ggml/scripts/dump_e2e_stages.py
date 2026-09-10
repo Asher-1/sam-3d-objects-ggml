@@ -20,14 +20,24 @@ Usage (repo root, sam3d-objects env):
         --image notebook/images/.../image.png --mask-dir ... --mask-index 14
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import struct
+import subprocess
 import sys
 import time
+import types
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+# The official notebook accesses CONDA_PREFIX directly.  A documented
+# interpreter path invocation does not populate it, so derive the active
+# environment from that interpreter before importing notebook/inference.py.
+if "CONDA_PREFIX" not in os.environ:
+    interpreter_dir = os.path.dirname(os.path.abspath(sys.executable))
+    os.environ["CONDA_PREFIX"] = os.path.dirname(interpreter_dir)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO_ROOT, "notebook"))
@@ -41,6 +51,50 @@ import torch  # noqa: E402
 
 SAMT_MAGIC = b"SAMT"
 GGML_TYPE_F32 = 0
+
+
+def sha256_file(path):
+    """Return a content digest without retaining a potentially large file."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def file_provenance(path):
+    """Record the exact file identity used by a reference capture."""
+    absolute = os.path.abspath(path)
+    if not os.path.isfile(absolute):
+        return {"path": absolute, "status": "missing"}
+    return {"path": absolute, "sha256": sha256_file(absolute)}
+
+
+def git_revision():
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
+def cuda_provenance():
+    if not torch.cuda.is_available():
+        return {"available": False}
+    properties = torch.cuda.get_device_properties(0)
+    return {
+        "available": True,
+        "name": properties.name,
+        "capability": list(torch.cuda.get_device_capability(0)),
+        "torch_cuda": torch.version.cuda,
+        "cudnn": torch.backends.cudnn.version(),
+    }
 
 
 def write_samt_f32(path, ne, data):
@@ -67,6 +121,10 @@ def write_samt_i32(path, ne, data):
 class Dumper:
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        if os.path.exists(out_dir) and os.listdir(out_dir):
+            raise ValueError(
+                f"refusing to overwrite non-empty official reference directory: {out_dir}"
+            )
         os.makedirs(out_dir, exist_ok=True)
         self.manifest = {}
 
@@ -112,9 +170,27 @@ def main():
     ap.add_argument("--image", default="notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png")
     ap.add_argument("--mask-dir", default="notebook/images/shutterstock_stylish_kidsroom_1640806567")
     ap.add_argument("--mask-index", type=int, default=14)
-    ap.add_argument("--out-dir", default="cpp_ggml/benchmarks/data/e2e")
+    ap.add_argument(
+        "--out-dir",
+        default="/tmp/sam3d-official-e2e",
+        help="empty output directory; defaults to a disposable /tmp reference",
+    )
     ap.add_argument("--config", default="checkpoints/hf/pipeline.yaml")
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument(
+        "--sampling-seed-mode",
+        choices=("pipeline", "stage-isolated"),
+        default="pipeline",
+        help=("pipeline preserves one CUDA Philox state across SS and SLat, matching "
+              "InferencePipeline.run; stage-isolated preserves the historical diagnostic mode"),
+    )
+    ap.add_argument(
+        "--ss-dtype",
+        choices=("bf16", "f32"),
+        default="bf16",
+        help=("materialize the SS generator and SS condition embedder in this dtype; "
+              "use f32 when comparing against an F32 GGUF, bf16 for the 12 GB staged oracle"),
+    )
     ap.add_argument("--skip-render", action="store_true", default=True)
     ap.add_argument(
         "--dump-mesh-decoder-reference",
@@ -127,6 +203,17 @@ def main():
         action="store_true",
         help=("with --dump-mesh-decoder-reference, also save each of the 12 official "
               "transformer block outputs to locate the first numerical divergence"),
+    )
+    ap.add_argument(
+        "--dump-ss-trajectory",
+        action="store_true",
+        help=("capture every official SS Euler latent directly from the staged "
+              "generator used by this oracle"),
+    )
+    ap.add_argument(
+        "--stop-after-ss",
+        action="store_true",
+        help="stop after the SS stage; requires --dump-ss-trajectory",
     )
     ap.add_argument(
         "--dump-mesh-decoder-attention-block",
@@ -169,13 +256,41 @@ def main():
     if (args.dump_mesh_decoder_blocks or args.dump_mesh_decoder_attention_block is not None or
             args.dump_mesh_decoder_internals_block is not None):
         args.dump_mesh_decoder_reference = True
+    if args.stop_after_ss and not args.dump_ss_trajectory:
+        ap.error("--stop-after-ss requires --dump-ss-trajectory")
 
     from loguru import logger
     logger.remove()  # quiet the per-step info spam
 
     from inference import Inference, load_image, load_single_mask  # noqa: E402
+    import moge  # noqa: E402
+    from sam3d_objects.pipeline import inference_pipeline as inference_pipeline_module  # noqa: E402
 
-    dmp = Dumper(os.path.join(REPO_ROOT, args.out_dir))
+    output_dir = os.path.abspath(args.out_dir)
+    dmp = Dumper(output_dir)
+    selected_mask_path = os.path.join(args.mask_dir, f"{args.mask_index}.png")
+    dmp.meta("reference_provenance", {
+        "schema": "sam3d.official-e2e-reference.v2",
+        "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sampling_seed_mode": args.sampling_seed_mode,
+        "ss_dtype": args.ss_dtype,
+        "seed": args.seed,
+        "repository_git_revision": git_revision(),
+        "python_executable": sys.executable,
+        "python_version": sys.version,
+        "torch_version": torch.__version__,
+        "cuda": cuda_provenance(),
+        "inputs": {
+            "image": file_provenance(args.image),
+            "selected_mask": file_provenance(selected_mask_path),
+            "pipeline_config": file_provenance(args.config),
+        },
+        "sources": {
+            "dump_script": file_provenance(__file__),
+            "inference_pipeline": file_provenance(inference_pipeline_module.__file__),
+            "moge": file_provenance(moge.__file__),
+        },
+    })
 
     print("[e2e] loading pipeline (compile=False, staged loading)...")
     t0 = time.perf_counter()
@@ -205,8 +320,9 @@ def main():
             model = model.to(dtype=torch.float16)
             dtxt = "fp16"
         else:
-            model = model.to(dtype=torch.bfloat16)
-            dtxt = "bf16"
+            ss_dtype = torch.float32 if args.ss_dtype == "f32" else torch.bfloat16
+            model = model.to(dtype=ss_dtype)
+            dtxt = args.ss_dtype
         print(f"[load] {base} -> CPU ({dtxt}), "
               f"params={sum(p.numel() for p in model.parameters())/1e6:.0f}M")
         return model
@@ -306,6 +422,7 @@ def main():
 
     # hook noise generation + per-step velocities
     noise_cap = {}
+    ss_trajectory = {}
     orig_gen_noise = type(ss_gen)._generate_noise
 
     def gen_noise_cap(self, x_shape, x_device):
@@ -315,6 +432,19 @@ def main():
         return out
 
     type(ss_gen)._generate_noise = gen_noise_cap
+    if args.dump_ss_trajectory:
+        original_generate_iter = ss_gen.generate_iter
+
+        def capture_ss_generate_iter(_self, *generate_args, **generate_kwargs):
+            for step, (timestamp, latent, metadata) in enumerate(
+                    original_generate_iter(*generate_args, **generate_kwargs), start=1):
+                ss_trajectory[step] = {
+                    name: value.detach().float().cpu()
+                    for name, value in latent.items()
+                }
+                yield timestamp, latent, metadata
+
+        ss_gen.generate_iter = types.MethodType(capture_ss_generate_iter, ss_gen)
 
     # hook condition inputs going INTO the generator (via get_condition_input)
     ss_input_dict = pipeline.preprocess_image(merged, pipeline.ss_preprocessor,
@@ -329,13 +459,27 @@ def main():
     # slat inputs dumped later (stage 2 uses the same image); keep in RAM
     # torch.save(slat_input_dict, os.path.join(dmp.out_dir, "slat_input.pt"))
 
+    # InferencePipeline.run seeds once before sparse structure sampling. The
+    # default preserves that same Philox stream for the subsequent SLat draw.
     torch.manual_seed(args.seed)
+    # ``sample_sparse_structure`` owns the autocast context.  A true F32 oracle
+    # therefore has to change the pipeline's stage dtype before entering it;
+    # CUDA autocast rejects/ignores float32 and executes the graph in F32.
+    if args.ss_dtype == "f32":
+        pipeline.shape_model_dtype = torch.float32
     ss_return = pipeline.sample_sparse_structure(ss_input_dict)
     type(ss_gen)._generate_noise = orig_gen_noise
+    if args.dump_ss_trajectory:
+        del ss_gen.generate_iter
 
     dmp.meta("ss_noise_keys", noise_cap.get("keys", []))
     for k, v in noise_cap.get("x0", {}).items():
         dmp.t(f"ss_x0_{k}", v)
+    for step, latent in sorted(ss_trajectory.items()):
+        for name, value in latent.items():
+            dmp.t(f"ss_torch_x{step:03d}_{name}", value)
+    if args.dump_ss_trajectory:
+        dmp.meta("ss_trajectory_steps", sorted(ss_trajectory))
 
     if "ss_cond_tokens" in cond_tokens_cap:
         dmp.t("ss_cond_tokens", cond_tokens_cap["ss_cond_tokens"])
@@ -348,7 +492,11 @@ def main():
     dmp.meta("ss_return_keys", sorted(ss_return.keys()))
 
     # ss_decoder I/O
-    with torch.no_grad(), torch.autocast(device_type="cuda", dtype=pipeline.shape_model_dtype):
+    if args.ss_dtype == "f32":
+        ss_autocast = contextlib.nullcontext()
+    else:
+        ss_autocast = torch.autocast(device_type="cuda", dtype=pipeline.shape_model_dtype)
+    with torch.no_grad(), ss_autocast:
         lat_in = shape_latent.permute(0, 2, 1).contiguous().view(
             shape_latent.shape[0], 8, 16, 16, 16)
         occ = ss_dec(lat_in)
@@ -380,6 +528,10 @@ def main():
     torch.cuda.empty_cache()
     print(f"[stage1] done in {time.perf_counter()-t0:.1f} s; "
           f"coords {tuple(coords.shape)}")
+    if args.stop_after_ss:
+        dmp.save()
+        print("\n[e2e] SS TRAJECTORY COMPLETE")
+        return
 
     # ==================================================================
     # stage 2: structured latent + decoders
@@ -403,7 +555,8 @@ def main():
 
     type(slat_gen)._generate_noise = gen_noise_cap2
 
-    torch.manual_seed(args.seed)
+    if args.sampling_seed_mode == "stage-isolated":
+        torch.manual_seed(args.seed)
     slat = pipeline.sample_slat(slat_input_dict, coords_gpu)
     type(slat_gen)._generate_noise = orig_gen_noise
 
@@ -824,6 +977,7 @@ def main():
             "schema": "sam3d.official-pbr-reference.v1",
             "source": "InferencePipeline.postprocess_slat_output",
             "seed": args.seed,
+            "reference_provenance": dmp.manifest["reference_provenance"],
             "mesh_postprocess": {
                 "simplify_ratio": 0.95,
                 "fill_holes": True,

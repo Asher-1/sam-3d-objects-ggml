@@ -1,0 +1,9 @@
+{
+  "schema": "sam3d.native-runtime-dependencies.v1",
+  "binary": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/bin/sam3d-cli",
+  "binary_sha256": "068a080418958ba3f4647c5611b041097b45adcdc55a7f73897735ebbf6a403c",
+  "ldd": "\tlinux-vdso.so.1 (0x00007ffee0bd6000)\n\tlibggml.so.0 => /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/lib/libggml.so.0 (0x00007f0ef710f000)\n\tlibggml-base.so.0 => /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/lib/libggml-base.so.0 (0x00007f0ef703f000)\n\tlibpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007f0ef6fc7000)\n\tlibjpeg.so.8 => /lib/x86_64-linux-gnu/libjpeg.so.8 (0x00007f0ef6f42000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f0ef6d5e000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f0ef6c0f000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f0ef6bf4000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f0ef6a02000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f0ef7255000)\n\tlibdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007f0ef69fc000)\n\tlibggml-cpu.so.0 => /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/lib/libggml-cpu.so.0 (0x00007f0ef6885000)\n\tlibggml-vulkan.so.0 => /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-vulkan/lib/libggml-vulkan.so.0 (0x00007f0ef3431000)\n\tlibgomp.so.1 => /lib/x86_64-linux-gnu/libgomp.so.1 (0x00007f0ef33ef000)\n\tlibvulkan.so.1 => /lib/x86_64-linux-gnu/libvulkan.so.1 (0x00007f0ef3399000)\n",
+  "passed": true,
+  "errors": [],
+  "scope": "linked dependency tree; not a dynamic plugin audit"
+}

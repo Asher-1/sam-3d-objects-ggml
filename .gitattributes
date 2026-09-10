@@ -1,0 +1,3 @@
+# Unified-diff context encodes an empty source line as one leading space.
+# Preserve normal whitespace checks while excluding that patch-format marker.
+cpp_ggml/third_party/ggml-patches/0001-sam3d-ggml-combined.patch whitespace=-blank-at-eol

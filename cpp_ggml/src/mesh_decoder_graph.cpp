@@ -3,6 +3,7 @@
 #include "common.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -15,6 +16,9 @@ ggml_tensor* as_f32(ggml_context* ctx, ggml_tensor* tensor) {
 }
 
 ggml_tensor* as_f16(ggml_context* ctx, ggml_tensor* tensor) {
+    // CUDA supports quantized decoder weights through the F32 dequantization
+    // path, not a direct Q4/Q8 -> F16 copy.
+    if (ggml_is_quantized(tensor->type)) tensor = ggml_cast(ctx, tensor, GGML_TYPE_F32);
     return tensor->type == GGML_TYPE_F16 ? tensor : ggml_cast(ctx, tensor, GGML_TYPE_F16);
 }
 
@@ -123,6 +127,30 @@ std::vector<ggml_tensor*> MeshDecoderGraph::build() {
         return {h};
     }
 
+    // PyTorch executes one variable-length attention call per shift, rather
+    // than one call for each equal-length window bucket.  Its CUDA dispatch is
+    // sensitive to the physical aligned dense-bias layout used by that single
+    // call.  Keep just the window-length description in graph inputs; the
+    // CUDA op materializes its ephemeral device-only bias buffer.
+    std::array<ggml_tensor*, 2> attention_sequence_lengths = {nullptr, nullptr};
+    if (official_fp16 && use_pytorch_cuda_attention) {
+        for (size_t shift = 0; shift < attention_sequence_lengths.size(); ++shift) {
+            const GsWindowTables& windows = tb->swin.shifts[shift];
+            std::vector<int32_t> lengths;
+            lengths.reserve(windows.buckets.size());
+            int64_t covered_tokens = 0;
+            for (const GsWindowTables::Bucket& bucket : windows.buckets) {
+                GGML_ASSERT(bucket.len > 0 && bucket.n_win > 0);
+                lengths.insert(lengths.end(), static_cast<size_t>(bucket.n_win),
+                               static_cast<int32_t>(bucket.len));
+                covered_tokens += bucket.len * bucket.n_win;
+            }
+            GGML_ASSERT(covered_tokens == n64 && !lengths.empty());
+            attention_sequence_lengths[shift] = add_i32(
+                lengths, "mesh_attention_sequence_lengths", {static_cast<int64_t>(lengths.size())});
+        }
+    }
+
     for (int block = 0; block < n_blocks; ++block) {
         const std::string name = prefix + ".blocks." + std::to_string(block);
         const GsWindowTables& windows = tb->swin.shifts[block % 2];
@@ -166,38 +194,43 @@ std::vector<ggml_tensor*> MeshDecoderGraph::build() {
         ggml_tensor* kh = heads(k);
         ggml_tensor* vh = heads(v);
         ggml_tensor* attention = nullptr;
-        for (const GsWindowTables::Bucket& bucket : windows.buckets) {
-            const int64_t offset = bucket.off;
-            const int64_t length = bucket.len;
-            const int64_t window_count = bucket.n_win;
-            auto window_view = [&](ggml_tensor* tensor) {
-                return ggml_view_4d(ctx, tensor, head_dim, length, n_heads, window_count,
-                                    tensor->nb[2], tensor->nb[1], length * tensor->nb[2],
-                                    offset * tensor->nb[2]);
-            };
-            ggml_tensor* query = ggml_cont(ctx, window_view(qh));
-            ggml_tensor* key = ggml_cont(ctx, window_view(kh));
-            ggml_tensor* value = ggml_cont(ctx, window_view(vh));
-            const float attention_scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
-            // The reference SDPA keeps its score and value reductions in
-            // F32.  The transformer projections remain F16, but promote the
-            // three attention operands before their numerically sensitive
-            // reductions rather than relying on a backend's F16 tensor-core
-            // accumulation choice.
-            ggml_tensor* attention_query = official_fp16 ? as_f32(ctx, query) : query;
-            ggml_tensor* attention_key = official_fp16 ? as_f32(ctx, key) : key;
-            ggml_tensor* attention_value = official_fp16 ? as_f32(ctx, value) : value;
-            ggml_tensor* scores = ggml_mul_mat(ctx, attention_key, attention_query);
-            if (official_fp16) ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
-            scores = ggml_scale(ctx, scores, attention_scale);
-            scores = ggml_soft_max(ctx, scores);
-            ggml_tensor* values_t = ggml_cont(ctx, ggml_transpose(ctx, attention_value));
-            ggml_tensor* result = ggml_mul_mat(ctx, values_t, scores);
-            if (official_fp16) ggml_mul_mat_set_prec(result, GGML_PREC_F32);
-            result = ggml_cont(ctx, ggml_permute(ctx, result, 0, 2, 1, 3));
-            result = ggml_reshape_2d(ctx, result, channels, length * window_count);
-            if (official_fp16) result = as_f16(ctx, result);
-            attention = attention == nullptr ? result : ggml_concat(ctx, attention, result, 1);
+        const float attention_scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
+        if (official_fp16 && use_pytorch_cuda_attention) {
+            GGML_ASSERT(qh->type == GGML_TYPE_F16 && kh->type == GGML_TYPE_F16 &&
+                        vh->type == GGML_TYPE_F16);
+            attention = ggml_sam3d_f16_masked_attn(
+                ctx, qh, kh, vh, attention_sequence_lengths[block % 2], attention_scale);
+            attention = ggml_reshape_2d(ctx, attention, channels, n64);
+        } else {
+            for (const GsWindowTables::Bucket& bucket : windows.buckets) {
+                const int64_t offset = bucket.off;
+                const int64_t length = bucket.len;
+                const int64_t window_count = bucket.n_win;
+                auto window_view = [&](ggml_tensor* tensor) {
+                    return ggml_view_4d(ctx, tensor, head_dim, length, n_heads, window_count,
+                                        tensor->nb[2], tensor->nb[1], length * tensor->nb[2],
+                                        offset * tensor->nb[2]);
+                };
+                ggml_tensor* query = ggml_cont(ctx, window_view(qh));
+                ggml_tensor* key = ggml_cont(ctx, window_view(kh));
+                ggml_tensor* value = ggml_cont(ctx, window_view(vh));
+                // The portable graph deliberately retains explicit F32
+                // reductions because it is used by CPU and Vulkan as well.
+                ggml_tensor* attention_query = official_fp16 ? as_f32(ctx, query) : query;
+                ggml_tensor* attention_key = official_fp16 ? as_f32(ctx, key) : key;
+                ggml_tensor* attention_value = official_fp16 ? as_f32(ctx, value) : value;
+                ggml_tensor* scores = ggml_mul_mat(ctx, attention_key, attention_query);
+                if (official_fp16) ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+                scores = ggml_scale(ctx, scores, attention_scale);
+                scores = ggml_soft_max(ctx, scores);
+                ggml_tensor* values_t = ggml_cont(ctx, ggml_transpose(ctx, attention_value));
+                ggml_tensor* result = ggml_mul_mat(ctx, values_t, scores);
+                if (official_fp16) ggml_mul_mat_set_prec(result, GGML_PREC_F32);
+                result = ggml_cont(ctx, ggml_permute(ctx, result, 0, 2, 1, 3));
+                result = ggml_reshape_2d(ctx, result, channels, length * window_count);
+                if (official_fp16) result = as_f16(ctx, result);
+                attention = attention == nullptr ? result : ggml_concat(ctx, attention, result, 1);
+            }
         }
         attention = get_rows_preserving_type(ctx, attention, original_indices);
         if (debug_stage == "block" + std::to_string(block) + "_attention_values") {
@@ -267,6 +300,15 @@ std::vector<ggml_tensor*> MeshDecoderGraph::build() {
         GGML_ASSERT(weights->ne[1] == kernel_elements);
         GGML_ASSERT(weights->ne[0] % input_width == 0);
         const int64_t output_width = weights->ne[0] / input_width;
+        // Each offset is a logical [Cin, Cout] matrix.  A view into a
+        // block-quantized [Cin*Cout, 27] source is not a valid independent
+        // Q8/Q4 MMQ row layout: the block metadata spans the logical matrix
+        // boundary.  Materialize the tensor once in F32 before creating the
+        // 27 offset views, preserving the official offset accumulation order
+        // without issuing an invalid quantized GEMM for a strided submatrix.
+        ggml_tensor* view_weights = ggml_is_quantized(weights->type)
+            ? as_f32(ctx, weights)
+            : weights;
         constexpr int64_t max_gather_elements = 256LL * 1024 * 1024;
         const int64_t token_tile = std::max<int64_t>(
             1, max_gather_elements / (input_width * kernel_elements));
@@ -291,9 +333,9 @@ std::vector<ggml_tensor*> MeshDecoderGraph::build() {
                 neighbour = ggml_reshape_2d(ctx, ggml_cont(ctx, neighbour),
                                              input_width, count);
                 ggml_tensor* offset_weight = ggml_view_2d(
-                    ctx, weights, input_width, output_width,
-                    static_cast<size_t>(input_width) * ggml_type_size(weights->type),
-                    static_cast<size_t>(offset) * weights->nb[1]);
+                    ctx, view_weights, input_width, output_width,
+                    static_cast<size_t>(input_width) * ggml_type_size(view_weights->type),
+                    static_cast<size_t>(offset) * view_weights->nb[1]);
                 ggml_tensor* term = ggml_mul_mat(ctx, offset_weight, neighbour);
                 result = result == nullptr ? term : ggml_add(ctx, result, term);
             }
@@ -319,8 +361,17 @@ std::vector<ggml_tensor*> MeshDecoderGraph::build() {
         // [Cout, Cin], then transpose it into ggml's [Cin, Cout] GEMM layout.
         // This differs intentionally from the 3x3 implicit-GEMM path, which
         // interprets KRSC weights conventionally per kernel offset.
+        // A physical transpose of a block-quantized tensor requires a
+        // quantized-to-quantized CUDA copy, which ggml deliberately does not
+        // implement (the blocks no longer describe independent rows after a
+        // transpose).  This 1x1 path is the only such layout conversion in
+        // the decoder, so establish the F32 boundary before the transpose.
+        // F16 weights retain their original layout and Tensor Core path.
+        ggml_tensor* layout_source = ggml_is_quantized(weights->type)
+            ? as_f32(ctx, weights)
+            : weights;
         ggml_tensor* saved_layout = ggml_reshape_2d(
-            ctx, weights, output_width, input_width);
+            ctx, layout_source, output_width, input_width);
         ggml_tensor* matrix = ggml_cont(ctx, ggml_transpose(ctx, saved_layout));
         // ggml's CUDA F32 ADD kernel requires both operands to be F32.  This
         // branch is used by the official decoder's F32 input/normalization

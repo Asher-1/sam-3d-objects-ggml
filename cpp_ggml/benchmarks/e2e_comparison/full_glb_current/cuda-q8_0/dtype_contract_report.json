@@ -1,0 +1,36 @@
+{
+  "schema": "sam3d.e2e.dtype-contract-validation.v1",
+  "contract": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/raw_native_cuda_q8_0/dtype_contract.json",
+  "backend": "cuda",
+  "model_dtypes": {
+    "base": "q8_0",
+    "ss": "q8_0",
+    "ss_decoder": "q8_0",
+    "slat": "q8_0",
+    "gs": "q8_0",
+    "mesh": "q8_0"
+  },
+  "stage_count": 11,
+  "stages": [
+    "gaussian_decoder",
+    "mesh_decoder",
+    "slat_condition_dino",
+    "slat_condition_fuser",
+    "slat_final_projection",
+    "slat_flow",
+    "ss_condition_dino",
+    "ss_condition_fuser",
+    "ss_condition_pointpatch",
+    "ss_decoder",
+    "ss_flow"
+  ],
+  "entry_count": 159,
+  "aggregated_graph_nodes": 58341,
+  "mul_mat_source_types": [
+    "f16",
+    "f32",
+    "q8_0"
+  ],
+  "expected_weight_type": "q8_0",
+  "passed": true
+}

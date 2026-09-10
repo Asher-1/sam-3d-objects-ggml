@@ -17,13 +17,24 @@
 namespace sam3d {
 
 struct MogeOutputs {
-    ggml_tensor* points = nullptr;  // [W, H, 3, 1], camera-space before shift
+    // `raw_points` is the unconstrained point head output at the resized
+    // MoGe image resolution. MoGeModel.forward() bilinearly returns this to
+    // the original image size before applying `_remap_points`; native infer
+    // must therefore consume this tensor rather than `points`.
+    ggml_tensor* raw_points = nullptr;  // [W, H, 3, 1]
+    // Legacy neural-only output: `_remap_points(raw_points)` at the resized
+    // resolution. Keep this for the existing direct-head parity harness.
+    ggml_tensor* points = nullptr;      // [W, H, 3, 1], before camera shift
     ggml_tensor* mask_logits = nullptr; // [W, H, 1, 1]
+    ggml_tensor* backbone_image = nullptr; // [C, W, H], normalized 14-pixel DINO input
+    ggml_tensor* backbone_patch_tokens = nullptr; // [C, patches], before cls/position
+    ggml_tensor* backbone_position_tokens = nullptr; // [C, 1 + patches]
     ggml_tensor* backbone_input = nullptr; // [C, 1 + patches], before block 0
     ggml_tensor* debug_q = nullptr; // block 0 [D, N, H], parity instrumentation
     ggml_tensor* debug_k = nullptr;
     ggml_tensor* debug_v = nullptr;
     ggml_tensor* debug_attention_context = nullptr;
+    std::vector<ggml_tensor*> backbone_attention_projection_outputs; // before LayerScale
     std::vector<ggml_tensor*> backbone_attention_outputs; // after attention projection and LayerScale
     std::vector<ggml_tensor*> backbone_mlp_fc1_outputs; // before exact GELU
     std::vector<ggml_tensor*> backbone_mlp_gelu_outputs; // after exact GELU

@@ -1,0 +1,713 @@
+{
+  "reference_provenance": {
+    "schema": "sam3d.official-e2e-reference.v2",
+    "generated_at_utc": "2026-09-10T06:25:59Z",
+    "sampling_seed_mode": "pipeline",
+    "ss_dtype": "bf16",
+    "seed": 42,
+    "repository_git_revision": "51077a8d8a00bc6c1bf38f16c6af09448fb792bd",
+    "python_executable": "/home/ludahai/anaconda3/envs/sam3d-objects/bin/python3.11",
+    "python_version": "3.11.16 | packaged by conda-forge | (main, Aug 21 2026, 22:44:51) [GCC 14.4.0]",
+    "torch_version": "2.5.1+cu121",
+    "cuda": {
+      "available": true,
+      "name": "NVIDIA GeForce RTX 3060",
+      "capability": [
+        8,
+        6
+      ],
+      "torch_cuda": "12.1",
+      "cudnn": 90100
+    },
+    "inputs": {
+      "image": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/image.png",
+        "sha256": "72785412200dcb9f5c6bc4eaa3018172293f67836627708e6bce78150109af15"
+      },
+      "selected_mask": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/notebook/images/shutterstock_stylish_kidsroom_1640806567/14.png",
+        "sha256": "7a79c2f537a20bfd70c001df42dd8d916d4c5f7fce4ea7ee99738aa178b29c13"
+      },
+      "pipeline_config": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/checkpoints/hf/pipeline.yaml",
+        "sha256": "53c3d226b21df85c0bb3d16e6e4fa63abde0d6167525765eb929d02bfa9d358c"
+      }
+    },
+    "sources": {
+      "dump_script": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/scripts/dump_e2e_stages.py",
+        "sha256": "682d5064e5fc7058c32919750c71f4333fbfb1eaa3e08f09a35a2b371733ee31"
+      },
+      "inference_pipeline": {
+        "path": "/home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/sam3d_objects/pipeline/inference_pipeline.py",
+        "sha256": "e83e9560a727b06565134ea855503034d3510cbfbeeff2b6ca6dc13013536d2f"
+      },
+      "moge": {
+        "path": "/home/ludahai/anaconda3/envs/sam3d-objects/lib/python3.11/site-packages/moge/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "image_shape": [
+    4480,
+    6720,
+    3
+  ],
+  "input_image_rgba": {
+    "file": "input_image_rgba.samt",
+    "shape": [
+      4480,
+      6720,
+      3
+    ],
+    "min": 0.0,
+    "max": 255.0
+  },
+  "pointmap_raw": {
+    "file": "pointmap_raw.samt",
+    "shape": [
+      3,
+      4480,
+      6720
+    ],
+    "min": -0.9087703824043274,
+    "max": 2.1151790618896484
+  },
+  "moge_pts_color": {
+    "file": "moge_pts_color.samt",
+    "shape": [
+      3,
+      4480,
+      6720
+    ],
+    "min": 0.0,
+    "max": 1.0
+  },
+  "intrinsics": {
+    "file": "intrinsics.samt",
+    "shape": [
+      3,
+      3
+    ],
+    "min": 0.0,
+    "max": 1.7109624147415161
+  },
+  "moge_keys": [
+    "depth",
+    "intrinsics",
+    "mask",
+    "mask_prob",
+    "pointmaps",
+    "points"
+  ],
+  "ss_input_mask": {
+    "file": "ss_input_mask.samt",
+    "shape": [
+      1,
+      1,
+      518,
+      518
+    ],
+    "min": 0.0,
+    "max": 1.0
+  },
+  "ss_input_image": {
+    "file": "ss_input_image.samt",
+    "shape": [
+      1,
+      3,
+      518,
+      518
+    ],
+    "min": 0.0,
+    "max": 0.9925168752670288
+  },
+  "ss_input_rgb_image": {
+    "file": "ss_input_rgb_image.samt",
+    "shape": [
+      1,
+      3,
+      518,
+      518
+    ],
+    "min": 0.0,
+    "max": 0.9577661156654358
+  },
+  "ss_input_rgb_image_mask": {
+    "file": "ss_input_rgb_image_mask.samt",
+    "shape": [
+      1,
+      1,
+      518,
+      518
+    ],
+    "min": 0.0,
+    "max": 1.0
+  },
+  "ss_input_pointmap": {
+    "file": "ss_input_pointmap.samt",
+    "shape": [
+      1,
+      3,
+      518,
+      518
+    ],
+    "min": -0.49619436264038086,
+    "max": 0.3794858455657959
+  },
+  "ss_input_rgb_pointmap": {
+    "file": "ss_input_rgb_pointmap.samt",
+    "shape": [
+      1,
+      3,
+      518,
+      518
+    ],
+    "min": -1.2084074020385742,
+    "max": 2.350539207458496
+  },
+  "ss_input_pointmap_scale": {
+    "file": "ss_input_pointmap_scale.samt",
+    "shape": [
+      1,
+      3
+    ],
+    "min": 0.547589898109436,
+    "max": 0.547589898109436
+  },
+  "ss_input_pointmap_shift": {
+    "file": "ss_input_pointmap_shift.samt",
+    "shape": [
+      1,
+      3
+    ],
+    "min": -0.35995444655418396,
+    "max": 1.8636423349380493
+  },
+  "ss_input_rgb_pointmap_scale": {
+    "file": "ss_input_rgb_pointmap_scale.samt",
+    "shape": [
+      1,
+      3
+    ],
+    "min": 0.547589898109436,
+    "max": 0.547589898109436
+  },
+  "ss_input_rgb_pointmap_shift": {
+    "file": "ss_input_rgb_pointmap_shift.samt",
+    "shape": [
+      1,
+      3
+    ],
+    "min": -0.35995444655418396,
+    "max": 1.8636423349380493
+  },
+  "ss_input_rgb_pointmap_unnorm": {
+    "file": "ss_input_rgb_pointmap_unnorm.samt",
+    "shape": [
+      1,
+      3,
+      518,
+      518
+    ],
+    "min": -0.9050334095954895,
+    "max": 2.1134088039398193
+  },
+  "ss_noise_keys": [
+    "6drotation_normalized",
+    "scale",
+    "shape",
+    "translation",
+    "translation_scale"
+  ],
+  "ss_x0_6drotation_normalized": {
+    "file": "ss_x0_6drotation_normalized.samt",
+    "shape": [
+      1,
+      1,
+      6
+    ],
+    "min": -1.9243990182876587,
+    "max": 2.1613736152648926
+  },
+  "ss_x0_scale": {
+    "file": "ss_x0_scale.samt",
+    "shape": [
+      1,
+      1,
+      3
+    ],
+    "min": -0.7174222469329834,
+    "max": 0.13913755118846893
+  },
+  "ss_x0_shape": {
+    "file": "ss_x0_shape.samt",
+    "shape": [
+      1,
+      4096,
+      8
+    ],
+    "min": -4.358195781707764,
+    "max": 3.9020326137542725
+  },
+  "ss_x0_translation": {
+    "file": "ss_x0_translation.samt",
+    "shape": [
+      1,
+      1,
+      3
+    ],
+    "min": -1.8688257932662964,
+    "max": -0.6973658800125122
+  },
+  "ss_x0_translation_scale": {
+    "file": "ss_x0_translation_scale.samt",
+    "shape": [
+      1,
+      1,
+      1
+    ],
+    "min": -1.2682214975357056,
+    "max": -1.2682214975357056
+  },
+  "ss_cond_tokens": {
+    "file": "ss_cond_tokens.samt",
+    "shape": [
+      1,
+      7528,
+      1024
+    ],
+    "min": -8.2578125,
+    "max": 6.35546875
+  },
+  "ss_shape_latent": {
+    "file": "ss_shape_latent.samt",
+    "shape": [
+      1,
+      4096,
+      8
+    ],
+    "min": -4.095101356506348,
+    "max": 5.706514358520508
+  },
+  "ss_pose_latent_6drotation_normalized": {
+    "file": "ss_pose_latent_6drotation_normalized.samt",
+    "shape": [
+      1,
+      1,
+      6
+    ],
+    "min": -1.202404499053955,
+    "max": 0.7407426834106445
+  },
+  "ss_pose_latent_scale": {
+    "file": "ss_pose_latent_scale.samt",
+    "shape": [
+      1,
+      1,
+      3
+    ],
+    "min": -1.001991868019104,
+    "max": -0.996928870677948
+  },
+  "ss_pose_latent_translation": {
+    "file": "ss_pose_latent_translation.samt",
+    "shape": [
+      1,
+      1,
+      3
+    ],
+    "min": 0.004584193229675293,
+    "max": 0.03190052509307861
+  },
+  "ss_pose_latent_translation_scale": {
+    "file": "ss_pose_latent_translation_scale.samt",
+    "shape": [
+      1,
+      1,
+      1
+    ],
+    "min": 0.07438409328460693,
+    "max": 0.07438409328460693
+  },
+  "ss_return_keys": [
+    "6drotation_normalized",
+    "coords",
+    "coords_original",
+    "downsample_factor",
+    "scale",
+    "shape",
+    "translation",
+    "translation_scale"
+  ],
+  "ss_latent_dec_input": {
+    "file": "ss_latent_dec_input.samt",
+    "shape": [
+      1,
+      8,
+      16,
+      16,
+      16
+    ],
+    "min": -4.095101356506348,
+    "max": 5.706514358520508
+  },
+  "ss_occ": {
+    "file": "ss_occ.samt",
+    "shape": [
+      1,
+      1,
+      64,
+      64,
+      64
+    ],
+    "min": -116.0625,
+    "max": 92.4375
+  },
+  "coords_original": {
+    "file": "coords_original.samt",
+    "shape": [
+      26855,
+      4
+    ],
+    "dtype": "i32"
+  },
+  "coords": {
+    "file": "coords.samt",
+    "shape": [
+      26281,
+      4
+    ],
+    "dtype": "i32"
+  },
+  "downsample_factor": 1.0,
+  "pose_rotation": {
+    "file": "pose_rotation.samt",
+    "shape": [
+      1,
+      4
+    ],
+    "min": -0.7698147296905518,
+    "max": 0.19812129437923431
+  },
+  "pose_translation": {
+    "file": "pose_translation.samt",
+    "shape": [
+      1,
+      3
+    ],
+    "min": -0.3574441969394684,
+    "max": 1.8662946224212646
+  },
+  "pose_scale": {
+    "file": "pose_scale.samt",
+    "shape": [
+      1,
+      3
+    ],
+    "min": 0.2014300674200058,
+    "max": 0.2014300674200058
+  },
+  "slat_x0": {
+    "file": "slat_x0.samt",
+    "shape": [
+      1,
+      26281,
+      8
+    ],
+    "min": -4.340126991271973,
+    "max": 5.016984939575195
+  },
+  "slat_cond_tokens": {
+    "file": "slat_cond_tokens.samt",
+    "shape": [
+      1,
+      5496,
+      1024
+    ],
+    "min": -6.44140625,
+    "max": 6.62890625
+  },
+  "slat_feats_final": {
+    "file": "slat_feats_final.samt",
+    "shape": [
+      26281,
+      8
+    ],
+    "min": -9.557464599609375,
+    "max": 6.3715972900390625
+  },
+  "slat_coords": {
+    "file": "slat_coords.samt",
+    "shape": [
+      26281,
+      4
+    ],
+    "dtype": "i32"
+  },
+  "decode_mesh_face_normal": {
+    "file": "decode_mesh_face_normal.samt",
+    "shape": [
+      970176,
+      3,
+      3
+    ],
+    "min": -0.9999999403953552,
+    "max": 1.0
+  },
+  "decode_mesh_faces": {
+    "file": "decode_mesh_faces.samt",
+    "shape": [
+      970176,
+      3
+    ],
+    "min": 0.0,
+    "max": 485075.0
+  },
+  "decode_mesh_reg_loss": "None",
+  "decode_mesh_res": "256",
+  "decode_mesh_success": "True",
+  "decode_mesh_tsdf_s": "None",
+  "decode_mesh_tsdf_v": "None",
+  "decode_mesh_vertex_attrs": {
+    "file": "decode_mesh_vertex_attrs.samt",
+    "shape": [
+      485076,
+      6
+    ],
+    "min": 0.006243931595236063,
+    "max": 0.8823276162147522
+  },
+  "decode_mesh_vertices": {
+    "file": "decode_mesh_vertices.samt",
+    "shape": [
+      485076,
+      3
+    ],
+    "min": -0.49948105216026306,
+    "max": 0.4997897744178772
+  },
+  "decode_mesh_keys": [
+    "face_normal",
+    "faces",
+    "reg_loss",
+    "res",
+    "success",
+    "tsdf_s",
+    "tsdf_v",
+    "vertex_attrs",
+    "vertices"
+  ],
+  "decode_gaussian__features_dc": {
+    "file": "decode_gaussian__features_dc.samt",
+    "shape": [
+      840992,
+      1,
+      3
+    ],
+    "min": -2.234722137451172,
+    "max": 4.700082302093506
+  },
+  "decode_gaussian__features_rest": "None",
+  "decode_gaussian__opacity": {
+    "file": "decode_gaussian__opacity.samt",
+    "shape": [
+      840992,
+      1
+    ],
+    "min": -7.747718334197998,
+    "max": 20.490249633789062
+  },
+  "decode_gaussian__rotation": {
+    "file": "decode_gaussian__rotation.samt",
+    "shape": [
+      840992,
+      4
+    ],
+    "min": -1.223921298980713,
+    "max": 0.687838077545166
+  },
+  "decode_gaussian__scaling": {
+    "file": "decode_gaussian__scaling.samt",
+    "shape": [
+      840992,
+      3
+    ],
+    "min": -20.38768196105957,
+    "max": 1.7758804559707642
+  },
+  "decode_gaussian__xyz": {
+    "file": "decode_gaussian__xyz.samt",
+    "shape": [
+      840992,
+      3
+    ],
+    "min": 0.0023460080847144127,
+    "max": 0.9967373013496399
+  },
+  "decode_gaussian_aabb": {
+    "file": "decode_gaussian_aabb.samt",
+    "shape": [
+      6
+    ],
+    "min": -0.5,
+    "max": 1.0
+  },
+  "decode_gaussian_active_sh_degree": "0",
+  "decode_gaussian_covariance_activation": "<function Gaussian.build_covariance_from_scaling_rotation at 0x7f55141549a0>",
+  "decode_gaussian_device": "cuda",
+  "decode_gaussian_init_params": "{'aabb': [-0.5, -0.5, -0.5, 1.0, 1.0, 1.0], 'sh_degree': 0, 'mininum_kernel_size': 0.0009, 'scaling_bias': 0.004, 'opacity_bias': 0.1, 'scaling_activation': 'softplus'}",
+  "decode_gaussian_inverse_opacity_activation": "<function inverse_sigmoid at 0x7f5514154400>",
+  "decode_gaussian_inverse_scaling_activation": "<function softplus_inverse_scaling_activation at 0x7f5628d07f60>",
+  "decode_gaussian_mininum_kernel_size": "0.0009",
+  "decode_gaussian_opacity_activation": "<built-in method sigmoid of type object at 0x7f57e80b4240>",
+  "decode_gaussian_opacity_bias": {
+    "file": "decode_gaussian_opacity_bias.samt",
+    "shape": [],
+    "min": -2.1972246170043945,
+    "max": -2.1972246170043945
+  },
+  "decode_gaussian_rotation_activation": "<function normalize at 0x7f5737f4ad40>",
+  "decode_gaussian_rots_bias": {
+    "file": "decode_gaussian_rots_bias.samt",
+    "shape": [
+      4
+    ],
+    "min": 0.0,
+    "max": 1.0
+  },
+  "decode_gaussian_scale_bias": {
+    "file": "decode_gaussian_scale_bias.samt",
+    "shape": [],
+    "min": -5.519460201263428,
+    "max": -5.519460201263428
+  },
+  "decode_gaussian_scaling_activation": "<built-in function softplus>",
+  "decode_gaussian_scaling_activation_type": "softplus",
+  "decode_gaussian_scaling_bias": "0.004",
+  "decode_gaussian_sh_degree": "0",
+  "decode_gaussian_keys": [
+    "_features_dc",
+    "_features_rest",
+    "_opacity",
+    "_rotation",
+    "_scaling",
+    "_xyz",
+    "aabb",
+    "active_sh_degree",
+    "covariance_activation",
+    "device",
+    "init_params",
+    "inverse_opacity_activation",
+    "inverse_scaling_activation",
+    "mininum_kernel_size",
+    "opacity_activation",
+    "opacity_bias",
+    "rotation_activation",
+    "rots_bias",
+    "scale_bias",
+    "scaling_activation",
+    "scaling_activation_type",
+    "scaling_bias",
+    "sh_degree"
+  ],
+  "ply": "/tmp/sam3d-release-20260910.DriMmt/raw_export_fixed/official_stages/output_gs.ply",
+  "asset_mincut_candidate_faces": {
+    "file": "asset_mincut_candidate_faces.samt",
+    "shape": [
+      24356
+    ],
+    "dtype": "i32"
+  },
+  "asset_mincut_vertices_zup": {
+    "file": "asset_mincut_vertices_zup.samt",
+    "shape": [
+      12168,
+      3
+    ],
+    "min": -0.4995611011981964,
+    "max": 0.4998987317085266
+  },
+  "asset_mincut_faces": {
+    "file": "asset_mincut_faces.samt",
+    "shape": [
+      24152,
+      3
+    ],
+    "dtype": "i32"
+  },
+  "asset_decimated_vertices_zup": {
+    "file": "asset_decimated_vertices_zup.samt",
+    "shape": [
+      24218,
+      3
+    ],
+    "min": -0.4995611011981964,
+    "max": 0.4998987317085266
+  },
+  "asset_decimated_faces": {
+    "file": "asset_decimated_faces.samt",
+    "shape": [
+      48508,
+      3
+    ],
+    "dtype": "i32"
+  },
+  "asset_decimated_visibility": {
+    "file": "asset_decimated_visibility.samt",
+    "shape": [
+      48508
+    ],
+    "min": 0.0,
+    "max": 0.45900002121925354
+  },
+  "asset_postprocess_vertices": {
+    "file": "asset_postprocess_vertices.samt",
+    "shape": [
+      15792,
+      3
+    ],
+    "min": -0.4995611011981964,
+    "max": 0.4998987317085266
+  },
+  "asset_postprocess_faces": {
+    "file": "asset_postprocess_faces.samt",
+    "shape": [
+      24504,
+      3
+    ],
+    "dtype": "i32"
+  },
+  "asset_uv": {
+    "file": "asset_uv.samt",
+    "shape": [
+      15792,
+      2
+    ],
+    "min": 0.00042158516589552164,
+    "max": 0.9995784163475037
+  },
+  "bake_extrinsics": {
+    "file": "bake_extrinsics.samt",
+    "shape": [
+      100,
+      4,
+      4
+    ],
+    "min": -1.0,
+    "max": 2.000000238418579
+  },
+  "bake_intrinsics": {
+    "file": "bake_intrinsics.samt",
+    "shape": [
+      100,
+      3,
+      3
+    ],
+    "min": 0.0,
+    "max": 1.3737387657165527
+  },
+  "official_pbr_reference": "official_pbr_reference",
+  "official_pbr_glb": "official_pbr_reference/official_pbr.glb",
+  "official_pbr_texture": "official_pbr_reference/base_color.png"
+}

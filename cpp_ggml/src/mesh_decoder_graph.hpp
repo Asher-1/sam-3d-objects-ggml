@@ -20,6 +20,9 @@ struct MeshDecoderGraph {
     const MeshTables* tb = nullptr;
     std::string debug_stage;
     std::string prefix = "meshdec";
+    // CUDA-only, F16-only fast path that reproduces the PyTorch memory-
+    // efficient attention dispatch. Other backends retain the portable graph.
+    bool use_pytorch_cuda_attention = false;
 
     ggml_tensor* x = nullptr;  // (8, N64), token-major input payload
     std::vector<ggml_tensor*> inputs;

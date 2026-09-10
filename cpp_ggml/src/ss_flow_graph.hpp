@@ -27,6 +27,9 @@ struct SsFlowGraph {
     const GGUFModel* m = nullptr;
     ggml_context* ctx() const { return g->ctx(); }
     std::string debug_stage;  // proj_in | block<N> | t_emb
+    // Strict SS parity uses an explicit F32 QK^T -> softmax -> V graph. It is
+    // scoped to this diffusion graph rather than a process-wide diagnostic.
+    bool strict_attention = false;
     std::string prefix = "dit";
     int64_t n_cond_tokens = 7528;  // host sets from the cond SAMT shape
     std::vector<ggml_tensor*> inputs;

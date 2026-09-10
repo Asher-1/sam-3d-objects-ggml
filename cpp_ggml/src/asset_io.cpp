@@ -232,6 +232,10 @@ bool write_pbr_glb(const std::string& path, const NativeMesh& mesh, std::string&
 
     std::vector<uint8_t> png;
     const bool has_texture = !mesh.material.base_color_texture.rgba.empty();
+    if (has_texture && mesh.texcoords.empty()) {
+        error = "GLB base-color texture requires one uv tuple per vertex";
+        return false;
+    }
     if (has_texture && !png_from_rgba(mesh.material.base_color_texture, png, error)) return false;
 
     std::vector<uint8_t> bin;

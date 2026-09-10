@@ -31,6 +31,35 @@ SAM 3D Objects is one part of SAM 3D, a pair of models for object and human mesh
 
 Follow the [setup](doc/setup.md) steps before running the following.
 
+### One-command textured GLB
+
+The repository provides two root launchers for complete image/mask-to-textured
+GLB reconstruction, including mesh cleanup, UVs, 100-view Gaussian observations,
+2500-step texture baking and a standalone base-color PNG:
+
+```bash
+# Official Python; installs its environment when --setup is supplied.
+bash run_python.sh --setup --out-dir output/python
+
+# Native C++/GGML, including CUDA post-processing and embedded texture.
+bash run_ggml.sh --backend cuda --dtype q8_0 \
+  --accept-pbr-licenses --out-dir output/cuda-q8
+
+# Vulkan neural inference with the same CUDA post-processing.
+bash run_ggml.sh --backend vulkan --dtype q8_0 \
+  --accept-pbr-licenses --out-dir output/vulkan-q8
+```
+
+See the [clone-to-run guide](cpp_ggml/README.md#clone-and-bootstrap) for CUDA,
+VTK, OpenCV, model downloads and license prerequisites. Pass `--image`, `--mask`
+and a new `--out-dir` for another object; use `--skip-build` for later native
+runs. Models are not automatically downloaded without the required access.
+Native output is `output.glb` plus `output.base_color.png`; Python output is
+`official_pbr_00.glb` plus `official_pbr_00.base_color.png`. PBR here matches the
+official baked base-color material, not independently predicted metallic,
+roughness or normal maps. Actual parity status is reported below, not implied
+by a successful export.
+
 ## Single or Multi-Object 3D Generation
 
 SAM 3D Objects can convert masked objects in an image, into 3D models with pose, shape, texture, and layout. SAM 3D is designed to be robust in challenging natural images, handling small objects and occlusions, unusual poses, and difficult situations encountered in uncurated natural scenes like this kidsroom:
@@ -82,36 +111,60 @@ As a way to combine the strengths of both **SAM 3D Objects** and **SAM 3D Body**
 condition, SS, SLat and Gaussian stages. It supports CPU, CUDA and Vulkan
 builds and consumes F32, F16, Q8_0 and Q4 GGUF files. The main advantages are
 portable backends, one-patch reproducibility, bounded-memory model streaming,
-and a single raw image-to-Gaussian-PLY benchmark contract shared with the
-official renderer.
+and complete raw image-to-textured-GLB evidence with an independent official
+reference. Vulkan owns neural inference; CUDA owns all PBR post-processing.
 
-The current C++ runtime is not yet an all-native replacement for the official
-image-to-textured-GLB pipeline. The checked-in raw-image benchmark still uses
-official Python for input conditioning and rendering, while C++ produces the
-GGML Gaussian path. A native non-baked mesh GLB export is regression-tested
-against official mesh-decoder tensors, but native mesh decoding, UV unwrap,
-texture baking and mesh cleanup are not complete. The exact boundary and the
-commands to reproduce it are documented in [`cpp_ggml/README.md`](cpp_ggml/README.md).
+The CUDA build also provides a native image-to-textured-PBR-GLB path. It runs
+MoGe preprocessing, GGML condition/SS/SLat/decoder stages, FlexiCubes, VTK and
+MeshFix cleanup, xatlas UVs, 100 Gaussian observations, 2500 Adam/TV texture
+steps and Telea repair in C++. No cuDNN, Python or Torch runtime is loaded by
+this command. The official Python environment remains the independent oracle
+for parity and render comparisons; BF16/SDPA versus GGUF F16/Q8/Q4 arithmetic
+is reported as measured error rather than described as bitwise equality.
 
 ### Measured end-to-end snapshot
 
-The table below is the latest real canonical image/mask run retained in
-[`cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json`](cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json).
-It is deliberately not a marketing claim: rows without a fresh exclusive-GPU
-record are marked pending, and the release gate remains failing when quality or
-latency is outside the contract.
+The [current complete measurement table](cpp_ggml/benchmarks/e2e_comparison/full_glb_current/README.md)
+contains the actual official Python and six native F16/Q8_0/Q4_0 GLBs,
+standalone 1024px PNGs, poses and 60-view final-asset comparisons. Every row
+starts from the kidsroom image and mask 14, seed 42, on an RTX 3060 12 GiB.
+The timer includes process startup, model loading, inference, complete
+100-view/2500-step PBR and GLB/PNG output. External scoring is excluded.
+Vulkan rows include their separate CUDA post-processing process.
 
-| Pipeline | Format | Total image -> Gaussian PLY | Render RGB MAE | Status |
-| --- | --- | ---: | ---: | --- |
-| Official PyTorch | F16 streamed | 75.994 s | 0 (self-reference) | exclusive reference |
-| GGML CUDA | Q8_0 | 72.726 s | 0.01243 | measured; quality/70 s gates pending |
-| GGML Vulkan | Q8_0 | not freshly measured | not measured | idle-GPU run required |
-| GGML CUDA | Q4 retained best milestone | 111.273 s | 0.04069 | historical; gate failed |
+| Pipeline | Complete cold GLB (s) | Final GLB RGB MAE | Silhouette IoU |
+| --- | ---: | ---: | ---: |
+| PyTorch staged mixed | 234.303 | reference | reference |
+| CUDA F16 | 252.136 | 0.02626 | 0.97719 |
+| CUDA Q8_0 | 216.164 | 0.02810 | 0.97386 |
+| CUDA Q4_0 | 215.338 | 0.04803 | 0.92415 |
+| Vulkan F16 + CUDA PBR | 236.220 | 0.02566 | 0.97676 |
+| Vulkan Q8_0 + CUDA PBR | 223.370 | 0.02732 | 0.97504 |
+| Vulkan Q4_0 + CUDA PBR | 224.024 | 0.05115 | 0.91703 |
 
-These are full image-to-PLY timings, not isolated operator timings. The latest
-render comparison and latency/quality plots are linked from
-[`cpp_ggml/benchmarks/README.md`](cpp_ggml/benchmarks/README.md). Re-run the
-matrix after reserving an idle GPU to refresh all formats and both backends.
+The official row was remeasured after fixing unused-weight residency before
+FlexiCubes; the six native raw rows are unchanged. Q8/Q4 are faster than this
+official cold process, while both F16 rows are slower. All native rows exceed
+70 seconds. Vulkan Q4 is not faster than Q8 in this single-sample matrix.
+The independently captured official stage reference differs from the timed
+official output by RGB MAE `0.00573`, IoU `0.99913`; reference agreement is
+measured separately, not assumed exact.
+
+![Complete image-to-textured-GLB latency](cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.png)
+
+Only one complete run is recorded per row. A successful export is not an
+accuracy pass or evidence of stable sub-70-second performance. The
+[release gate](cpp_ggml/benchmarks/e2e_comparison/e2e_gate_current.json)
+records remaining numerical, timing, repeatability and acceptance-coverage
+gaps; official hot-session and native cold-process numbers are not mixed.
+
+The release audit corrected a missing export-time UV V flip and the native
+material's metallic factor. With identical official intermediate inputs, the
+corrected native GLB has bitwise-identical mesh/UVs and a measured 60-view
+RGB MAE of `0.001192`, IoU `1.0`. That is a controlled post-processing result,
+not a claim that raw neural inference is identical. Fresh raw outputs after
+the fix, current charts and the remaining-issues analysis are linked from
+[benchmarks](cpp_ggml/benchmarks/README.md).
 
 ### Model families and practical advantages
 
@@ -120,10 +173,10 @@ single precision policy without changing the graph:
 
 | GGUF family | Pipeline role | Practical advantage |
 | --- | --- | --- |
-| `ss_generator-*`, `ss_decoder-*` | sparse structure and occupancy | controls the geometry support; F16 is the accuracy reference, Q8_0 is the current speed/quality compromise, and Q4 is the compact experimental path |
+| `ss_generator-*`, `ss_decoder-*` | sparse structure and occupancy | controls geometry support; F16 is the native floating-point baseline, Q8_0 reduces weight storage, and Q4 is the compact experimental path |
 | `slat_generator-*` | structured latent diffusion | keeps the long latent denoising stage in the same native GGML graph across CPU, CUDA and Vulkan |
 | `slat_decoder_gs-*`, `slat_decoder_gs_4-*` | Gaussian attribute decoding | produces the Gaussian representation used by the official camera renderer |
-| `slat_decoder_mesh-*` | mesh decoding | enables the official mesh branch when the Python post-processing path is selected |
+| `slat_decoder_mesh-*` | mesh decoding | native FlexiCubes mesh feeds C++ cleanup, xatlas UVs and CUDA texture baking |
 
 Every family is available in the repository's F32/F16/Q8_0 and Q4 variants
 where conversion supports that tensor layout. The runtime keeps the model
@@ -142,7 +195,9 @@ it is a separate model family and must not be substituted for SAM 3D weights.
 Use the repository helper to place SAM 3D files in the canonical directory:
 
 ```bash
-bash cpp_ggml/scripts/download_gguf.sh
+bash cpp_ggml/scripts/download_gguf.sh --dtype q8_0
+SAM3D_PYTHON=/path/to/sam3d-objects/bin/python \
+  bash cpp_ggml/scripts/prepare_moge_gguf.sh
 ```
 
 For the complete clone, environment, build, inference and regression workflow,

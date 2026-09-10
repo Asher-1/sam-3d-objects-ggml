@@ -1,72 +1,165 @@
-# End-to-end benchmark evidence
+# Complete Textured GLB Benchmarks
 
-This directory retains only full image-and-mask -> GGML inference -> Gaussian
-PLY -> official 60-view render evidence. Operator-only profiles, intermediate
-latents, and superseded backend experiments are intentionally removed because
-they cannot establish an end-to-end release result.
+The current snapshot is the **2026-09-10 raw image/mask-to-textured-GLB** run.
+The release gate is **FAIL**, not a claim of official numerical parity or
+stable 70-second reconstruction. See the [remaining-issues audit](../docs/E2E_ROOT_CAUSE_AND_IMPLEMENTATION_PLAN.md).
 
-## Current snapshot
+## Current Evidence
 
-The current machine-readable report is
-[`e2e_comparison/e2e_latency_current.json`](e2e_comparison/e2e_latency_current.json).
-Its latency and quality plots are
-[`e2e_comparison/e2e_latency_current.png`](e2e_comparison/e2e_latency_current.png)
-and
-[`e2e_comparison/e2e_metrics_current.png`](e2e_comparison/e2e_metrics_current.png).
-The latest complete render comparison is
-[`e2e_comparison/render_cuda_q8_current/side_by_side.png`](e2e_comparison/render_cuda_q8_current/side_by_side.png),
-with per-frame metrics in
-[`e2e_comparison/render_cuda_q8_current/render_metrics.json`](e2e_comparison/render_cuda_q8_current/render_metrics.json).
+- [Seven-pipeline measurement table, downloadable GLBs/PNGs and six comparisons](e2e_comparison/full_glb_current/README.md)
+- [Complete timing and quality JSON](e2e_comparison/e2e_latency_current.json)
+- [Machine-readable failure reasons](e2e_comparison/e2e_gate_current.json)
+- [Original commands, durations and return codes](e2e_comparison/full_glb_current/full_e2e_summary.json)
+- [Model, executable and patch provenance](e2e_comparison/full_glb_current/provenance.json)
 
-| Runner | Format | E2E latency | Render RGB MAE | Provenance | Gate status |
-| --- | --- | ---: | ---: | --- | --- |
-| Official PyTorch | F16 streamed | 75.994 s | 0 (self-reference) | exclusive GPU | reference |
-| GGML CUDA | Q8_0 | 72.726 s | 0.012434 | exclusive GPU | fails MAE <= 0.01 and 70 s |
-| GGML Vulkan | Q8_0 | not measured | not measured | shared GPU observed | pending rerun |
-| GGML CUDA | Q4 retained best | 111.273 s (historical) | 0.040692 | historical, pre-current hash | fails; rerun required |
+![Complete image-to-textured-GLB cold latency](e2e_comparison/e2e_latency_current.png)
 
-Only the first two rows have fresh exclusive-GPU evidence in this checkout.
-The release verifier deliberately requires all six CUDA/Vulkan F16, Q8_0 and
-Q4 rows, so the current report remains a failing release signal until the
-missing rows are regenerated on an idle GPU and meet the quality, latency and
-relative-speed contract.
+![Final GLB multiview quality](e2e_comparison/e2e_metrics_current.png)
 
-## Reproduce
+All rows use kidsroom mask 14, seed 42, RTX 3060 12 GiB, strict SS attention
+and native sampling. Native candidates do not replay official noise, support,
+pose or latent. CUDA runs the whole native path; Vulkan owns inference and
+hands immutable Gaussian/raw-mesh artifacts to a separate CUDA PBR process.
+All generative stages, including the mesh decoder, use the indicated GGUF
+family; MoGe stays F16. Q4 means Q4_0 here, not the separate retained SS Q4_K
+sensitive-layer candidate described in [q4_best](q4_best/README.md).
 
-All model files belong in [`../models/gguf/`](../models/gguf/); no GGUF file is
-stored under `benchmarks/`. From the repository root:
+The workload includes mesh cleanup, xatlas UV, 100 Gaussian views at 1024px,
+2500 Adam/TV updates, Telea, GLB output and a standalone 1024px base-color PNG.
+The timer starts at subprocess launch and ends after successful exit. Imports,
+initialization, weight loading and file I/O are included; external comparison
+rendering is excluded. Each row has **one** sample. Exclusive-GPU receipts
+check other NVIDIA compute clients at each launch, not continuous isolation
+from the desktop or every possible graphics client.
+
+The official reference uses the documented streamed mixed BF16/F16/native
+policy to fit this GPU. Its hot-session measurement remains in JSON but is
+not mixed into the cold-process chart. The independently captured official
+quality GLB is retained separately from the timed official GLB. This is not a
+claim of unchanged full-F32 official inference or bitwise parity.
+
+The two official outputs are also compared directly:
+[timed-versus-stage diagnostic](e2e_comparison/full_glb_current/official_reference_agreement/glb_render_metrics.json).
+Their measured RGB MAE is `0.0057263`, IoU `0.9991254`; neither identical
+reference outputs nor a stable tolerance can be assumed from one pair.
+
+The official row was remeasured after releasing unused SLat weights before
+FlexiCubes to fix a root-launcher OOM. Its current complete cold time is
+234.303 seconds; both the original and refreshed measurement receipts are
+preserved. Native binaries did not change, so their six raw measurements
+remain unchanged. Q8/Q4 are faster than this reference; both F16 rows are
+slower. No row has been promoted to stable or numerically accepted.
+
+Every final GLB is compared over 60 fixed reference-world camera views at
+512px. Foreground linear RGB, silhouette, depth and normal errors are reported.
+These are final-asset comparisons, not PLY pictures. The common Lambertian
+renderer does not model complete glTF metallic/roughness response; material
+fields are inspected independently. The audit identified and corrected a
+missing export-time V flip and mismatched metallicFactor. The current archive
+is regenerated from raw input after that fix, not edited GLB JSON. The files
+can also be inspected in a normal GLB viewer.
+
+## Reproduce And Publish
+
+Deploy dependencies and models using [the main guide](../README.md). To
+generate just one complete model from the repository root:
 
 ```bash
-SAM3D_PYTHON=/absolute/path/to/sam3d-objects/bin/python \
-  bash cpp_ggml/scripts/quickstart.sh cuda matrix
+bash run_python.sh --python /absolute/path/to/sam3d-objects/bin/python
+bash run_ggml.sh --backend cuda --dtype q8_0 --accept-pbr-licenses
+bash run_ggml.sh --backend vulkan --dtype q8_0 --accept-pbr-licenses
 ```
 
-The matrix runs the complete image/mask-to-PLY path and the same official
-renderer for every format/backend. It records GPU exclusivity, model hashes,
-stage timings, render MAE and PSNR. Rebuild plots from a report with:
+For a fresh long raw regression, reserve an idle GPU and use a **new** work
+directory. The command builds required targets and runs the official oracle,
+controlled postprocessing, all six complete raw GLB candidates and the
+additional neural diagnostic matrix:
 
 ```bash
-python3 cpp_ggml/scripts/plot_e2e_latency.py \
+export SAM3D_PYTHON=/absolute/path/to/sam3d-objects/bin/python
+export SAM3D_WORK_DIR=/tmp/sam3d-full-e2e-new
+SAM3D_ACCEPT_PBR_LICENSES=1 SAM3D_MEASURE_OFFICIAL_FULL_GLB=1 \
+  bash cpp_ggml/scripts/quickstart.sh cuda full-e2e
+```
+
+Set `SAM3D_SKIP_NEURAL_DIAGNOSTIC_MATRIX=1` to omit only the extra neural-only
+benchmark. All six complete raw GLB reconstructions and their Gaussian/final
+GLB comparisons still run. The post-export-fix snapshot uses this option;
+the earlier run already executed the separate neural diagnostic matrix.
+
+The nonzero return code records a failed gate; it does not discard measured
+assets. Do not wrap it in `|| true` in acceptance CI. Once the command has
+finished, publish the compact results to a new directory even when parity
+failed:
+
+```bash
+"$SAM3D_PYTHON" cpp_ggml/scripts/publish_full_e2e.py \
+  --summary "$SAM3D_WORK_DIR/full_e2e_summary.json" \
+  --destination /tmp/sam3d-full-e2e-published
+```
+
+This writes the seven GLB/PNG/pose triples, comparison images/GIFs, source
+receipts, current JSON, gate and both charts. It refuses an existing archive.
+The final snapshot captures input, binary, model and patch hashes before any
+measured subprocess. Older summaries without that field receive explicitly
+labelled publication-time provenance, never a fabricated pre-run snapshot.
+
+Final numerical budgets must be chosen and documented **before acceptance**,
+not adjusted to the candidate's errors. `quickstart.sh` forwards these
+environment variables to the full runner:
+
+| Scope | Variables |
+| --- | --- |
+| Final rendered GLB | `SAM3D_MAX_GLB_RGB_MAE_LINEAR`, `SAM3D_MIN_GLB_MASK_IOU`, `SAM3D_MAX_GLB_NORMAL_ANGLE_DEG`, `SAM3D_MAX_GLB_DEPTH_MAE_NDC` |
+| Controlled texture | `SAM3D_MAX_TEXTURE_MAE_U8`, `SAM3D_MAX_TEXTURE_RMSE_U8`, `SAM3D_MAX_TEXTURE_ABS_U8` |
+| Controlled normals | `SAM3D_MAX_NORMAL_ANGLE_DEG` |
+
+Unconfigured budgets mean measurement only. Existing neural MAE <= 0.01 is
+not relaxed. Optional calibrated operator/trajectory checks are documented in
+[the runtime guide](../README.md). Native hot-session timing, sufficient
+repeats and numerical parity remain required but missing; setting these budget
+variables alone cannot make the full release gate pass.
+
+Regenerate charts and validate archived content without rerunning inference:
+
+```bash
+"$SAM3D_PYTHON" cpp_ggml/scripts/plot_e2e_latency.py \
   --input cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json \
   --output cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.png \
   --metrics-output cpp_ggml/benchmarks/e2e_comparison/e2e_metrics_current.png
-python3 cpp_ggml/scripts/validate_e2e_benchmark.py \
+"$SAM3D_PYTHON" cpp_ggml/scripts/validate_e2e_benchmark.py \
   --input cpp_ggml/benchmarks/e2e_comparison/e2e_latency_current.json \
   --output cpp_ggml/benchmarks/e2e_comparison/e2e_gate_current.json
 ```
 
-The verifier exits nonzero for missing, shared-GPU, over-70-second, or
-render-MAE-over-0.01 rows. That failure is expected for the incomplete current
-snapshot and is kept visible rather than replaced with partial module timings.
+The validator rejects missing or changed assets, nonfinite values, wrong
+timer/sampling scope, missing budgets, unpassed quality and incomplete
+coverage. It also reports the 70-second, relative-PyTorch and Q4/Q8 requirements
+and missing repeated-run evidence. Synthetic validator tests are not model
+parity tests.
 
-## Reproducibility
+## Retention And Reproducibility
 
-GGML source changes are delivered by the single patch
-[`third_party/ggml-patches/0001-sam3d-ggml-combined.patch`](../third_party/ggml-patches/0001-sam3d-ggml-combined.patch)
-and applied automatically during CMake configuration. Verify its replay before
-benchmarking:
+All GGUF files live in `../models/gguf/`. The current archive keeps complete
+viewable assets and small receipts, not giant latent/raster/observation dumps.
+Historical normal-attention GLBs, old raw runs and neural-only presentation
+images are superseded by this snapshot. The retained `data/e2e` directory is
+a test fixture, not a current performance result. The Q4 milestone retains
+its small provenance/strategy receipts, not obsolete output images or models.
+
+Original receipts may mention removed scratch paths; archived model links
+and SHA-256 values are authoritative. Regenerate intermediate tensors through
+the raw command when needed. No unrelated user temporary directories are
+included in benchmark cleanup.
+
+GGML changes are delivered by the single
+[combined patch](../third_party/ggml-patches/0001-sam3d-ggml-combined.patch),
+automatically applied by CMake. Before measuring:
 
 ```bash
 bash cpp_ggml/scripts/apply_ggml_patches.sh --check
-git -C cpp_ggml/third_party/ggml diff --check
+python3 cpp_ggml/scripts/test_ggml_patch_delivery.py
 ```
+
+The clean-clone test verifies exact final-tree equivalence, idempotency,
+read-only checking and rejection of unrecorded ggml source edits.

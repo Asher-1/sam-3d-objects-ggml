@@ -442,6 +442,12 @@ def convert_slat_decoder_gs(ckpt_dir, out_dir, dtype, name="slat_decoder_gs"):
     w.add_string("gsdec.attn_mode", yconf.get("attn_mode", "swin"))
     w.add_uint32("gsdec.window_size", int(yconf.get("window_size", 8)))
     w.add_uint32("gsdec.qk_rms_norm", int(yconf.get("qk_rms_norm", False)))
+    # The official decoder keeps input/output SparseLinear in F32 and casts
+    # only the Transformer torso to F16.  Persist that execution contract so
+    # a GGUF is self-describing rather than relying on a model-name default.
+    w.add_uint32("gsdec.use_fp16", int(yconf.get("use_fp16", False)))
+    if yconf.get("use_fp16", False):
+        w.add_string("gsdec.precision_contract", "official-use-fp16-torso-v1")
     rep = yconf["representation_config"]
     w.add_uint32("gsdec.num_gaussians", int(rep["num_gaussians"]))
     w.add_float32("gsdec.voxel_size", float(rep["voxel_size"]))
@@ -452,9 +458,18 @@ def convert_slat_decoder_gs(ckpt_dir, out_dir, dtype, name="slat_decoder_gs"):
     for k in ("_xyz", "_features_dc", "_opacity", "_scaling", "_rotation"):
         w.add_float32(f"gsdec.lr.{k}", float(rep["lr"][k]))
     w.add_float32("gsdec.filter_3d", float(rep["3d_filter_kernel_size"]))
+    # ``SparseTransformerBase.convert_to_fp16`` affects only ``blocks``.
+    # Input/output SparseLinear stay F32 in the official model.  Retain those
+    # sensitive projections at F32 for every deployment quantization; F16
+    # GGUFs store the torso itself in F16, while Q8/Q4 retain their requested
+    # compressed torso representation.
+    official_mixed_fp16 = bool(yconf.get("use_fp16", False))
     n = 0
     for key, tensor in sd.items():
-        write_tensor(w, "gsdec." + key, tensor, dtype)
+        storage_dtype = None
+        if official_mixed_fp16 and not key.startswith("blocks."):
+            storage_dtype = "f32"
+        write_tensor(w, "gsdec." + key, tensor, dtype, storage_dtype=storage_dtype)
         n += 1
     finish_gguf(w)
     return out_path, n

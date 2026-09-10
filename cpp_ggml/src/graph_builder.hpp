@@ -52,7 +52,7 @@ ggml_tensor* gb_self_attention_core(ggml_context* ctx, ggml_tensor* qkv, int n_h
 // to_kv (2C, Cctx). qk_rms handled by caller via gb_self_attention_core-like
 // ops; this helper expects q and kv already projected and reshaped.
 ggml_tensor* gb_attention(ggml_context* ctx, ggml_tensor* q, ggml_tensor* k, ggml_tensor* v,
-                          float scale, bool use_flash);
+                          float scale, bool use_flash, bool force_manual = false);
 
 // FFN: Linear -> GELU -> Linear (default tanh approximation; erf = exact)
 ggml_tensor* gb_ffn_gelu(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w0, ggml_tensor* b0,

@@ -11,3 +11,4 @@ benchmarks/data/e2e/*
 !benchmarks/data/e2e/ss_occ_f32.samt
 *.ply
 *.bin
+*.glb

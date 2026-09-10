@@ -1,0 +1,62 @@
+Internal ctest changing into directory: /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr
+Test project /home/ludahai/develop/code/github/dl/sam-3d-objects-ggml/cpp_ggml/build-cuda-pbr
+      Start  1: sam3d_ggml_patch_replay
+ 1/28 Test  #1: sam3d_ggml_patch_replay ...........................   Passed    0.16 sec
+      Start  2: sam3d_ggml_cli_help
+ 2/28 Test  #2: sam3d_ggml_cli_help ...............................   Passed    0.07 sec
+      Start  3: sam3d_ggml_native_glb_asset
+ 3/28 Test  #3: sam3d_ggml_native_glb_asset .......................   Passed    0.00 sec
+      Start  4: sam3d_ggml_native_image_preprocess
+ 4/28 Test  #4: sam3d_ggml_native_image_preprocess ................   Passed    0.00 sec
+      Start  5: sam3d_ggml_native_moge_inference_contract
+ 5/28 Test  #5: sam3d_ggml_native_moge_inference_contract .........   Passed    0.04 sec
+      Start  6: sam3d_ggml_mesh_subdivide_tables
+ 6/28 Test  #6: sam3d_ggml_mesh_subdivide_tables ..................   Passed    0.00 sec
+      Start  7: sam3d_ggml_flexicubes_synthetic_mesh
+ 7/28 Test  #7: sam3d_ggml_flexicubes_synthetic_mesh ..............   Passed    0.00 sec
+      Start  8: sam3d_ggml_xatlas_uv
+ 8/28 Test  #8: sam3d_ggml_xatlas_uv ..............................   Passed    0.01 sec
+      Start  9: sam3d_ggml_native_mesh_rasterizer
+ 9/28 Test  #9: sam3d_ggml_native_mesh_rasterizer .................   Passed    0.15 sec
+      Start 10: sam3d_ggml_native_pose_decoder
+10/28 Test #10: sam3d_ggml_native_pose_decoder ....................   Passed    0.00 sec
+      Start 11: sam3d_ggml_dtype_contract
+11/28 Test #11: sam3d_ggml_dtype_contract .........................   Passed    0.03 sec
+      Start 12: sam3d_ggml_vtk_mesh_simplify
+12/28 Test #12: sam3d_ggml_vtk_mesh_simplify ......................   Passed    0.02 sec
+      Start 13: sam3d_ggml_native_telea_inpaint
+13/28 Test #13: sam3d_ggml_native_telea_inpaint ...................   Passed    0.01 sec
+      Start 14: sam3d_ggml_native_gaussian_renderer
+14/28 Test #14: sam3d_ggml_native_gaussian_renderer ...............   Passed    0.13 sec
+      Start 15: sam3d_ggml_native_texture_baker
+15/28 Test #15: sam3d_ggml_native_texture_baker ...................   Passed    0.20 sec
+      Start 16: sam3d_ggml_native_pbr_pipeline
+16/28 Test #16: sam3d_ggml_native_pbr_pipeline ....................   Passed    0.21 sec
+      Start 17: sam3d_ggml_meshfix_boundary_repair
+17/28 Test #17: sam3d_ggml_meshfix_boundary_repair ................   Passed    0.00 sec
+      Start 18: sam3d_ggml_python_scripts
+18/28 Test #18: sam3d_ggml_python_scripts .........................   Passed    0.13 sec
+      Start 19: sam3d_ggml_flexicubes_table_generation
+19/28 Test #19: sam3d_ggml_flexicubes_table_generation ............   Passed    0.05 sec
+      Start 20: sam3d_ggml_trajectory_validation
+20/28 Test #20: sam3d_ggml_trajectory_validation ..................   Passed    0.15 sec
+      Start 21: sam3d_ggml_full_e2e_report_validation
+21/28 Test #21: sam3d_ggml_full_e2e_report_validation .............   Passed    0.31 sec
+      Start 22: sam3d_ggml_clean_patch_delivery
+22/28 Test #22: sam3d_ggml_clean_patch_delivery ...................   Passed    1.66 sec
+      Start 23: sam3d_ggml_native_mesh_asset
+23/28 Test #23: sam3d_ggml_native_mesh_asset ......................   Passed    0.27 sec
+      Start 24: sam3d_native_cuda_no_cudnn
+24/28 Test #24: sam3d_native_cuda_no_cudnn ........................   Passed    0.05 sec
+      Start 25: sam3d_ggml_native_pytorch_cuda_rng
+25/28 Test #25: sam3d_ggml_native_pytorch_cuda_rng ................   Passed    1.74 sec
+      Start 26: sam3d_ggml_native_pytorch_cuda_randperm
+26/28 Test #26: sam3d_ggml_native_pytorch_cuda_randperm ...........   Passed    2.09 sec
+      Start 27: sam3d_ggml_native_pytorch_coordinate_downsample
+27/28 Test #27: sam3d_ggml_native_pytorch_coordinate_downsample ...   Passed    2.02 sec
+      Start 28: sam3d_ggml_portable_philox_rng
+28/28 Test #28: sam3d_ggml_portable_philox_rng ....................   Passed    0.34 sec
+
+100% tests passed, 0 tests failed out of 28
+
+Total Test time (real) =   9.88 sec

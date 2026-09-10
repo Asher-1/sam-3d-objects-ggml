@@ -12,11 +12,14 @@ hooked at every stage the C++ graph debugs: input_layer, each io res block
 (pre/post downsample), APE, block0 / block23, out blocks, final feats.
 """
 import argparse
+import json
 import os
 import struct
 
 import numpy as np
 import torch
+
+from gguf_torch_loader import replace_backbone_from_gguf
 
 SAMT_MAGIC = b"SAMT"
 
@@ -49,6 +52,9 @@ def main():
     ap.add_argument("--out-dir", default="/tmp/slat_dbg")
     ap.add_argument("--t", type=float, default=0.0)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--gguf",
+                    help=("optional generator GGUF; replaces every reverse_fn.backbone weight "
+                          "with its exact GGUF dequantization before the Torch reference"))
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
@@ -64,6 +70,14 @@ def main():
     sd = sd.get("state_dict", sd)
     gen_sd = {k[len("_base_models.generator."):]: v for k, v in sd.items()
               if k.startswith("_base_models.generator.")}
+    del sd
+    if args.gguf:
+        weight_report = replace_backbone_from_gguf(gen_sd, args.gguf)
+        with open(os.path.join(args.out_dir, "reference_weight_scope.json"), "w", encoding="utf-8") as stream:
+            json.dump(weight_report, stream, indent=2)
+            stream.write("\n")
+        print("[ref] same-GGUF backbone loaded: "
+              f"{weight_report['backbone_tensors_loaded']} tensors from {weight_report['gguf']}")
     missing, unexpected = gen.load_state_dict(gen_sd, strict=False)
     print(f"[ref] slat generator loaded: missing={len(missing)} unexpected={len(unexpected)}")
     gen = gen.to(args.device).eval()

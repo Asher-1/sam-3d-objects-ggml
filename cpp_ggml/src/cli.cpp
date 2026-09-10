@@ -12,17 +12,32 @@
 #include "ss_decoder_graph.hpp"
 #include "dino_graph.hpp"
 #include "moge_graph.hpp"
+#include "moge_inference.hpp"
+#include "pose_decoder.hpp"
 #include "pointpatch_graph.hpp"
 #include "ss_flow_graph.hpp"
 #include "slat_flow_graph.hpp"
 #include "gs_decoder_graph.hpp"
 #include "flexicubes.hpp"
 #include "mesh_postprocess.hpp"
+#include "mesh_rasterizer.hpp"
+#if defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+#include "mesh_rasterizer_cuda.hpp"
+#endif
 #include "mesh_uv.hpp"
 #include "mesh_decoder_graph.hpp"
+#include "mesh_decoder_runner.hpp"
+#include "pytorch_philox_rng.hpp"
+#if defined(SAM3D_USE_CUDA)
+#include "pytorch_cuda_rng.hpp"
+#endif
 #if defined(SAM3D_NATIVE_PBR_CUDA)
 #include "gaussian_renderer.hpp"
 #include "texture_inpaint.hpp"
+#if defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+#include "texture_baker.hpp"
+#include "native_pbr_pipeline.hpp"
+#endif
 #endif
 #include "sparse_ops.hpp"
 #include "graph_builder.hpp"
@@ -32,7 +47,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <limits>
+#include <memory>
 #include <vector>
 
 using namespace sam3d;
@@ -46,18 +63,41 @@ static void print_usage() {
             "  decode-ss --model <ss_decoder.gguf> --input <latent.bin> [--out out.bin]\n"
             "            [--backend auto|cpu|cuda|vulkan] [--threads N]\n"
             "            [--warmup N] [--iters N] [--json out.jsonl]\n"
-            "  e2e|run --model <models_dir> <condition_dir> --out <out.ply>\n"
+            "  gs-decode --model <slat_decoder_gs.gguf> <e2e_dir> <out_dir>\n"
+            "            decode frozen slat_feats_final.samt and slat_coords.samt\n"
+            "  e2e|run --model <models_dir> <condition_dir> --out <out.ply> [--pbr-out <asset.glb>]\n"
+            "            [--pose-out <pose.json> --dtype-contract-out <contract.json>]\n"
             "            [--backend cpu|cuda|vulkan] [--seed N] [--threads N]\n"
+            "  image-to-3d --image <image> --out <out.ply> [--mask <mask.png>]\n"
+            "              [--model <models_dir> --moge-model <moge.gguf> --pbr-out <asset.glb>]\n"
+            "              [--mesh-vertices-out <vertices.samt> --mesh-faces-out <faces.samt>]\n"
+            "              [--pose-out <pose.json> --dtype-contract-out <contract.json>]\n"
+            "              [--conditions-out <directory> --noise-dir <official-stage-dir>]\n"
+            "              [--backend cpu|cuda|vulkan]\n"
+            "              [--dtype f16|q8_0|q4_0 --ss-attention normal|strict --seed N --threads N]\n"
+            "  pose-decode --rotation-6d <tensor.samt> --log-scale <tensor.samt>\n"
+            "              --translation <tensor.samt> --log-translation-scale <tensor.samt>\n"
+            "              --scene-scale <tensor.samt> --scene-shift <tensor.samt> --out <pose.json>\n"
+            "  rng-dump --seed N --sizes N,N,... --out-dir <directory>\n"
+            "           [--implementation auto|cuda|portable] [--distribution-blocks N]\n"
+            "           [--randperm-size N]\n"
+            "  coords-downsample --input <coords.samt> --out <coords.samt> --seed N\n"
+            "           --distribution-blocks N --normal-draws N,N,...\n"
+            "           [--max-coords N --downsample-factor N]\n"
             "  moge-smoke --model <moge.gguf> [--backend cpu|cuda|vulkan]\n"
             "             [--input image.png] [--width N] [--height N] [--threads N]\n"
+            "  moge-infer --model <moge.gguf> --input <image> --out <prefix>\n"
+            "             [--backend cpu|cuda|vulkan] [--num-tokens N] [--threads N]\n"
+            "             [--force-projection] [--no-apply-mask] [--dump-intermediates] [--dump-blocks]\n"
             "  preprocess-conditions --image <image> --pointmap <pointmap.samt> --out-dir <dir>\n"
             "             [--mask <binary-mask.png>] [--decoded-rgb-out <image.samt>]\n"
             "  mesh-export --vertices <vertices.samt> --faces <faces.samt>\n"
-            "              [--attrs <vertex_attrs.samt>] --out <asset.glb>\n"
+            "              [--attrs <vertex_attrs.samt> | --uv <uv.samt> --texture <base_color.png>]\n"
+            "              --out <asset.glb>\n"
             "  mesh-decode --model <slat_decoder_mesh.gguf> --input <slat_feats.samt>\n"
             "              --coords <slat_coords.samt> --out <cube_features.samt>\n"
             "              [--coords-out <subdivided_coords.samt>] [--stage input_layer|blockN|upsampleN]\n"
-            "              [--backend cpu|cuda|vulkan]\n"
+            "              [--backend cpu|cuda|vulkan] [--portable-attention]\n"
             "  mesh-extract --features <cube_features.samt> --coords <cube_coords.samt>\n"
             "               --out <asset.glb> [--resolution N] [--vertices-out <vertices.samt>]\n"
             "               [--faces-out <faces.samt>] [--attrs-out <vertex_attrs.samt>]\n"
@@ -65,6 +105,15 @@ static void print_usage() {
             "  mesh-postprocess --vertices <vertices.samt> --faces <faces.samt>\n"
             "                   --vertices-out <vertices.samt> --faces-out <faces.samt>\n"
             "                   [--target-reduction 0.95 --visibility <frequency.samt>]\n"
+            "                   [--native-visibility --visibility-views 1000]\n"
+            "                   [--visibility-resolution 1024]\n"
+            "  mesh-visibility --vertices <vertices.samt> --faces <faces.samt> --out <frequency.samt>\n"
+            "                  [--views 1000] [--resolution 1024]\n"
+            "                  [--extrinsics <cameras.samt> --intrinsics <cameras.samt>]\n"
+            "                  [--view <cameras.samt> --projection <cameras.samt>]\n"
+            "  mesh-camera-dump --extrinsics-out <extrinsics.samt> --intrinsics-out <intrinsics.samt>\n"
+            "                   [--views-out <views.samt> --projections-out <projections.samt>]\n"
+            "                   [--views 1000]\n"
             "  mesh-filter-visibility --vertices <vertices.samt> --faces <faces.samt>\n"
             "                         --visibility <frequency.samt>\n"
             "                         --vertices-out <vertices.samt> --faces-out <faces.samt>\n"
@@ -80,14 +129,282 @@ static void print_usage() {
             "               [--extrinsics <cameras.samt> --intrinsics <cameras.samt>]\n"
             "  texture-inpaint --texture <base_color.png> --mask <holes.png> --out <repaired.png>\n"
             "                  [--radius 3]\n"
+            "  texture-bake --vertices <vertices.samt> --faces <faces.samt> --uv <uv.samt>\n"
+            "               --observations-dir <views_dir> --extrinsics <cameras.samt>\n"
+            "               --intrinsics <cameras.samt> --out <base_color.png>\n"
+            "               [--texture-size 1024 --steps 2500 --seed 0 --holes-out <holes.png>]\n"
+            "               [--no-inpaint --raw-texture-out <texture.samt>]\n"
+            "  texture-raster --vertices <vertices.samt> --faces <faces.samt> --uv <uv.samt>\n"
+            "                 --extrinsics <cameras.samt> --intrinsics <cameras.samt>\n"
+            "                 --view-index N --uv-out <uv.samt> --uv-dr-out <uv_dr.samt>\n"
+            "                 --coverage-out <coverage.samt> [--resolution 1024]\n"
+            "  pbr-assemble --vertices <vertices.samt> --faces <faces.samt> --ply <output_gs.ply>\n"
+            "               --out <asset.glb> [--already-clean] [--views 100 --resolution 1024]\n"
+            "               [--texture-size 1024 --steps 2500 --seed 0]\n"
             "\n"
-            "Use scripts/run_image_to_3d.py for the raw-image E2E benchmark.\n");
+            "Use scripts/run_image_to_3d.py --native-image-input for raw-image E2E.\n");
+}
+
+static int cmd_rng_dump(int argc, char** argv) {
+    uint64_t seed = 42;
+    std::string sizes_text;
+    std::string output_dir;
+    std::string implementation = "auto";
+    uint32_t distribution_blocks = 0;
+    size_t randperm_size = 0;
+    for (int index = 0; index < argc; ++index) {
+        const char* argument = argv[index];
+        if (!strcmp(argument, "--seed") && index + 1 < argc) {
+            seed = strtoull(argv[++index], nullptr, 10);
+        } else if (!strcmp(argument, "--sizes") && index + 1 < argc) {
+            sizes_text = argv[++index];
+        } else if (!strcmp(argument, "--out-dir") && index + 1 < argc) {
+            output_dir = argv[++index];
+        } else if (!strcmp(argument, "--implementation") && index + 1 < argc) {
+            implementation = argv[++index];
+        } else if (!strcmp(argument, "--distribution-blocks") && index + 1 < argc) {
+            char* end = nullptr;
+            const unsigned long parsed = strtoul(argv[++index], &end, 10);
+            if (end == argv[index] || *end != '\0' || parsed == 0 ||
+                parsed > std::numeric_limits<uint32_t>::max()) {
+                fprintf(stderr, "rng-dump: --distribution-blocks must be a positive uint32\n");
+                return 2;
+            }
+            distribution_blocks = static_cast<uint32_t>(parsed);
+        } else if (!strcmp(argument, "--randperm-size") && index + 1 < argc) {
+            char* end = nullptr;
+            const unsigned long long parsed = strtoull(argv[++index], &end, 10);
+            if (end == argv[index] || *end != '\0' || parsed == 0 ||
+                parsed > static_cast<unsigned long long>(std::numeric_limits<int>::max())) {
+                fprintf(stderr, "rng-dump: --randperm-size must be a positive int32\n");
+                return 2;
+            }
+            randperm_size = static_cast<size_t>(parsed);
+        } else {
+            fprintf(stderr, "rng-dump: unknown or incomplete argument: %s\n", argument);
+            return 2;
+        }
+    }
+    if (sizes_text.empty() || output_dir.empty()) {
+        fprintf(stderr, "rng-dump requires --sizes and --out-dir\n");
+        return 2;
+    }
+    if (implementation != "auto" && implementation != "cuda" && implementation != "portable") {
+        fprintf(stderr, "rng-dump: --implementation must be auto, cuda, or portable\n");
+        return 2;
+    }
+#if !defined(SAM3D_USE_CUDA)
+    if (implementation == "cuda") {
+        fprintf(stderr, "rng-dump: --implementation cuda requires a CUDA build\n");
+        return 2;
+    }
+    if (implementation == "auto") implementation = "portable";
+#else
+    if (implementation == "auto") implementation = "cuda";
+#endif
+    uint32_t resolved_distribution_blocks = distribution_blocks;
+#if defined(SAM3D_USE_CUDA)
+    if (implementation == "cuda" && resolved_distribution_blocks == 0) {
+        std::string error;
+        if (!PytorchCudaNormalRng::distribution_blocks(resolved_distribution_blocks, error)) {
+            fprintf(stderr, "rng-dump: %s\n", error.c_str());
+            return 1;
+        }
+    }
+#endif
+    if (implementation == "portable" && resolved_distribution_blocks == 0) {
+        fprintf(stderr, "rng-dump: portable Philox requires --distribution-blocks from the PyTorch CUDA reference\n");
+        return 2;
+    }
+    std::vector<size_t> sizes;
+    size_t start = 0;
+    while (start < sizes_text.size()) {
+        const size_t end = sizes_text.find(',', start);
+        const std::string token = sizes_text.substr(start, end == std::string::npos ? end : end - start);
+        char* parse_end = nullptr;
+        const unsigned long long value = strtoull(token.c_str(), &parse_end, 10);
+        if (token.empty() || parse_end == token.c_str() || *parse_end != '\0' || value == 0 ||
+            value > static_cast<unsigned long long>(std::numeric_limits<int>::max())) {
+            fprintf(stderr, "rng-dump: invalid size '%s'\n", token.c_str());
+            return 2;
+        }
+        sizes.push_back(static_cast<size_t>(value));
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    std::error_code directory_error;
+    std::filesystem::create_directories(output_dir, directory_error);
+    if (directory_error) {
+        fprintf(stderr, "rng-dump: cannot create %s: %s\n", output_dir.c_str(),
+                directory_error.message().c_str());
+        return 1;
+    }
+#if defined(SAM3D_USE_CUDA)
+    std::unique_ptr<PytorchCudaNormalRng> cuda_rng;
+    if (implementation == "cuda") {
+        cuda_rng = std::make_unique<PytorchCudaNormalRng>(seed, resolved_distribution_blocks);
+    }
+#endif
+    std::unique_ptr<PytorchPhiloxNormalRng> portable_rng;
+    if (implementation == "portable") {
+        portable_rng = std::make_unique<PytorchPhiloxNormalRng>(seed, resolved_distribution_blocks);
+    }
+    std::unique_ptr<PytorchPhiloxNormalRng> randperm_rng;
+    if (randperm_size != 0) {
+        randperm_rng = std::make_unique<PytorchPhiloxNormalRng>(seed, resolved_distribution_blocks);
+    }
+    for (size_t index = 0; index < sizes.size(); ++index) {
+        std::vector<float> values(sizes[index]);
+        std::string error;
+#if defined(SAM3D_USE_CUDA)
+        const bool filled = cuda_rng ? cuda_rng->fill(values, error) :
+            portable_rng->fill(values, error);
+#else
+        const bool filled = portable_rng->fill(values, error);
+#endif
+        if (!filled) {
+            fprintf(stderr, "rng-dump: %s\n", error.c_str());
+            return 1;
+        }
+        if (randperm_rng && !randperm_rng->advance_normal(values.size(), error)) {
+            fprintf(stderr, "rng-dump: cannot advance randperm Philox state: %s\n", error.c_str());
+            return 1;
+        }
+        char filename[32];
+        snprintf(filename, sizeof(filename), "rng_%02zu.samt", index);
+        if (!save_raw_tensor_f32(output_dir + "/" + filename,
+                                 {static_cast<int64_t>(values.size())}, values.data())) {
+            fprintf(stderr, "rng-dump: cannot write %s\n", filename);
+            return 1;
+        }
+    }
+    if (randperm_rng) {
+        std::vector<uint32_t> permutation;
+        std::string error;
+        if (!randperm_rng->randperm(randperm_size, permutation, error)) {
+            fprintf(stderr, "rng-dump: PyTorch-compatible randperm failed: %s\n", error.c_str());
+            return 1;
+        }
+        std::vector<int32_t> permutation_i32(permutation.begin(), permutation.end());
+        if (!save_raw_tensor_i32(output_dir + "/randperm.samt",
+                                 {static_cast<int64_t>(permutation_i32.size())},
+                                 permutation_i32.data())) {
+            fprintf(stderr, "rng-dump: cannot write randperm.samt\n");
+            return 1;
+        }
+    }
+    std::ofstream contract(output_dir + "/rng_contract.json", std::ios::trunc);
+    if (!contract) {
+        fprintf(stderr, "rng-dump: cannot write rng_contract.json\n");
+        return 1;
+    }
+    contract << "{\n"
+             << "  \"schema\": \"sam3d.pytorch-philox-contract.v1\",\n"
+             << "  \"seed\": " << seed << ",\n"
+             << "  \"implementation\": \"" << implementation << "\",\n"
+             << "  \"distribution_blocks\": " << resolved_distribution_blocks << ",\n"
+             << "  \"randperm_size\": " << randperm_size << "\n"
+             << "}\n";
+    return 0;
+}
+
+static int cmd_coords_downsample(int argc, char** argv) {
+    std::string input;
+    std::string output;
+    std::string normal_draws;
+    uint64_t seed = 42;
+    uint32_t distribution_blocks = 0;
+    int64_t max_coordinates = 42000;
+    int downsample_factor = 2;
+    for (int index = 0; index < argc; ++index) {
+        const char* argument = argv[index];
+        if (!strcmp(argument, "--input") && index + 1 < argc) {
+            input = argv[++index];
+        } else if (!strcmp(argument, "--out") && index + 1 < argc) {
+            output = argv[++index];
+        } else if (!strcmp(argument, "--seed") && index + 1 < argc) {
+            seed = strtoull(argv[++index], nullptr, 10);
+        } else if (!strcmp(argument, "--distribution-blocks") && index + 1 < argc) {
+            char* end = nullptr;
+            const unsigned long parsed = strtoul(argv[++index], &end, 10);
+            if (end == argv[index] || *end != '\0' || parsed == 0 ||
+                parsed > std::numeric_limits<uint32_t>::max()) {
+                fprintf(stderr, "coords-downsample: --distribution-blocks must be a positive uint32\n");
+                return 2;
+            }
+            distribution_blocks = static_cast<uint32_t>(parsed);
+        } else if (!strcmp(argument, "--normal-draws") && index + 1 < argc) {
+            normal_draws = argv[++index];
+        } else if (!strcmp(argument, "--max-coords") && index + 1 < argc) {
+            max_coordinates = strtoll(argv[++index], nullptr, 10);
+        } else if (!strcmp(argument, "--downsample-factor") && index + 1 < argc) {
+            downsample_factor = atoi(argv[++index]);
+        } else {
+            fprintf(stderr, "coords-downsample: unknown or incomplete argument: %s\n", argument);
+            return 2;
+        }
+    }
+    if (input.empty() || output.empty() || normal_draws.empty() || distribution_blocks == 0 ||
+        max_coordinates <= 0 || downsample_factor <= 0) {
+        fprintf(stderr, "coords-downsample requires input, output, positive distribution-blocks, "
+                        "normal-draws, max-coords, and downsample-factor\n");
+        return 2;
+    }
+    RawTensor coordinates_tensor;
+    if (!load_raw_tensor(input, coordinates_tensor) || coordinates_tensor.type != GGML_TYPE_I32 ||
+        coordinates_tensor.ne.size() != 2 || coordinates_tensor.ne[0] != 4 ||
+        coordinates_tensor.ne[1] <= 0 ||
+        coordinates_tensor.data.size() != static_cast<size_t>(coordinates_tensor.ne[1]) *
+            4 * sizeof(int32_t)) {
+        fprintf(stderr, "coords-downsample: input must be a non-empty I32 SAMT tensor shaped [4, N]\n");
+        return 2;
+    }
+    PytorchPhiloxNormalRng rng(seed, distribution_blocks);
+    size_t start = 0;
+    while (start < normal_draws.size()) {
+        const size_t end = normal_draws.find(',', start);
+        const std::string token = normal_draws.substr(start, end == std::string::npos ? end : end - start);
+        char* parse_end = nullptr;
+        const unsigned long long count = strtoull(token.c_str(), &parse_end, 10);
+        if (token.empty() || parse_end == token.c_str() || *parse_end != '\0' || count == 0 ||
+            count > static_cast<unsigned long long>(std::numeric_limits<int>::max())) {
+            fprintf(stderr, "coords-downsample: invalid normal draw size '%s'\n", token.c_str());
+            return 2;
+        }
+        std::string error;
+        if (!rng.advance_normal(static_cast<size_t>(count), error)) {
+            fprintf(stderr, "coords-downsample: cannot advance Philox state: %s\n", error.c_str());
+            return 1;
+        }
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    const auto* source = reinterpret_cast<const int32_t*>(coordinates_tensor.data.data());
+    std::vector<int32_t> coordinates(source, source + coordinates_tensor.data.size() / sizeof(int32_t));
+    std::vector<int32_t> downsampled;
+    std::string error;
+    bool randomly_subsampled = false;
+    downsampled = downsample_sparse_coords_pytorch(coordinates, rng, error,
+                                                    randomly_subsampled, max_coordinates,
+                                                    downsample_factor);
+    if (downsampled.empty()) {
+        fprintf(stderr, "coords-downsample: %s\n", error.empty() ? "empty output" : error.c_str());
+        return 1;
+    }
+    if (!save_raw_tensor_i32(output, {4, static_cast<int64_t>(downsampled.size() / 4)},
+                             downsampled.data())) {
+        fprintf(stderr, "coords-downsample: cannot write %s\n", output.c_str());
+        return 1;
+    }
+    return 0;
 }
 
 struct MeshExportOpts {
     std::string vertices;
     std::string faces;
     std::string attributes;
+    std::string texcoords;
+    std::string texture;
     std::string output;
 };
 
@@ -163,6 +480,15 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
         LOGE("mesh-export requires --vertices, --faces and --out");
         return 1;
     }
+    if (!options.attributes.empty() && (!options.texcoords.empty() || !options.texture.empty())) {
+        LOGE("mesh-export: --attrs is the non-baked vertex-color path and cannot be combined "
+             "with --uv or --texture");
+        return 1;
+    }
+    if (options.texcoords.empty() != options.texture.empty()) {
+        LOGE("mesh-export: the baked PBR path requires both --uv and --texture");
+        return 1;
+    }
 
     RawTensor vertices_tensor;
     RawTensor faces_tensor;
@@ -184,6 +510,7 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
     }
 
     NativeMesh mesh;
+    std::string error;
     mesh.positions = std::move(vertices);
     // ``postprocessing_utils.to_glb`` rotates the decoder's Z-up coordinates
     // into glTF's Y-up convention before creating the final Trimesh asset.
@@ -226,13 +553,33 @@ static int cmd_mesh_export(const MeshExportOpts& options) {
         }
     }
 
-    std::string error;
+    if (!options.texcoords.empty()) {
+        RawTensor texcoords_tensor;
+        std::vector<float> texcoords;
+        if (!tensor_values_f32(options.texcoords, texcoords_tensor, texcoords, "UV coordinates")) {
+            return 1;
+        }
+        if (texcoords_tensor.ne.size() != 2 || texcoords_tensor.ne[0] != 2 ||
+            texcoords.size() != vertex_count * 2) {
+            LOGE("mesh-export: UV coordinates must have official SAMT shape [2, vertex_count]");
+            return 1;
+        }
+        mesh.texcoords = std::move(texcoords);
+        if (!load_rgba_image(options.texture, mesh.material.base_color_texture, error)) {
+            LOGE("mesh-export: %s", error.c_str());
+            return 1;
+        }
+    }
+
     if (!write_pbr_glb(options.output, mesh, error)) {
         LOGE("mesh-export: %s", error.c_str());
         return 1;
     }
+    const char* material = mesh.material.base_color_texture.rgba.empty()
+                               ? (mesh.colors.empty() ? "" : ", COLOR_0")
+                               : ", TEXCOORD_0, baseColorTexture";
     LOGI("mesh-export: wrote %s (%zu vertices, %zu triangles%s)", options.output.c_str(),
-         vertex_count, mesh.indices.size() / 3, mesh.colors.empty() ? "" : ", COLOR_0");
+         vertex_count, mesh.indices.size() / 3, material);
     return 0;
 }
 
@@ -256,6 +603,9 @@ struct MeshPostprocessOpts {
     std::string faces_output;
     std::string visibility;
     float target_reduction = 0.95f;
+    bool native_visibility = false;
+    int visibility_views = 1000;
+    int visibility_resolution = 1024;
 };
 
 struct MeshVisibilityFilterOpts {
@@ -265,6 +615,26 @@ struct MeshVisibilityFilterOpts {
     std::string vertices_output;
     std::string faces_output;
     std::string candidates_output;
+};
+
+struct MeshVisibilityOpts {
+    std::string vertices;
+    std::string faces;
+    std::string output;
+    std::string extrinsics;
+    std::string intrinsics;
+    std::string view;
+    std::string projection;
+    int view_count = 1000;
+    int resolution = 1024;
+};
+
+struct MeshCameraDumpOpts {
+    std::string extrinsics_output;
+    std::string intrinsics_output;
+    std::string views_output;
+    std::string projections_output;
+    int view_count = 1000;
 };
 
 struct MeshBoundaryRepairOpts {
@@ -318,16 +688,30 @@ static int cmd_mesh_postprocess(const MeshPostprocessOpts& options) {
         LOGE("mesh-postprocess: %s", error.c_str());
         return 1;
     }
+    if (options.native_visibility && !options.visibility.empty()) {
+        LOGE("mesh-postprocess accepts either --visibility or --native-visibility, not both");
+        return 1;
+    }
     MeshVisibilityFilterStats visibility_stats;
-    if (!options.visibility.empty()) {
+    if (!options.visibility.empty() || options.native_visibility) {
         RawTensor visibility_tensor;
         std::vector<float> visibility;
-        if (!tensor_values_f32(options.visibility, visibility_tensor, visibility,
-                               "mesh-postprocess visibility") ||
-            visibility_tensor.ne.size() != 1 ||
-            visibility.size() != mesh.indices.size() / 3) {
-            LOGE("mesh-postprocess visibility must be F32 [face_count] after VTK reduction");
-            return 1;
+        if (options.native_visibility) {
+            MeshRasterConfig raster;
+            raster.width = options.visibility_resolution;
+            raster.height = options.visibility_resolution;
+            if (!mesh_visibility_frequency(mesh, options.visibility_views, raster, visibility, error)) {
+                LOGE("mesh-postprocess native visibility: %s", error.c_str());
+                return 1;
+            }
+        } else {
+            if (!tensor_values_f32(options.visibility, visibility_tensor, visibility,
+                                   "mesh-postprocess visibility") ||
+                visibility_tensor.ne.size() != 1 ||
+                visibility.size() != mesh.indices.size() / 3) {
+                LOGE("mesh-postprocess visibility must be F32 [face_count] after VTK reduction");
+                return 1;
+            }
         }
         if (!filter_invisible_faces_official(mesh, visibility, {}, &visibility_stats, error)) {
             LOGE("mesh-postprocess visibility/mincut: %s", error.c_str());
@@ -342,11 +726,160 @@ static int cmd_mesh_postprocess(const MeshPostprocessOpts& options) {
         return 1;
     }
     LOGI("mesh-postprocess: VTK reduction %.3f: %lld vertices, %lld triangles; "
-         "visibility mincut candidates=%zu removed=%zu (MeshFix boundary repair is separate)",
+         "visibility=%s mincut candidates=%zu removed=%zu (MeshFix boundary repair is separate)",
          options.target_reduction, static_cast<long long>(vertex_count), static_cast<long long>(face_count),
+         options.native_visibility ? "native" : (options.visibility.empty() ? "disabled" : "external"),
          visibility_stats.mincut_face_count, visibility_stats.removed_face_count);
     return 0;
 #endif
+}
+
+static int cmd_mesh_visibility(const MeshVisibilityOpts& options) {
+    if (options.vertices.empty() || options.faces.empty() || options.output.empty()) {
+        LOGE("mesh-visibility requires --vertices, --faces and --out");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "mesh-visibility vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "mesh-visibility faces") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3) {
+        LOGE("mesh-visibility expects vertices [3,V] and faces [3,F] SAMT tensors");
+        return 1;
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    MeshRasterConfig config;
+    config.width = options.resolution;
+    config.height = options.resolution;
+    std::vector<float> visibility;
+    std::string error;
+    const bool has_opencv_cameras = !options.extrinsics.empty() || !options.intrinsics.empty();
+    const bool has_opengl_cameras = !options.view.empty() || !options.projection.empty();
+    const bool has_external_cameras = has_opencv_cameras || has_opengl_cameras;
+    int effective_view_count = options.view_count;
+    bool success = false;
+    if (has_external_cameras) {
+        if (has_opencv_cameras && has_opengl_cameras) {
+            LOGE("mesh-visibility accepts one external camera convention at a time");
+            return 1;
+        }
+        RawTensor first_tensor;
+        RawTensor second_tensor;
+        std::vector<float> first;
+        std::vector<float> second;
+        const std::string& first_path = has_opengl_cameras ? options.view : options.extrinsics;
+        const std::string& second_path = has_opengl_cameras ? options.projection : options.intrinsics;
+        if (first_path.empty() || second_path.empty() ||
+            !tensor_values_f32(first_path, first_tensor, first, "mesh-visibility camera matrix") ||
+            !tensor_values_f32(second_path, second_tensor, second, "mesh-visibility camera matrix") ||
+            first_tensor.ne.size() != 3 || first_tensor.ne[0] != 4 || first_tensor.ne[1] != 4 ||
+            second_tensor.ne.size() != 3 || second_tensor.ne[2] != first_tensor.ne[2] ||
+            first.size() != static_cast<size_t>(first_tensor.ne[2]) * 16) {
+            LOGE("mesh-visibility camera tensors must share F32 [V,4,4] matrices");
+            return 1;
+        }
+        if (has_opencv_cameras && (second_tensor.ne[0] != 3 || second_tensor.ne[1] != 3 ||
+                                  second.size() != static_cast<size_t>(second_tensor.ne[2]) * 9)) {
+            LOGE("mesh-visibility intrinsics must be F32 [V,3,3]");
+            return 1;
+        }
+        if (has_opengl_cameras && (second_tensor.ne[0] != 4 || second_tensor.ne[1] != 4 ||
+                                  second.size() != static_cast<size_t>(second_tensor.ne[2]) * 16)) {
+            LOGE("mesh-visibility projections must be F32 [V,4,4]");
+            return 1;
+        }
+        std::vector<MeshRasterCamera> cameras(static_cast<size_t>(first_tensor.ne[2]));
+        for (size_t index = 0; index < cameras.size(); ++index) {
+            if (has_opengl_cameras) {
+                std::copy_n(first.data() + index * 16, 16, cameras[index].view.begin());
+                std::copy_n(second.data() + index * 16, 16, cameras[index].projection.begin());
+                cameras[index].has_view_projection = true;
+            } else {
+                std::copy_n(first.data() + index * 16, 16, cameras[index].extrinsics.begin());
+                std::copy_n(second.data() + index * 9, 9, cameras[index].intrinsics.begin());
+            }
+        }
+        effective_view_count = static_cast<int>(cameras.size());
+        success = mesh_visibility_frequency(mesh, cameras, config, visibility, error);
+    } else {
+        success = mesh_visibility_frequency(mesh, options.view_count, config, visibility, error);
+    }
+    if (!success) {
+        LOGE("mesh-visibility: %s", error.c_str());
+        return 1;
+    }
+    if (!save_raw_tensor_f32(options.output,
+                             {static_cast<int64_t>(visibility.size())}, visibility.data())) {
+        LOGE("mesh-visibility: failed to write %s", options.output.c_str());
+        return 1;
+    }
+    LOGI("mesh-visibility: wrote %s (%zu faces, %d views, %dx%d)",
+         options.output.c_str(), visibility.size(), effective_view_count,
+         config.width, config.height);
+    return 0;
+}
+
+static int cmd_mesh_camera_dump(const MeshCameraDumpOpts& options) {
+    if (options.extrinsics_output.empty() || options.intrinsics_output.empty()) {
+        LOGE("mesh-camera-dump requires --extrinsics-out and --intrinsics-out");
+        return 1;
+    }
+    if (options.views_output.empty() != options.projections_output.empty()) {
+        LOGE("mesh-camera-dump requires --views-out and --projections-out together");
+        return 1;
+    }
+    MeshRasterConfig config;
+    std::string error;
+    const std::vector<MeshRasterCamera> cameras =
+        make_mesh_hammersley_cameras(options.view_count, config, error);
+    if (cameras.empty()) {
+        LOGE("mesh-camera-dump: %s", error.c_str());
+        return 1;
+    }
+    std::vector<float> extrinsics;
+    std::vector<float> intrinsics;
+    extrinsics.reserve(cameras.size() * 16);
+    intrinsics.reserve(cameras.size() * 9);
+    for (const MeshRasterCamera& camera : cameras) {
+        extrinsics.insert(extrinsics.end(), camera.extrinsics.begin(), camera.extrinsics.end());
+        intrinsics.insert(intrinsics.end(), camera.intrinsics.begin(), camera.intrinsics.end());
+    }
+    if (!save_raw_tensor_f32(options.extrinsics_output,
+                             {4, 4, static_cast<int64_t>(cameras.size())}, extrinsics.data()) ||
+        !save_raw_tensor_f32(options.intrinsics_output,
+                             {3, 3, static_cast<int64_t>(cameras.size())}, intrinsics.data())) {
+        LOGE("mesh-camera-dump: failed to write camera tensors");
+        return 1;
+    }
+#if defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+    if (!options.views_output.empty()) {
+        std::vector<float> views;
+        std::vector<float> projections;
+        if (!mesh_hammersley_camera_matrices_nvdiffrast_cuda(
+                options.view_count, views, projections, error) ||
+            !save_raw_tensor_f32(options.views_output,
+                                 {4, 4, static_cast<int64_t>(options.view_count)}, views.data()) ||
+            !save_raw_tensor_f32(options.projections_output,
+                                 {4, 4, static_cast<int64_t>(options.view_count)}, projections.data())) {
+            LOGE("mesh-camera-dump: failed to write CUDA visibility matrices: %s", error.c_str());
+            return 1;
+        }
+    }
+#elif !defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+    if (!options.views_output.empty()) {
+        LOGE("mesh-camera-dump --views-out requires a CUDA nvdiffrast-native-PBR build");
+        return 1;
+    }
+#endif
+    LOGI("mesh-camera-dump: wrote %zu Hammersley cameras", cameras.size());
+    return 0;
 }
 
 static int cmd_mesh_filter_visibility(const MeshVisibilityFilterOpts& options) {
@@ -512,6 +1045,48 @@ struct TextureInpaintOpts {
     float radius = 3.0f;
 };
 
+struct TextureBakeOpts {
+    std::string vertices;
+    std::string faces;
+    std::string uv;
+    std::string observations_dir;
+    std::string extrinsics;
+    std::string intrinsics;
+    std::string output;
+    std::string holes_output;
+    std::string raw_texture_output;
+    int texture_size = 1024;
+    int steps = 2500;
+    unsigned seed = 0;
+    bool apply_telea = true;
+};
+
+struct TextureRasterOpts {
+    std::string vertices;
+    std::string faces;
+    std::string uv;
+    std::string extrinsics;
+    std::string intrinsics;
+    std::string uv_output;
+    std::string uv_derivatives_output;
+    std::string coverage_output;
+    int view_index = 0;
+    int resolution = 1024;
+};
+
+struct PbrAssembleOpts {
+    std::string vertices;
+    std::string faces;
+    std::string ply;
+    std::string output;
+    int render_views = 100;
+    int resolution = 1024;
+    int texture_size = 1024;
+    int texture_steps = 2500;
+    unsigned seed = 0;
+    bool already_clean = false;
+};
+
 static int cmd_texture_inpaint(const TextureInpaintOpts& options) {
 #if !defined(SAM3D_NATIVE_PBR_CUDA)
     (void)options;
@@ -553,6 +1128,208 @@ static int cmd_texture_inpaint(const TextureInpaintOpts& options) {
         return 1;
     }
     LOGI("texture-inpaint: wrote %s", options.output.c_str());
+    return 0;
+#endif
+}
+
+static int cmd_texture_bake(const TextureBakeOpts& options) {
+#if !defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+    (void)options;
+    LOGE("texture-bake requires CUDA native PBR with "
+         "SAM3D_GGML_NVDIFFRAST_NONCOMMERCIAL=ON; it never falls back to PyTorch");
+    return 1;
+#else
+    if (options.vertices.empty() || options.faces.empty() || options.uv.empty() ||
+        options.observations_dir.empty() || options.extrinsics.empty() || options.intrinsics.empty() ||
+        options.output.empty() || options.texture_size <= 0 || options.steps <= 0) {
+        LOGE("texture-bake requires --vertices, --faces, --uv, --observations-dir, --extrinsics, "
+             "--intrinsics, --out, positive --texture-size and positive --steps");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    RawTensor uv_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    std::vector<float> uv;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "texture-bake vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "texture-bake faces") ||
+        !tensor_values_f32(options.uv, uv_tensor, uv, "texture-bake UVs") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        uv_tensor.ne.size() != 2 || uv_tensor.ne[0] != 2 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3 ||
+        uv.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 2) {
+        LOGE("texture-bake expects vertices [3,V], faces [3,F], and xatlas UVs [2,V] SAMT tensors");
+        return 1;
+    }
+    RawTensor extrinsics_tensor;
+    RawTensor intrinsics_tensor;
+    if (!load_raw_tensor(options.extrinsics, extrinsics_tensor) ||
+        !load_raw_tensor(options.intrinsics, intrinsics_tensor) ||
+        extrinsics_tensor.type != GGML_TYPE_F32 || intrinsics_tensor.type != GGML_TYPE_F32 ||
+        extrinsics_tensor.ne.size() != 3 || intrinsics_tensor.ne.size() != 3 ||
+        extrinsics_tensor.ne[0] != 4 || extrinsics_tensor.ne[1] != 4 ||
+        intrinsics_tensor.ne[0] != 3 || intrinsics_tensor.ne[1] != 3 ||
+        extrinsics_tensor.ne[2] <= 0 || intrinsics_tensor.ne[2] != extrinsics_tensor.ne[2] ||
+        extrinsics_tensor.data.size() != static_cast<size_t>(extrinsics_tensor.ne[2]) * 16 * sizeof(float) ||
+        intrinsics_tensor.data.size() != static_cast<size_t>(intrinsics_tensor.ne[2]) * 9 * sizeof(float)) {
+        LOGE("texture-bake camera SAMT tensors must be F32 [camera_count,4,4] and [camera_count,3,3]");
+        return 1;
+    }
+    const size_t view_count = static_cast<size_t>(extrinsics_tensor.ne[2]);
+    std::vector<GaussianCamera> cameras(view_count);
+    for (size_t index = 0; index < view_count; ++index) {
+        std::memcpy(cameras[index].extrinsics.data(),
+                    extrinsics_tensor.data.data() + index * 16 * sizeof(float), 16 * sizeof(float));
+        std::memcpy(cameras[index].intrinsics.data(),
+                    intrinsics_tensor.data.data() + index * 9 * sizeof(float), 9 * sizeof(float));
+    }
+    std::vector<RgbaImage> observations;
+    observations.reserve(view_count);
+    std::string error;
+    for (size_t index = 0; index < view_count; ++index) {
+        char file_name[64];
+        std::snprintf(file_name, sizeof(file_name), "view_%03zu.png", index);
+        const std::string path = (std::filesystem::path(options.observations_dir) / file_name).string();
+        RgbaImage observation;
+        if (!load_rgba_image(path, observation, error)) {
+            LOGE("texture-bake: failed to load official Gaussian observation %s: %s", path.c_str(),
+                 error.c_str());
+            return 1;
+        }
+        observations.push_back(std::move(observation));
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    mesh.texcoords = std::move(uv);
+    TextureBakeConfig config;
+    config.texture_size = options.texture_size;
+    config.steps = options.steps;
+    config.random_seed = options.seed;
+    config.apply_telea = options.apply_telea;
+    RgbaImage texture;
+    std::vector<uint8_t> holes;
+    std::vector<float> optimized_texture;
+    std::vector<float>* optimized_texture_output =
+        options.raw_texture_output.empty() ? nullptr : &optimized_texture;
+    if (!bake_texture_official_cuda(mesh, observations, cameras, config, texture, &holes,
+                                    optimized_texture_output, error)) {
+        LOGE("texture-bake: %s", error.c_str());
+        return 1;
+    }
+    if (!write_rgba_png(options.output, texture, error)) {
+        LOGE("texture-bake: %s", error.c_str());
+        return 1;
+    }
+    if (!options.raw_texture_output.empty() &&
+        !save_raw_tensor_f32(options.raw_texture_output,
+                             {3, static_cast<int64_t>(texture.width), static_cast<int64_t>(texture.height)},
+                             optimized_texture.data())) {
+        LOGE("texture-bake: failed to write F32 optimized texture %s",
+             options.raw_texture_output.c_str());
+        return 1;
+    }
+    if (!options.holes_output.empty()) {
+        RgbaImage hole_image;
+        hole_image.width = texture.width;
+        hole_image.height = texture.height;
+        hole_image.rgba.resize(holes.size() * 4);
+        for (size_t pixel = 0; pixel < holes.size(); ++pixel) {
+            const uint8_t value = holes[pixel] == 0 ? 0 : 255;
+            hole_image.rgba[pixel * 4] = value;
+            hole_image.rgba[pixel * 4 + 1] = value;
+            hole_image.rgba[pixel * 4 + 2] = value;
+            hole_image.rgba[pixel * 4 + 3] = 255;
+        }
+        if (!write_rgba_png(options.holes_output, hole_image, error)) {
+            LOGE("texture-bake: %s", error.c_str());
+            return 1;
+        }
+    }
+    LOGI("texture-bake: wrote %s from %zu native Gaussian views (%dx%d, %d Adam/TV steps)",
+         options.output.c_str(), view_count, texture.width, texture.height, config.steps);
+    return 0;
+#endif
+}
+
+static int cmd_texture_raster(const TextureRasterOpts& options) {
+#if !defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+    (void)options;
+    LOGE("texture-raster requires CUDA native PBR with "
+         "SAM3D_GGML_NVDIFFRAST_NONCOMMERCIAL=ON");
+    return 1;
+#else
+    if (options.vertices.empty() || options.faces.empty() || options.uv.empty() ||
+        options.extrinsics.empty() || options.intrinsics.empty() || options.uv_output.empty() ||
+        options.uv_derivatives_output.empty() || options.coverage_output.empty() ||
+        options.view_index < 0 || options.resolution <= 0) {
+        LOGE("texture-raster requires mesh, camera, output tensors, non-negative --view-index and "
+             "positive --resolution");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    RawTensor uv_tensor;
+    RawTensor extrinsics_tensor;
+    RawTensor intrinsics_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    std::vector<float> uv;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "texture-raster vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "texture-raster faces") ||
+        !tensor_values_f32(options.uv, uv_tensor, uv, "texture-raster UVs") ||
+        !load_raw_tensor(options.extrinsics, extrinsics_tensor) ||
+        !load_raw_tensor(options.intrinsics, intrinsics_tensor) ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        uv_tensor.ne.size() != 2 || uv_tensor.ne[0] != 2 ||
+        uv.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 2 ||
+        extrinsics_tensor.type != GGML_TYPE_F32 || intrinsics_tensor.type != GGML_TYPE_F32 ||
+        extrinsics_tensor.ne.size() != 3 || intrinsics_tensor.ne.size() != 3 ||
+        extrinsics_tensor.ne[0] != 4 || extrinsics_tensor.ne[1] != 4 ||
+        intrinsics_tensor.ne[0] != 3 || intrinsics_tensor.ne[1] != 3 ||
+        intrinsics_tensor.ne[2] != extrinsics_tensor.ne[2] ||
+        options.view_index >= extrinsics_tensor.ne[2]) {
+        LOGE("texture-raster expects vertices [3,V], faces [3,F], UVs [2,V], and camera tensors "
+             "F32 [camera_count,4,4] / [camera_count,3,3]");
+        return 1;
+    }
+    GaussianCamera camera;
+    std::memcpy(camera.extrinsics.data(),
+                extrinsics_tensor.data.data() + static_cast<size_t>(options.view_index) * 16 * sizeof(float),
+                16 * sizeof(float));
+    std::memcpy(camera.intrinsics.data(),
+                intrinsics_tensor.data.data() + static_cast<size_t>(options.view_index) * 9 * sizeof(float),
+                9 * sizeof(float));
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    mesh.texcoords = std::move(uv);
+    TextureBakeConfig config;
+    TextureBakeRaster raster;
+    std::string error;
+    if (!rasterize_texture_bake_view_official_cuda(mesh, camera, config, options.resolution,
+                                                   options.resolution, raster, error)) {
+        LOGE("texture-raster: %s", error.c_str());
+        return 1;
+    }
+    std::vector<int32_t> coverage(raster.coverage.begin(), raster.coverage.end());
+    if (!save_raw_tensor_f32(options.uv_output,
+                             {2, static_cast<int64_t>(raster.width), static_cast<int64_t>(raster.height)},
+                             raster.uv.data()) ||
+        !save_raw_tensor_f32(options.uv_derivatives_output,
+                             {4, static_cast<int64_t>(raster.width), static_cast<int64_t>(raster.height)},
+                             raster.uv_derivatives.data()) ||
+        !save_raw_tensor_i32(options.coverage_output,
+                             {static_cast<int64_t>(raster.width), static_cast<int64_t>(raster.height)},
+                             coverage.data())) {
+        LOGE("texture-raster: failed to write raster SAMT outputs");
+        return 1;
+    }
+    LOGI("texture-raster: wrote view %d native UV, derivative, and coverage tensors", options.view_index);
     return 0;
 #endif
 }
@@ -647,6 +1424,69 @@ static int cmd_gaussian_render(const GaussianRenderOpts& options) {
     }
     LOGI("gaussian-render: wrote %zu official Hammersley views (%dx%d) to %s", images.size(),
          config.width, config.height, options.output_dir.c_str());
+    return 0;
+#endif
+}
+
+static int cmd_pbr_assemble(const PbrAssembleOpts& options) {
+#if !defined(SAM3D_USE_NVDIFFRAST_CUDARASTER)
+    (void)options;
+    LOGE("pbr-assemble requires CUDA native PBR with "
+         "SAM3D_GGML_NVDIFFRAST_NONCOMMERCIAL=ON; it never falls back to PyTorch");
+    return 1;
+#else
+    if (options.vertices.empty() || options.faces.empty() || options.ply.empty() ||
+        options.output.empty() || options.render_views <= 0 || options.resolution <= 0 ||
+        options.texture_size <= 0 || options.texture_steps <= 0) {
+        LOGE("pbr-assemble requires --vertices, --faces, --ply, --out and positive stage sizes");
+        return 1;
+    }
+    RawTensor vertices_tensor;
+    RawTensor faces_tensor;
+    std::vector<float> vertices;
+    std::vector<uint32_t> faces;
+    if (!tensor_values_f32(options.vertices, vertices_tensor, vertices, "pbr-assemble vertices") ||
+        !tensor_indices(options.faces, faces_tensor, faces, "pbr-assemble faces") ||
+        vertices_tensor.ne.size() != 2 || vertices_tensor.ne[0] != 3 ||
+        vertices.size() != static_cast<size_t>(vertices_tensor.ne[1]) * 3 ||
+        faces_tensor.ne.size() != 2 || faces_tensor.ne[0] != 3 ||
+        faces.size() != static_cast<size_t>(faces_tensor.ne[1]) * 3) {
+        LOGE("pbr-assemble expects vertices [3,V] F32 and faces [3,F] F32/I32 SAMT tensors");
+        return 1;
+    }
+    NativeMesh mesh;
+    mesh.positions = std::move(vertices);
+    mesh.indices = std::move(faces);
+    GaussianSplatSet splats;
+    std::string error;
+    if (!load_gaussian_splat_ply(options.ply, splats, error)) {
+        LOGE("pbr-assemble: %s", error.c_str());
+        return 1;
+    }
+    NativePbrPipelineConfig config;
+    config.input_mesh_already_clean = options.already_clean;
+    config.render_views = options.render_views;
+    config.render_resolution = options.resolution;
+    config.texture_size = options.texture_size;
+    config.texture_steps = options.texture_steps;
+    config.random_seed = options.seed;
+    NativePbrPipelineResult result;
+    if (!assemble_official_pbr_cuda(mesh, splats, config, result, error)) {
+        LOGE("pbr-assemble: %s", error.c_str());
+        return 1;
+    }
+    if (!write_pbr_glb(options.output, result.mesh, error)) {
+        LOGE("pbr-assemble: %s", error.c_str());
+        return 1;
+    }
+    auto texture_path = std::filesystem::path(options.output);
+    texture_path.replace_extension(".base_color.png");
+    if (!write_rgba_png(texture_path.string(), result.mesh.material.base_color_texture, error)) {
+        LOGE("pbr-assemble: failed to write base-color texture: %s", error.c_str());
+        return 1;
+    }
+    LOGI("pbr-assemble: wrote %s (%zu rendered views, %zu pre-MeshFix faces, %zu final triangles)",
+         options.output.c_str(), result.rendered_views, result.pre_meshfix_faces, result.final_faces);
     return 0;
 #endif
 }
@@ -763,6 +1603,7 @@ struct MeshDecodeOpts {
     std::string stage;
     std::string backend = "auto";
     int threads = 8;
+    bool native_attention = true;
 };
 
 static int cmd_mesh_decode(const MeshDecodeOpts& options) {
@@ -794,102 +1635,40 @@ static int cmd_mesh_decode(const MeshDecodeOpts& options) {
         return 1;
     }
 
-    auto backend = Backend::create(options.backend, options.threads);
-    if (!backend) return 1;
-    GGUFModel model;
-    if (!model.load(options.model, backend->weights_buffer_type())) return 1;
-    if (model.str("sam3d.model") != "slat_decoder_mesh") {
-        LOGE("mesh-decode requires slat_decoder_mesh GGUF, got %s",
-             model.str("sam3d.model").c_str());
+    MeshDecoderRunOptions run_options;
+    run_options.model_path = options.model;
+    run_options.backend = options.backend;
+    run_options.threads = options.threads;
+    run_options.debug_stage = options.stage;
+    run_options.native_attention = options.native_attention;
+    MeshDecoderRunResult result;
+    std::string error;
+    if (!run_mesh_decoder(reinterpret_cast<const float*>(features_tensor.data.data()),
+                          reinterpret_cast<const int32_t*>(coords_tensor.data.data()),
+                          token_count, run_options, result, error)) {
+        LOGE("mesh-decode: %s", error.c_str());
         return 1;
     }
-
-    const int32_t* input_coords = reinterpret_cast<const int32_t*>(coords_tensor.data.data());
-    MeshTables tables;
-    if (!tables.build(input_coords, token_count, model.i32("meshdec.resolution", 64))) {
-        LOGE("mesh-decode: failed to construct sparse subdivision or convolution tables");
-        return 1;
-    }
-    const int64_t final_output_tokens = token_count * 64;
-    if (tables.levels[2].n != final_output_tokens) {
-        LOGE("mesh-decode: unexpected two-stage subdivision size");
-        return 1;
-    }
-
-    GraphContext context;
-    MeshDecoderGraph graph_builder;
-    graph_builder.g = &context;
-    graph_builder.m = &model;
-    graph_builder.tb = &tables;
-    graph_builder.debug_stage = options.stage;
-    ggml_tensor* input = context.input_f32("mesh_decoder_input", {8, token_count});
-    graph_builder.x = input;
-    graph_builder.inputs.push_back(input);
-    graph_builder.table_data.push_back(nullptr);
-    const std::vector<ggml_tensor*> outputs = graph_builder.build();
-    GGML_ASSERT(outputs.size() == 1);
-    const int64_t output_channels = outputs.front()->ne[0];
-    const int64_t output_tokens = outputs.front()->ne[1];
-    if (options.stage.empty() &&
-        (output_channels != 101 || output_tokens != final_output_tokens)) {
-        LOGE("mesh-decode: final graph shape is not [101, %lld]",
-             static_cast<long long>(final_output_tokens));
-        return 1;
-    }
-    ggml_cgraph* graph = ggml_new_graph_custom(context.ctx(), 65536, false);
-    ggml_set_output(outputs.front());
-    ggml_build_forward_expand(graph, outputs.front());
-    if (!backend->alloc(graph) ||
-        !backend->set_input_f32(input,
-                                reinterpret_cast<const float*>(features_tensor.data.data()),
-                                static_cast<size_t>(token_count) * 8)) {
-        return 1;
-    }
-    for (size_t index = 0; index < graph_builder.inputs.size(); ++index) {
-        ggml_tensor* graph_input = graph_builder.inputs[index];
-        const auto& data = graph_builder.table_data[index];
-        if (!graph_input->buffer || !data) continue;
-        const bool uploaded = graph_input->type == GGML_TYPE_F32
-            ? backend->set_input_f32(graph_input, reinterpret_cast<const float*>(data->data()), data->size())
-            : backend->set_input_i32(graph_input, data->data(), data->size());
-        if (!uploaded) return 1;
-    }
-    if (!backend->run(graph)) return 1;
-
-    std::vector<float> output;
-    if (!backend->get_tensor_f32(outputs.front(), output) ||
-        output.size() != static_cast<size_t>(output_tokens) * output_channels ||
-        !std::all_of(output.begin(), output.end(),
-                     [](float value) { return std::isfinite(value); })) {
-        LOGE("mesh-decode: graph produced an invalid feature tensor");
-        return 1;
-    }
-    if (!save_raw_tensor_f32(options.output, {output_channels, output_tokens}, output.data())) {
+    if (!save_raw_tensor_f32(options.output, {result.channels, result.token_count},
+                             result.features.data())) {
         LOGE("mesh-decode: failed to write %s", options.output.c_str());
         return 1;
     }
     if (!options.output_coordinates.empty()) {
-        const MeshConvLevel* output_level = &tables.levels[0];
-        if (output_tokens == tables.levels[1].n) output_level = &tables.levels[1];
-        if (output_tokens == tables.levels[2].n) output_level = &tables.levels[2];
-        if (output_tokens != output_level->n) {
-            LOGE("mesh-decode: debug stage has no matching sparse support");
-            return 1;
-        }
         RawTensor output_coords;
-        output_coords.ne = {4, output_tokens};
+        output_coords.ne = {4, result.token_count};
         output_coords.type = GGML_TYPE_I32;
-        output_coords.data.resize(output_level->coords.size() * sizeof(int32_t));
-        std::memcpy(output_coords.data.data(), output_level->coords.data(), output_coords.data.size());
+        output_coords.data.resize(result.coordinates.size() * sizeof(int32_t));
+        std::memcpy(output_coords.data.data(), result.coordinates.data(), output_coords.data.size());
         if (!save_raw_tensor(options.output_coordinates, output_coords)) {
             LOGE("mesh-decode: failed to write %s", options.output_coordinates.c_str());
             return 1;
         }
     }
     LOGI("mesh-decode: %lld input cells -> [%lld, %lld] %s (%s)",
-         static_cast<long long>(token_count), static_cast<long long>(output_channels),
-         static_cast<long long>(output_tokens),
-         options.stage.empty() ? "raw features" : options.stage.c_str(), backend->backend_name());
+         static_cast<long long>(token_count), static_cast<long long>(result.channels),
+         static_cast<long long>(result.token_count),
+         options.stage.empty() ? "raw features" : options.stage.c_str(), result.backend_name.c_str());
     return 0;
 }
 
@@ -902,6 +1681,109 @@ struct MogeSmokeOpts {
     int height = 56;
     int threads = 8;
 };
+
+struct MogeInferOpts {
+    std::string model;
+    std::string image_path;
+    std::string output_prefix;
+    std::string backend = "cpu";
+    int num_tokens = 2500;
+    int threads = 8;
+    bool force_projection = false;
+    bool apply_mask = true;
+    bool dump_intermediates = false;
+    bool dump_blocks = false;
+};
+
+struct ImageTo3DOpts {
+    std::string models_dir = "cpp_ggml/models/gguf";
+    std::string moge_model = "cpp_ggml/models/gguf/moge_vitl-f16.gguf";
+    std::string backend = "auto";
+    std::string dtype = "f16";
+    std::string image;
+    std::string mask;
+    std::string output;
+    std::string pbr_output;
+    std::string mesh_vertices_output;
+    std::string mesh_faces_output;
+    std::string pose_output;
+    std::string dtype_contract_output;
+    std::string noise_dir;
+    std::string conditions_output;
+    int threads = 8;
+    int seed = 42;
+    bool strict_ss_attention = false;
+};
+
+struct PoseDecodeOpts {
+    std::string rotation_6d;
+    std::string log_scale;
+    std::string translation;
+    std::string log_translation_scale;
+    std::string scene_scale;
+    std::string scene_shift;
+    std::string output;
+};
+
+static bool load_pose_f32(const std::string& path, size_t expected_count,
+                          std::vector<float>& values, const char* label) {
+    RawTensor tensor;
+    if (path.empty() || !load_raw_tensor(path, tensor) || tensor.type != GGML_TYPE_F32 ||
+        tensor.data.size() != expected_count * sizeof(float)) {
+        LOGE("pose-decode: %s must be an F32[%zu] SAMT tensor", label, expected_count);
+        return false;
+    }
+    const float* source = reinterpret_cast<const float*>(tensor.data.data());
+    values.assign(source, source + expected_count);
+    return true;
+}
+
+static int cmd_pose_decode(int argc, char** argv) {
+    PoseDecodeOpts options;
+    for (int index = 0; index < argc; ++index) {
+        if (!std::strcmp(argv[index], "--rotation-6d") && index + 1 < argc) {
+            options.rotation_6d = argv[++index];
+        } else if (!std::strcmp(argv[index], "--log-scale") && index + 1 < argc) {
+            options.log_scale = argv[++index];
+        } else if (!std::strcmp(argv[index], "--translation") && index + 1 < argc) {
+            options.translation = argv[++index];
+        } else if (!std::strcmp(argv[index], "--log-translation-scale") && index + 1 < argc) {
+            options.log_translation_scale = argv[++index];
+        } else if (!std::strcmp(argv[index], "--scene-scale") && index + 1 < argc) {
+            options.scene_scale = argv[++index];
+        } else if (!std::strcmp(argv[index], "--scene-shift") && index + 1 < argc) {
+            options.scene_shift = argv[++index];
+        } else if (!std::strcmp(argv[index], "--out") && index + 1 < argc) {
+            options.output = argv[++index];
+        } else {
+            LOGE("pose-decode: unrecognized or incomplete argument %s", argv[index]);
+            return 2;
+        }
+    }
+    std::vector<float> rotation_6d, log_scale, translation, log_translation_scale;
+    std::vector<float> scene_scale, scene_shift;
+    if (options.output.empty() ||
+        !load_pose_f32(options.rotation_6d, 6, rotation_6d, "--rotation-6d") ||
+        !load_pose_f32(options.log_scale, 3, log_scale, "--log-scale") ||
+        !load_pose_f32(options.translation, 3, translation, "--translation") ||
+        !load_pose_f32(options.log_translation_scale, 1, log_translation_scale,
+                       "--log-translation-scale") ||
+        !load_pose_f32(options.scene_scale, 3, scene_scale, "--scene-scale") ||
+        !load_pose_f32(options.scene_shift, 3, scene_shift, "--scene-shift")) {
+        return 2;
+    }
+    NativeInstancePose pose;
+    std::string error;
+    if (!decode_scale_shift_invariant_pose(rotation_6d.data(), log_scale.data(), translation.data(),
+                                           log_translation_scale[0], scene_scale.data(),
+                                           scene_shift.data(), pose, error) ||
+        !write_native_pose_json(options.output, pose, error)) {
+        LOGE("pose-decode: %s", error.c_str());
+        return 1;
+    }
+    LOGI("pose-decode: wrote %s", options.output.c_str());
+    return 0;
+}
 
 struct PreprocessConditionsOpts {
     std::string image;
@@ -1220,6 +2102,160 @@ static int cmd_moge_smoke(const MogeSmokeOpts& options) {
     printf("moge-smoke: backend=%s points=%zu mask=%zu point_range=[%.6f, %.6f]\n",
            backend->backend_name(), points.size(), mask.size(),
            *std::min_element(points.begin(), points.end()), *std::max_element(points.begin(), points.end()));
+    return 0;
+}
+
+static int cmd_moge_infer(const MogeInferOpts& options) {
+    if (options.model.empty() || options.image_path.empty() || options.output_prefix.empty()) {
+        LOGE("moge-infer requires --model, --input and --out");
+        return 1;
+    }
+    RgbaImage image;
+    std::string error;
+    if (!load_rgba_image(options.image_path, image, error)) {
+        LOGE("moge-infer: %s", error.c_str());
+        return 1;
+    }
+    auto backend = Backend::create(options.backend, options.threads);
+    if (!backend) return 1;
+    GGUFModel model;
+    if (!model.load(options.model, backend->weights_buffer_type())) return 1;
+    MogeInferenceOptions inference_options;
+    inference_options.num_tokens = options.num_tokens;
+    inference_options.apply_mask = options.apply_mask;
+    inference_options.force_projection = options.force_projection;
+    inference_options.capture_intermediates = options.dump_intermediates;
+    inference_options.capture_block_outputs = options.dump_blocks;
+    MogeInferenceResult result;
+    const double started = now_ms();
+    if (!run_moge_inference(image, model, *backend, inference_options, result, error)) {
+        LOGE("moge-infer: %s", error.c_str());
+        return 1;
+    }
+    const std::filesystem::path output_path(options.output_prefix);
+    if (!output_path.parent_path().empty()) {
+        std::error_code create_error;
+        std::filesystem::create_directories(output_path.parent_path(), create_error);
+        if (create_error) {
+            LOGE("moge-infer: cannot create output directory: %s", create_error.message().c_str());
+            return 1;
+        }
+    }
+    std::vector<float> mask(result.mask.begin(), result.mask.end());
+    const float scalar_values[] = {result.focal, result.shift};
+    if (!save_raw_tensor_f32(options.output_prefix + ".moge_points.samt",
+                             {3, result.width, result.height}, result.points_moge.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".pointmap_raw.samt",
+                             {result.width, result.height, 3}, result.pointmap_pytorch3d.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".mask_logits.samt",
+                             {result.width, result.height}, result.mask_logits.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".mask_probability.samt",
+                             {result.width, result.height}, result.mask_probability.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".mask.samt",
+                             {result.width, result.height}, mask.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".depth.samt",
+                             {result.width, result.height}, result.depth.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".intrinsics.samt", {3, 3},
+                             result.intrinsics.data()) ||
+        !save_raw_tensor_f32(options.output_prefix + ".focal_shift.samt", {2}, scalar_values)) {
+        LOGE("moge-infer: failed to write output tensors with prefix %s", options.output_prefix.c_str());
+        return 1;
+    }
+    if (options.dump_intermediates &&
+        (!save_raw_tensor_f32(options.output_prefix + ".resized_rgb.samt",
+                              {3, result.resized_width, result.resized_height},
+                              result.resized_rgb.data()) ||
+         !save_raw_tensor_f32(options.output_prefix + ".forward_points.samt",
+                              {3, result.width, result.height}, result.forward_points.data()))) {
+        LOGE("moge-infer: failed to write regression intermediate tensors with prefix %s",
+             options.output_prefix.c_str());
+        return 1;
+    }
+    if (options.dump_blocks) {
+        const auto save_block_series = [&](const char* name,
+                                           const std::vector<std::vector<float>>& values,
+                                           int channels) {
+            if (values.empty() || channels <= 0) return false;
+            for (size_t index = 0; index < values.size(); ++index) {
+                const std::string path = options.output_prefix + "." + name +
+                                         std::to_string(index) + ".samt";
+                if (!save_raw_tensor_f32(path, {channels, result.backbone_tokens},
+                                         values[index].data())) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        if (!save_raw_tensor_f32(options.output_prefix + ".backbone_image.samt",
+                                 {3, result.backbone_image_width, result.backbone_image_height},
+                                 result.backbone_image.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".backbone_patch_tokens.samt",
+                                 {result.backbone_hidden, result.backbone_tokens - 1},
+                                 result.backbone_patch_tokens.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".backbone_position_tokens.samt",
+                                 {result.backbone_hidden, result.backbone_tokens},
+                                 result.backbone_position_tokens.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".backbone_input.samt",
+                                 {result.backbone_hidden, result.backbone_tokens},
+                                 result.backbone_input.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".attention_context.samt",
+                                 {static_cast<int64_t>(result.backbone_attention_context.size())},
+                                 result.backbone_attention_context.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".q.samt",
+                                 {static_cast<int64_t>(result.backbone_q.size())},
+                                 result.backbone_q.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".k.samt",
+                                 {static_cast<int64_t>(result.backbone_k.size())},
+                                 result.backbone_k.data()) ||
+            !save_raw_tensor_f32(options.output_prefix + ".v.samt",
+                                 {static_cast<int64_t>(result.backbone_v.size())},
+                                 result.backbone_v.data()) ||
+            !save_block_series("attention_projection", result.backbone_attention_projection,
+                               result.backbone_hidden) ||
+            !save_block_series("attention", result.backbone_attention, result.backbone_hidden) ||
+            !save_block_series("mlp_fc1", result.backbone_mlp_fc1, result.backbone_mlp_hidden) ||
+            !save_block_series("mlp_gelu", result.backbone_mlp_gelu, result.backbone_mlp_hidden) ||
+            !save_block_series("mlp", result.backbone_mlp, result.backbone_hidden) ||
+            !save_block_series("block", result.backbone_blocks, result.backbone_hidden)) {
+            LOGE("moge-infer: failed to write DINO block regression tensors with prefix %s",
+                 options.output_prefix.c_str());
+            return 1;
+        }
+    }
+    LOGI("moge-infer: backend=%s input=%dx%d tokens=%d pointmap=%s.pointmap_raw.samt %.1f ms",
+         backend->backend_name(), image.width, image.height, options.num_tokens,
+         options.output_prefix.c_str(), now_ms() - started);
+    return 0;
+}
+
+static int cmd_image_to_3d(const ImageTo3DOpts& options) {
+    ImageTo3DOptions native_options;
+    native_options.models_dir = options.models_dir;
+    native_options.moge_model = options.moge_model;
+    native_options.backend = options.backend;
+    native_options.dtype = options.dtype;
+    native_options.image_path = options.image;
+    native_options.mask_path = options.mask;
+    native_options.out_ply = options.output;
+    native_options.out_pbr = options.pbr_output;
+    native_options.out_mesh_vertices = options.mesh_vertices_output;
+    native_options.out_mesh_faces = options.mesh_faces_output;
+    native_options.out_pose = options.pose_output;
+    native_options.out_dtype_contract = options.dtype_contract_output;
+    native_options.noise_dir = options.noise_dir;
+    native_options.conditions_out = options.conditions_output;
+    native_options.n_threads = options.threads;
+    native_options.seed = options.seed;
+    native_options.strict_ss_attention = options.strict_ss_attention;
+    RunResult result = run_image_to_3d(native_options);
+    if (!result.ok) {
+        LOGE("image-to-3d: %s", result.error.c_str());
+        return 1;
+    }
+    LOGI("image-to-3d: wrote %s%s%s%s", options.output.c_str(),
+         options.pbr_output.empty() ? "" : " and native PBR GLB",
+         options.mesh_vertices_output.empty() ? "" : " and raw FlexiCubes mesh",
+         options.pose_output.empty() ? "" : " and official pose JSON");
     return 0;
 }
 
@@ -1642,6 +2678,13 @@ static int cmd_pointpatch(const std::string& model_path,
 static int cmd_gs_decode(const std::string& model_path,
                          const std::string& e2e_dir,
                          const std::string& out_dir) {
+    std::error_code directory_error;
+    std::filesystem::create_directories(out_dir, directory_error);
+    if (directory_error) {
+        LOGE("gs-decode: cannot create %s: %s", out_dir.c_str(),
+             directory_error.message().c_str());
+        return 1;
+    }
     const char* be = getenv("SAM3D_BACKEND");
     auto backend = Backend::create(be ? be : "cpu",
                                    getenv("SAM3D_NTHREADS") ? atoi(getenv("SAM3D_NTHREADS")) : 8);
@@ -1667,6 +2710,10 @@ static int cmd_gs_decode(const std::string& model_path,
     GraphContext gctx;
     GsDecoderGraph gb;
     gb.g = &gctx; gb.m = &m; gb.tb = &tb;
+#ifdef SAM3D_USE_CUDA
+    gb.use_pytorch_cuda_attention = std::strstr(backend->backend_name(), "CUDA") != nullptr &&
+                                      getenv("SAM3D_GS_PORTABLE_ATTN") == nullptr;
+#endif
     if (const char* st = getenv("SAM3D_DEBUG_STAGE")) gb.debug_stage = st;
     ggml_tensor* xin = gctx.input_f32("x", {x_lat.ne[0], x_lat.ne[1]});
     gb.x = xin;
@@ -1901,6 +2948,7 @@ static int cmd_ss_step(const std::string& model_path, const std::string& e2e_dir
     gb.g = &gctx;
     gb.m = &m;
     gb.n_cond_tokens = cond_t.ne[1];
+    gb.strict_attention = getenv("SAM3D_SS_STRICT_ATTN") != nullptr;
     if (const char* st = getenv("SAM3D_DEBUG_STAGE")) gb.debug_stage = st;
     std::vector<ggml_tensor*> outs = gb.build();
 
@@ -2036,7 +3084,10 @@ static int cmd_info(const std::string& model_path) {
 namespace sam3d {
 int cmd_e2e(const std::string& models_dir, const std::string& cond_dir,
             const std::string& noise_dir, const std::string& out_ply,
-            const std::string& dbg_dir, unsigned seed, int nthreads);
+            const std::string& dbg_dir, const std::string& out_pbr,
+            const std::string& out_mesh_vertices, const std::string& out_mesh_faces,
+            const std::string& out_pose, const std::string& out_dtype_contract,
+            unsigned seed, int nthreads);
 }  // namespace sam3d
 
 int main(int argc, char** argv) {
@@ -2049,6 +3100,9 @@ int main(int argc, char** argv) {
         print_usage();
         return 0;
     }
+    if (cmd == "rng-dump") return cmd_rng_dump(argc - 2, argv + 2);
+    if (cmd == "coords-downsample") return cmd_coords_downsample(argc - 2, argv + 2);
+    if (cmd == "pose-decode") return cmd_pose_decode(argc - 2, argv + 2);
     std::string model, input, out;
     std::vector<std::string> pos;  // bare positional args
     for (int i = 2; i < argc; i++) {
@@ -2086,6 +3140,8 @@ int main(int argc, char** argv) {
             if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
             else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
             else if (!std::strcmp(argv[i], "--attrs") && i + 1 < argc) options.attributes = argv[++i];
+            else if (!std::strcmp(argv[i], "--uv") && i + 1 < argc) options.texcoords = argv[++i];
+            else if (!std::strcmp(argv[i], "--texture") && i + 1 < argc) options.texture = argv[++i];
         }
         return cmd_mesh_export(options);
     }
@@ -2106,6 +3162,22 @@ int main(int argc, char** argv) {
         }
         return cmd_gaussian_render(options);
     }
+    if (cmd == "pbr-assemble") {
+        PbrAssembleOpts options;
+        options.output = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--ply") && i + 1 < argc) options.ply = argv[++i];
+            else if (!std::strcmp(argv[i], "--views") && i + 1 < argc) options.render_views = std::atoi(argv[++i]);
+            else if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) options.resolution = std::atoi(argv[++i]);
+            else if (!std::strcmp(argv[i], "--texture-size") && i + 1 < argc) options.texture_size = std::atoi(argv[++i]);
+            else if (!std::strcmp(argv[i], "--steps") && i + 1 < argc) options.texture_steps = std::atoi(argv[++i]);
+            else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) options.seed = static_cast<unsigned>(std::atoi(argv[++i]));
+            else if (!std::strcmp(argv[i], "--already-clean")) options.already_clean = true;
+        }
+        return cmd_pbr_assemble(options);
+    }
     if (cmd == "texture-inpaint") {
         TextureInpaintOpts options;
         options.output = out;
@@ -2117,6 +3189,59 @@ int main(int argc, char** argv) {
             }
         }
         return cmd_texture_inpaint(options);
+    }
+    if (cmd == "texture-bake") {
+        TextureBakeOpts options;
+        options.output = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--uv") && i + 1 < argc) options.uv = argv[++i];
+            else if (!std::strcmp(argv[i], "--observations-dir") && i + 1 < argc) {
+                options.observations_dir = argv[++i];
+            } else if (!std::strcmp(argv[i], "--extrinsics") && i + 1 < argc) {
+                options.extrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--intrinsics") && i + 1 < argc) {
+                options.intrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--texture-size") && i + 1 < argc) {
+                options.texture_size = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--steps") && i + 1 < argc) {
+                options.steps = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) {
+                options.seed = static_cast<unsigned>(std::strtoul(argv[++i], nullptr, 10));
+            } else if (!std::strcmp(argv[i], "--holes-out") && i + 1 < argc) {
+                options.holes_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--no-inpaint")) {
+                options.apply_telea = false;
+            } else if (!std::strcmp(argv[i], "--raw-texture-out") && i + 1 < argc) {
+                options.raw_texture_output = argv[++i];
+            }
+        }
+        return cmd_texture_bake(options);
+    }
+    if (cmd == "texture-raster") {
+        TextureRasterOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--uv") && i + 1 < argc) options.uv = argv[++i];
+            else if (!std::strcmp(argv[i], "--extrinsics") && i + 1 < argc) {
+                options.extrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--intrinsics") && i + 1 < argc) {
+                options.intrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--view-index") && i + 1 < argc) {
+                options.view_index = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) {
+                options.resolution = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--uv-out") && i + 1 < argc) {
+                options.uv_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--uv-dr-out") && i + 1 < argc) {
+                options.uv_derivatives_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--coverage-out") && i + 1 < argc) {
+                options.coverage_output = argv[++i];
+            }
+        }
+        return cmd_texture_raster(options);
     }
     if (cmd == "mesh-decode") {
         MeshDecodeOpts options;
@@ -2133,6 +3258,8 @@ int main(int argc, char** argv) {
                 options.backend = argv[++i];
             } else if (!std::strcmp(argv[i], "--threads") && i + 1 < argc) {
                 options.threads = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--portable-attention")) {
+                options.native_attention = false;
             }
         }
         return cmd_mesh_decode(options);
@@ -2172,9 +3299,54 @@ int main(int argc, char** argv) {
                 options.target_reduction = std::strtof(argv[++i], nullptr);
             } else if (!std::strcmp(argv[i], "--visibility") && i + 1 < argc) {
                 options.visibility = argv[++i];
+            } else if (!std::strcmp(argv[i], "--native-visibility")) {
+                options.native_visibility = true;
+            } else if (!std::strcmp(argv[i], "--visibility-views") && i + 1 < argc) {
+                options.visibility_views = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--visibility-resolution") && i + 1 < argc) {
+                options.visibility_resolution = std::atoi(argv[++i]);
             }
         }
         return cmd_mesh_postprocess(options);
+    }
+    if (cmd == "mesh-visibility") {
+        MeshVisibilityOpts options;
+        options.output = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--vertices") && i + 1 < argc) options.vertices = argv[++i];
+            else if (!std::strcmp(argv[i], "--faces") && i + 1 < argc) options.faces = argv[++i];
+            else if (!std::strcmp(argv[i], "--views") && i + 1 < argc) {
+                options.view_count = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--resolution") && i + 1 < argc) {
+                options.resolution = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--extrinsics") && i + 1 < argc) {
+                options.extrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--intrinsics") && i + 1 < argc) {
+                options.intrinsics = argv[++i];
+            } else if (!std::strcmp(argv[i], "--view") && i + 1 < argc) {
+                options.view = argv[++i];
+            } else if (!std::strcmp(argv[i], "--projection") && i + 1 < argc) {
+                options.projection = argv[++i];
+            }
+        }
+        return cmd_mesh_visibility(options);
+    }
+    if (cmd == "mesh-camera-dump") {
+        MeshCameraDumpOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--extrinsics-out") && i + 1 < argc) {
+                options.extrinsics_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--intrinsics-out") && i + 1 < argc) {
+                options.intrinsics_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--views-out") && i + 1 < argc) {
+                options.views_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--projections-out") && i + 1 < argc) {
+                options.projections_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--views") && i + 1 < argc) {
+                options.view_count = std::atoi(argv[++i]);
+            }
+        }
+        return cmd_mesh_camera_dump(options);
     }
     if (cmd == "mesh-filter-visibility") {
         MeshVisibilityFilterOpts options;
@@ -2242,6 +3414,76 @@ int main(int argc, char** argv) {
         }
         return cmd_moge_smoke(options);
     }
+    if (cmd == "moge-infer") {
+        MogeInferOpts options;
+        options.model = model;
+        options.image_path = input;
+        options.output_prefix = out;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--backend") && i + 1 < argc) options.backend = argv[++i];
+            else if (!std::strcmp(argv[i], "--num-tokens") && i + 1 < argc) {
+                options.num_tokens = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--threads") && i + 1 < argc) {
+                options.threads = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--force-projection")) {
+                options.force_projection = true;
+            } else if (!std::strcmp(argv[i], "--no-apply-mask")) {
+                options.apply_mask = false;
+            } else if (!std::strcmp(argv[i], "--dump-intermediates")) {
+                options.dump_intermediates = true;
+            } else if (!std::strcmp(argv[i], "--dump-blocks")) {
+                options.dump_blocks = true;
+            }
+        }
+        return cmd_moge_infer(options);
+    }
+    if (cmd == "image-to-3d") {
+        ImageTo3DOpts options;
+        for (int i = 2; i < argc; ++i) {
+            if (!std::strcmp(argv[i], "--image") && i + 1 < argc) options.image = argv[++i];
+            else if (!std::strcmp(argv[i], "--mask") && i + 1 < argc) options.mask = argv[++i];
+            else if (!std::strcmp(argv[i], "--out") && i + 1 < argc) options.output = argv[++i];
+            else if (!std::strcmp(argv[i], "--pbr-out") && i + 1 < argc) {
+                options.pbr_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--mesh-vertices-out") && i + 1 < argc) {
+                options.mesh_vertices_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--mesh-faces-out") && i + 1 < argc) {
+                options.mesh_faces_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--pose-out") && i + 1 < argc) {
+                options.pose_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--dtype-contract-out") && i + 1 < argc) {
+                options.dtype_contract_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--noise-dir") && i + 1 < argc) {
+                options.noise_dir = argv[++i];
+            } else if (!std::strcmp(argv[i], "--model") && i + 1 < argc) {
+                options.models_dir = argv[++i];
+            } else if (!std::strcmp(argv[i], "--moge-model") && i + 1 < argc) {
+                options.moge_model = argv[++i];
+            } else if (!std::strcmp(argv[i], "--conditions-out") && i + 1 < argc) {
+                options.conditions_output = argv[++i];
+            } else if (!std::strcmp(argv[i], "--backend") && i + 1 < argc) {
+                options.backend = argv[++i];
+            } else if (!std::strcmp(argv[i], "--dtype") && i + 1 < argc) {
+                options.dtype = argv[++i];
+            } else if (!std::strcmp(argv[i], "--ss-attention") && i + 1 < argc) {
+                const std::string value = argv[++i];
+                if (value == "strict") {
+                    options.strict_ss_attention = true;
+                } else if (value != "normal") {
+                    LOGE("image-to-3d: --ss-attention must be normal or strict");
+                    return 1;
+                }
+            } else if (!std::strcmp(argv[i], "--seed") && i + 1 < argc) {
+                options.seed = std::atoi(argv[++i]);
+            } else if (!std::strcmp(argv[i], "--threads") && i + 1 < argc) {
+                options.threads = std::atoi(argv[++i]);
+            } else {
+                LOGE("image-to-3d: unrecognized or incomplete argument %s", argv[i]);
+                return 1;
+            }
+        }
+        return cmd_image_to_3d(options);
+    }
     if (cmd == "preprocess-conditions") {
         PreprocessConditionsOpts options;
         options.image = input;
@@ -2278,37 +3520,46 @@ int main(int argc, char** argv) {
         return cmd_gs_decode(model, pos[0], pos[1]);
     }
     if (cmd == "e2e" && pos.size() >= 1) {
-        std::string noise_dir, dbg_dir;
+        std::string noise_dir, dbg_dir, pbr_out, pose_out, dtype_contract_out;
         unsigned seed = 0;
         int nthreads = getenv("SAM3D_NTHREADS") ? atoi(getenv("SAM3D_NTHREADS")) : 8;
         for (int i = 2; i < argc; i++) {
             if (!strcmp(argv[i], "--noise-dir") && i + 1 < argc) noise_dir = argv[++i];
             else if (!strcmp(argv[i], "--dbg-dir") && i + 1 < argc) dbg_dir = argv[++i];
+            else if (!strcmp(argv[i], "--pbr-out") && i + 1 < argc) pbr_out = argv[++i];
+            else if (!strcmp(argv[i], "--pose-out") && i + 1 < argc) pose_out = argv[++i];
+            else if (!strcmp(argv[i], "--dtype-contract-out") && i + 1 < argc) dtype_contract_out = argv[++i];
             else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = (unsigned)atoi(argv[++i]);
             else if (!strcmp(argv[i], "--threads") && i + 1 < argc) nthreads = atoi(argv[++i]);
         }
         // pos[0] = condition dir (dump_e2e_stages output); out = PLY path
         if (out.empty()) out = "output.ply";
         return cmd_e2e(model.empty() ? "cpp_ggml/models/gguf" : model,
-                       pos[0], noise_dir, out, dbg_dir, seed, nthreads);
+                       pos[0], noise_dir, out, dbg_dir, pbr_out, "", "", pose_out,
+                       dtype_contract_out,
+                       seed, nthreads);
     }
     if (cmd == "run" && pos.size() >= 1) {
         const char* be = getenv("SAM3D_BACKEND");
         std::string backend = be ? be : "auto";
-        std::string noise_dir, dbg_dir;
+        std::string noise_dir, dbg_dir, pbr_out, pose_out, dtype_contract_out;
         unsigned seed = 42;
         int nthreads = getenv("SAM3D_NTHREADS") ? atoi(getenv("SAM3D_NTHREADS")) : 8;
         for (int i = 2; i < argc; ++i) {
             if (!strcmp(argv[i], "--backend") && i + 1 < argc) backend = argv[++i];
             else if (!strcmp(argv[i], "--noise-dir") && i + 1 < argc) noise_dir = argv[++i];
             else if (!strcmp(argv[i], "--dbg-dir") && i + 1 < argc) dbg_dir = argv[++i];
+            else if (!strcmp(argv[i], "--pbr-out") && i + 1 < argc) pbr_out = argv[++i];
+            else if (!strcmp(argv[i], "--pose-out") && i + 1 < argc) pose_out = argv[++i];
+            else if (!strcmp(argv[i], "--dtype-contract-out") && i + 1 < argc) dtype_contract_out = argv[++i];
             else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = (unsigned)atoi(argv[++i]);
             else if (!strcmp(argv[i], "--threads") && i + 1 < argc) nthreads = atoi(argv[++i]);
         }
         if (model.empty()) model = "cpp_ggml/models/gguf";
         if (out.empty()) out = "output.ply";
         if (backend != "auto") setenv("SAM3D_BACKEND", backend.c_str(), 1);
-        return cmd_e2e(model, pos[0], noise_dir, out, dbg_dir, seed, nthreads);
+        return cmd_e2e(model, pos[0], noise_dir, out, dbg_dir, pbr_out, "", "", pose_out,
+                       dtype_contract_out, seed, nthreads);
     }
     // remaining commands are implemented in session.cpp via run_pipeline
     CliOptions opts;

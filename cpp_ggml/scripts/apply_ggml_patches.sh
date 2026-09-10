@@ -18,6 +18,19 @@
 
 set -euo pipefail
 
+check_only=0
+case "${1:-}" in
+    --check) check_only=1; shift ;;
+    --help|-h)
+        echo "Usage: bash apply_ggml_patches.sh [--check]"
+        echo "--check verifies clean replay or the exact patched tree without modifying source files."
+        exit 0 ;;
+esac
+if (( $# )); then
+    echo "error: unexpected argument: $1" >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CPP_GGML_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 GGML_DIR="${CPP_GGML_DIR}/third_party/ggml"
@@ -44,7 +57,11 @@ if [[ ! -f "${PATCH}" ]]; then
     echo "error: required combined ggml patch not found: ${PATCH}" >&2
     exit 1
 fi
-PATCHES=("${PATCH}")
+PATCHES=("${PATCH_DIR}"/*.patch)
+if [[ ${#PATCHES[@]} != 1 || "${PATCHES[0]}" != "$PATCH" ]]; then
+    echo "error: exactly one combined ggml patch is supported; consolidate extra patch files" >&2
+    exit 1
+fi
 
 applied=0
 skipped=0
@@ -58,7 +75,10 @@ if [[ -z "${SAM3D_PATCH_FLOCK_HELD:-}" ]] && command -v flock >/dev/null 2>&1; t
     if [[ -e "${LOCK_FILE}" ]]; then
         export SAM3D_PATCH_FLOCK_HELD=1
         SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
-        exec flock "${LOCK_FILE}" bash "${SCRIPT_PATH}" "$@"
+        if (( check_only )); then
+            exec flock "${LOCK_FILE}" bash "${SCRIPT_PATH}" --check
+        fi
+        exec flock "${LOCK_FILE}" bash "${SCRIPT_PATH}"
     fi
 fi
 
@@ -82,6 +102,18 @@ actual_tree="$(GIT_INDEX_FILE="${actual_index}" git write-tree)"
 
 if [[ "${actual_tree}" == "${expected_tree}" ]]; then
     echo "ggml patches: applied 0, skipped ${#PATCHES[@]} (final tree verified)"
+    exit 0
+fi
+
+baseline_tree="$(git rev-parse 'HEAD^{tree}')"
+if [[ "${actual_tree}" != "${baseline_tree}" ]]; then
+    echo "error: ggml worktree contains changes not represented by the combined patch" >&2
+    echo "       expected tree: ${expected_tree}; actual tree: ${actual_tree}" >&2
+    echo "       preserve local changes and include intended source changes in the combined patch" >&2
+    exit 1
+fi
+if (( check_only )); then
+    echo "ggml patches: clean replay verified (source tree unchanged; run without --check to apply)"
     exit 0
 fi
 
@@ -119,4 +151,10 @@ for patch in "${PATCHES[@]}"; do
     exit 1
 done
 
+GIT_INDEX_FILE="${actual_index}" git add -A -- .
+actual_tree="$(GIT_INDEX_FILE="${actual_index}" git write-tree)"
+if [[ "${actual_tree}" != "${expected_tree}" ]]; then
+    echo "error: patched ggml worktree does not match the replayed final tree" >&2
+    exit 1
+fi
 echo "ggml patches: applied ${applied}, skipped ${skipped}"

@@ -37,6 +37,8 @@ os.environ.setdefault("CUDA_HOME", os.environ["CONDA_PREFIX"])
 os.environ.setdefault("LIDRA_SKIP_INIT", "true")
 
 from gpu_exclusivity import require_exclusive_gpu
+from official_reference_policy import (install_staged_mixed_precision_loader,
+                                       reference_weight_policy)
 
 # This script imports the official pipeline at module load, and that import can
 # initialize CUDA or load checkpoints. Reject a contaminated timing environment
@@ -84,6 +86,10 @@ def move_module(module, device) -> None:
         module.to(device)
 
 
+def move_depth_model(pipeline, device) -> None:
+    move_module(getattr(getattr(pipeline, "depth_model", None), "model", None), device)
+
+
 def run_streamed_gaussian(pipeline, rgba_image, seed: int):
     """Run the official Gaussian path while moving inactive modules to CPU.
 
@@ -100,6 +106,13 @@ def run_streamed_gaussian(pipeline, rgba_image, seed: int):
         if name not in {"ss_generator", "ss_decoder"}:
             move_module(module, "cpu")
     move_module(conditioners["slat_condition_embedder"], "cpu")
+    # Restore modules explicitly on every request. A previous streamed request
+    # moves them back to CPU, so omitting these transfers makes multi-iteration
+    # timing depend on stale module residency rather than the stated contract.
+    move_module(conditioners["ss_condition_embedder"], device)
+    move_module(models["ss_generator"], device)
+    move_module(models["ss_decoder"], device)
+    move_depth_model(pipeline, device)
     torch.cuda.empty_cache()
 
     image = pipeline.merge_image_and_mask(rgba_image, None)
@@ -123,7 +136,7 @@ def run_streamed_gaussian(pipeline, rgba_image, seed: int):
     move_module(models["ss_generator"], "cpu")
     move_module(models["ss_decoder"], "cpu")
     move_module(conditioners["ss_condition_embedder"], "cpu")
-    move_module(pipeline.depth_model.model, "cpu")
+    move_depth_model(pipeline, "cpu")
     torch.cuda.empty_cache()
 
     move_module(models["slat_generator"], device)
@@ -152,53 +165,46 @@ def main():
     ap.add_argument("--config", default="checkpoints/hf/pipeline.yaml")
     ap.add_argument("--stream-weights", action=argparse.BooleanOptionalAction, default=True,
                     help="move inactive official models to CPU between stages; required on 12 GiB GPUs")
+    ap.add_argument("--timer-mode", choices=("hot-session", "cold-request"),
+                    default="hot-session",
+                    help=("hot-session excludes construction/input/PLY; cold-request measures one "
+                          "fresh staged request through PLY file close"))
     ap.add_argument("--render", action="store_true",
                     help="also render the PyTorch result with gsplat after recording metrics")
     ap.add_argument("--fp32-weights", action="store_true",
-                    help="keep official fp32 weights (needs ~24+ GB VRAM); "
-                         "default converts all pipeline weights to float16 "
-                         "to fit a 12 GB GPU")
+                        help="keep official fp32 weights (needs ~24+ GB VRAM); "
+                         "default uses a staged BF16/F16/native mixed-precision "
+                         "layout to fit a 12 GB GPU")
     ap.add_argument("--require-exclusive-gpu", action="store_true",
                     help="reject a timing run while another NVIDIA compute client is active")
+    ap.add_argument("--capture-stage-diagnostics", action="store_true",
+                    help="capture SS tensors for a stage oracle after each forward; excluded from the default timing contract")
     args = ap.parse_args()
+    if args.timer_mode == "cold-request" and (args.warmup != 0 or args.iters != 1):
+        ap.error("cold-request requires --warmup 0 --iters 1")
+    if args.timer_mode == "cold-request" and args.capture_stage_diagnostics:
+        ap.error("cold-request rejects --capture-stage-diagnostics")
     gpu_exclusivity = (require_exclusive_gpu("cuda") if args.require_exclusive_gpu else
                        {"required": False, "checked": False, "active_compute_processes": []})
 
+    cold_started = time.perf_counter() if args.timer_mode == "cold-request" else None
     print(f"[e2e] loading pipeline from {args.config} (compile=False)")
-    t0 = time.perf_counter()
+    initialization_started = time.perf_counter()
     if not args.fp32_weights:
-        # The official loader transfers each checkpoint to CUDA before it
-        # returns.  Convert while the model is still on CPU, otherwise all
-        # F32 checkpoints briefly coexist on a 12 GiB GPU and OOM before a
-        # later warmup hook has a chance to cast them.
+        # Keep all checkpoints on CPU until run_streamed_gaussian moves the
+        # active stage. A blanket F16 cast breaks official *Norm32 modules.
         from sam3d_objects.pipeline.inference_pipeline import InferencePipeline
-        _orig_load = InferencePipeline.instantiate_and_load_from_pretrained
-
-        def _load_f16(self, *load_args, **load_kwargs):
-            target_device = load_kwargs.pop("device", "cuda")
-            model = _orig_load(self, *load_args, device="cpu", **load_kwargs)
-            return model.to(dtype=torch.float16).to(target_device)
-
-        InferencePipeline.instantiate_and_load_from_pretrained = _load_f16
+        original_loader = InferencePipeline.instantiate_and_load_from_pretrained
+        InferencePipeline.instantiate_and_load_from_pretrained = (
+            install_staged_mixed_precision_loader(original_loader))
+    if not args.stream_weights and not args.fp32_weights:
+        ap.error("--no-stream-weights requires --fp32-weights; the mixed reference keeps models on CPU")
 
     inference = Inference(args.config, compile=False)
-    print(f"[e2e] pipeline loaded in {time.perf_counter() - t0:.1f} s")
+    print(f"[e2e] pipeline loaded in {time.perf_counter() - initialization_started:.1f} s")
 
-    # hook the torch ss_decoder: capture the real ss_generator latent (the
-    # input) and the fp32 occupancy logits (the output) plus its wall time
+    # Tensor downloads are a diagnostic facility, not inference work.
     cap = {}
-    ss_decoder = inference._pipeline.models["ss_decoder"]
-    orig_forward = ss_decoder.forward
-
-    def hooked_forward(t):
-        t0 = time.perf_counter()
-        out = orig_forward(t)
-        cap["latent"] = t.detach().float().cpu().numpy()   # (1, 8, 16, 16, 16)
-        cap["occ"] = out.detach().float().cpu().numpy()    # (1, 1, 64, 64, 64)
-        cap["dec_ms"] = (time.perf_counter() - t0) * 1e3
-        return out
-
-    ss_decoder.forward = hooked_forward
 
     image = load_image(args.image)
     mask = load_single_mask(args.mask_dir, index=args.mask_index)
@@ -218,31 +224,58 @@ def main():
         if i >= args.warmup:
             times.append(dt)
 
+    if args.capture_stage_diagnostics:
+        ss_decoder = inference._pipeline.models["ss_decoder"]
+        original_forward = ss_decoder.forward
+
+        def hooked_forward(t):
+            started = time.perf_counter()
+            decoded = original_forward(t)
+            cap["latent"] = t.detach().float().cpu().numpy()   # (1, 8, 16, 16, 16)
+            cap["occ"] = decoded.detach().float().cpu().numpy()  # (1, 1, 64, 64, 64)
+            cap["dec_ms"] = (time.perf_counter() - started) * 1e3
+            return decoded
+
+        ss_decoder.forward = hooked_forward
+        # Run once outside the timed sample set. This is deliberately a full
+        # forward instead of a partially replayed latent, so the diagnostic
+        # artifacts retain their original source semantics.
+        if args.stream_weights:
+            run_streamed_gaussian(inference._pipeline, rgba_image, seed=42)
+        else:
+            inference(image, mask, seed=42)
+        ss_decoder.forward = original_forward
+
     out_dir = os.path.join(REPO_ROOT, args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
 
-    # artifacts for the C++ comparison + visual report
-    lat = cap["latent"][0]                          # (8, 16, 16, 16) C,D,H,W
-    occ = cap["occ"][0]
-    if occ.ndim == 4:
-        occ = occ[0]                                # (64, 64, 64)
-    lat_path = os.path.join(out_dir, "ss_latent_real.samt")
-    occ_path = os.path.join(out_dir, "ss_occ_torch.samt")
-    write_samt_f32(lat_path, [lat.shape[3], lat.shape[2], lat.shape[1], lat.shape[0]], lat)
-    write_samt_f32(occ_path, list(occ.shape[::-1]), occ)
-    print(f"[e2e] wrote {lat_path} and {occ_path}")
-    print(f"[e2e] torch occupancy range [{occ.min():.2f}, {occ.max():.2f}], "
-          f"{int((occ > 0).sum())} voxels > 0")
+    if args.capture_stage_diagnostics:
+        # Artifacts are emitted after the separate diagnostic forward, so their
+        # D2H copies do not contaminate the hot-request latency row.
+        lat = cap["latent"][0]                          # (8, 16, 16, 16) C,D,H,W
+        occ = cap["occ"][0]
+        if occ.ndim == 4:
+            occ = occ[0]                                # (64, 64, 64)
+        lat_path = os.path.join(out_dir, "ss_latent_real.samt")
+        occ_path = os.path.join(out_dir, "ss_occ_torch.samt")
+        write_samt_f32(lat_path, [lat.shape[3], lat.shape[2], lat.shape[1], lat.shape[0]], lat)
+        write_samt_f32(occ_path, list(occ.shape[::-1]), occ)
+        print(f"[e2e] wrote {lat_path} and {occ_path}")
+        print(f"[e2e] torch occupancy range [{occ.min():.2f}, {occ.max():.2f}], "
+              f"{int((occ > 0).sum())} voxels > 0")
 
     ply_path = os.path.join(out_dir, "output_gs.ply")
     output["gs"].save_ply(ply_path)
+    if cold_started is not None:
+        torch.cuda.synchronize()
+        times = [(time.perf_counter() - cold_started) * 1e3]
     print(f"[e2e] wrote {ply_path}")
 
     s = stats(times)
     row = {
         "component": "pt_e2e_pipeline",
         "model": "sam-3d-objects (official pipeline)",
-        "dtype": "float16",
+        "dtype": "mixed-bf16-f16-native" if not args.fp32_weights else "float32",
         "backend": "CUDA",
         "device": torch.cuda.get_device_name(0),
         "image": args.image,
@@ -253,8 +286,30 @@ def main():
         "e2e_ms_min": round(s["min"], 1),
         "e2e_ms_p50": round(s["p50"], 1),
         "e2e_ms_max": round(s["max"], 1),
-        "ss_decoder_ms_mean": round(cap.get("dec_ms", 0.0), 1),
+        "ss_decoder_ms_mean": round(cap.get("dec_ms", 0.0), 1) if args.capture_stage_diagnostics else None,
+        "timer_contract": (
+            {
+                "id": "sam3d.cold-request.image-mask-to-gaussian-ply.v2",
+                "kind": "cold-request",
+                "includes": [
+                    "official staged-model construction", "input image/mask disk decode",
+                    "streamed model transfers", "preprocessing", "MoGe", "SS", "SLat",
+                    "Gaussian decode", "PLY serialization and file close",
+                ],
+                "excludes": ["Python launcher import", "stage tensor downloads", "external render scoring", "mesh/PBR postprocessing"],
+            }
+            if args.timer_mode == "cold-request" else
+            {
+                "id": "sam3d.hot-session.image-mask-to-gaussian-ply.v1",
+                "kind": "hot-session",
+                "includes": ["streamed model transfers", "preprocessing", "MoGe", "SS", "SLat", "Gaussian decode"],
+                "excludes": ["pipeline construction", "input image/mask disk decode", "PLY serialization", "stage tensor downloads", "external render scoring", "mesh/PBR postprocessing"],
+            }
+        ),
+        "timer_mode": args.timer_mode,
+        "stage_diagnostics": args.capture_stage_diagnostics,
         "weight_residency": "streamed" if args.stream_weights else "resident",
+        "weight_policy": reference_weight_policy(args.fp32_weights),
         "gpu_exclusivity": gpu_exclusivity,
     }
     jsonl_path = os.path.join(REPO_ROOT, args.json)
