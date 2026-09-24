@@ -4289,9 +4289,19 @@ int main(int argc, char** argv) {
         std::string noise_dir, dbg_dir, pbr_out, pose_out, dtype_contract_out;
         unsigned seed = 42;
         int nthreads = getenv("SAM3D_NTHREADS") ? atoi(getenv("SAM3D_NTHREADS")) : 8;
+        bool run_manual_attention = false;
+        bool run_ss_strict = false;
+        std::string run_dtype;
+        std::string run_stage;
+        std::string run_debug_stage;
         for (int i = 2; i < argc; ++i) {
             if (!strcmp(argv[i], "--backend") && i + 1 < argc) backend = argv[++i];
             else if (!strcmp(argv[i], "--noise-dir") && i + 1 < argc) noise_dir = argv[++i];
+            else if (!strcmp(argv[i], "--cond-manual-attention-exp")) run_manual_attention = true;
+            else if (!strcmp(argv[i], "--dtype") && i + 1 < argc) run_dtype = argv[++i];
+            else if (!strcmp(argv[i], "--ss-attention") && i + 1 < argc) run_ss_strict = !strcmp(argv[++i], "strict");
+            else if (!strcmp(argv[i], "--stage") && i + 1 < argc) run_stage = argv[++i];
+            else if (!strcmp(argv[i], "--debug-stage") && i + 1 < argc) run_debug_stage = argv[++i];
             else if (!strcmp(argv[i], "--dbg-dir") && i + 1 < argc) dbg_dir = argv[++i];
             else if (!strcmp(argv[i], "--pbr-out") && i + 1 < argc) pbr_out = argv[++i];
             else if (!strcmp(argv[i], "--pose-out") && i + 1 < argc) pose_out = argv[++i];
@@ -4313,6 +4323,11 @@ int main(int argc, char** argv) {
         e2e.backend = backend;
         e2e.seed = seed;
         e2e.threads = nthreads;
+        if (run_manual_attention) e2e.cond_manual_attention = true;
+        if (!run_dtype.empty()) e2e.dtype = run_dtype;
+        e2e.ss_strict_attention = run_ss_strict;
+        if (!run_stage.empty()) e2e.stage = run_stage;
+        if (!run_debug_stage.empty()) e2e.debug_stage = run_debug_stage;
         return cmd_e2e(e2e);
     }
     // remaining commands are implemented in session.cpp via run_pipeline
